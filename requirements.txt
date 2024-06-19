@@ -1,2 +1,4 @@
-dnspython==2.2.0
-requests
+dnspython>=2.2.1
+requests>=2.28.1
+tqdm>=4.64.1
+argparse
