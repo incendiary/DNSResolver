@@ -119,19 +119,39 @@ def fetch_azure_ip_ranges(output_dir, extreme=False):
 
 
 # Function to check if an IP address is within given IP ranges
-def is_in_ip_ranges(ip_address, ipv4_ranges, ipv6_ranges):
+def is_in_ip_ranges(ip_address, ipv4_ranges, ipv6_ranges, verbose=False, extreme=False):
+    def check_ranges(ip, range_set, verbose=False, extreme=False):
+        for cidr in range_set:
+            if ip in ipaddress.ip_network(cidr):
+                print(f"{ip} found in {cidr}")
+                return True
+            elif extreme:
+                print(f"{ip} not found in {cidr}")
+        return False
+
     try:
         ip = ipaddress.ip_address(ip_address)
-        if ip.version == 4:
-            for cidr in ipv4_ranges:
-                if ip in ipaddress.ip_network(cidr):
-                    return True
-        elif ip.version == 6:
-            for cidr in ipv6_ranges:
-                if ip in ipaddress.ip_network(cidr):
-                    return True
+        range_sets = (
+            (ipv4_ranges, ipv6_ranges)
+            if ip.version == 4
+            else (ipv6_ranges, ipv4_ranges)
+        )
+
+        for range_set in range_sets:
+            if check_ranges(ip, range_set, verbose, extreme):
+                return True
+
+        if verbose:
+            print(f"{ip} not found in any range")
         return False
     except ValueError:
+        print(f"Invalid IP: {ip_address}") if verbose or extreme else None
+        return False
+
+        return ip_found
+    except ValueError:
+        if verbose or extreme:
+            print(f"Invalid IP: {ip_address}")
         return False
 
 
@@ -230,10 +250,23 @@ def process_domain(
                     )
 
             # Check if IPs are in cloud ranges
-            in_gcp = any(is_in_ip_ranges(ip, gcp_ipv4, gcp_ipv6) for ip in final_ips)
-            in_aws = any(is_in_ip_ranges(ip, aws_ipv4, aws_ipv6) for ip in final_ips)
+            in_gcp = any(
+                is_in_ip_ranges(
+                    ip, gcp_ipv4, gcp_ipv6, verbose=verbose, extreme=extreme
+                )
+                for ip in final_ips
+            )
+            in_aws = any(
+                is_in_ip_ranges(
+                    ip, aws_ipv4, aws_ipv6, verbose=verbose, extreme=extreme
+                )
+                for ip in final_ips
+            )
             in_azure = any(
-                is_in_ip_ranges(ip, azure_ipv4, azure_ipv6) for ip in final_ips
+                is_in_ip_ranges(
+                    ip, azure_ipv4, azure_ipv6, verbose=verbose, extreme=extreme
+                )
+                for ip in final_ips
             )
 
             if in_gcp:
