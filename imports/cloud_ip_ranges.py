@@ -117,7 +117,8 @@ def is_in_ip_ranges(ip_address, ipv4_ranges, ipv6_ranges, verbose=False, extreme
     def check_ranges(ip, range_set, verbose=False, extreme=False):
         for cidr in range_set:
             if ip in ipaddress.ip_network(cidr):
-                print(f"{ip} found in {cidr}")
+                if verbose:
+                    print(f"{ip} found in {cidr}")
                 return True
             elif extreme:
                 print(f"{ip} not found in {cidr}")

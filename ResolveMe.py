@@ -3,6 +3,7 @@ import os
 import threading
 from datetime import datetime
 from tqdm import tqdm
+import json
 
 from imports.cloud_ip_ranges import (
     fetch_google_cloud_ip_ranges,
@@ -11,6 +12,7 @@ from imports.cloud_ip_ranges import (
 )
 from imports.cname_checker import detect_direct_takeovers
 from imports.domain_processor import process_domain
+from imports.environment import create_empty_files, get_environment_info
 
 
 def main(domains_file, output_dir, resolvers=None, verbose=False, extreme=False):
@@ -30,14 +32,7 @@ def main(domains_file, output_dir, resolvers=None, verbose=False, extreme=False)
     direct_reference_file = os.path.join(
         output_dir, f"direct_reference_results_{timestamp}.txt"
     )
-
-    # Create empty dangling CNAME file to avoid FileNotFoundError
-    with open(dangling_cname_file, "w") as f:
-        pass
-
-    # Create empty dangling direct_reference_file file to avoid FileNotFoundError
-    with open(direct_reference_file, "w") as f:
-        pass
+    environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.txt")
 
     output_files = {
         "resolved": resolved_file,
@@ -46,7 +41,15 @@ def main(domains_file, output_dir, resolvers=None, verbose=False, extreme=False)
         "azure": azure_file,
         "direct": direct_reference_file,
         "dangling": dangling_cname_file,
+        "environment": environment_file,
     }
+
+    # Create empty files to avoid FileNotFoundError
+    create_empty_files(output_files)
+
+    environment_info = get_environment_info()
+    with open(output_files["environment"], "w") as json_file:
+        json_file.write(json.dumps(environment_info))
 
     # Prepare nameservers list if provided
     if resolvers:

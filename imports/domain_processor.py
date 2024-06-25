@@ -73,7 +73,8 @@ def process_domain(
             if verbose or extreme:
                 print(f"Writing resolved records for domain: {domain}")
 
-            print(output_files["resolved"])
+            if verbose:
+                print(output_files["resolved"])
 
             with open(output_files["resolved"], "a") as f:
                 f.write(f"{domain}:\n")
