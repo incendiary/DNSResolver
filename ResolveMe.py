@@ -15,7 +15,17 @@ from imports.domain_processor import process_domain
 from imports.environment import create_empty_files, get_environment_info
 
 
-def main(domains_file, output_dir, resolvers=None, verbose=False, extreme=False):
+def main(
+    domains_file,
+    output_dir,
+    mode,
+    resolvers=None,
+    verbose=False,
+    extreme=False,
+    internal_resolvers=None,
+    external_resolvers=None,
+):
+
     # Create output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_dir, timestamp)
@@ -182,10 +192,32 @@ if __name__ == "__main__":
             "resolvers cannot be set along with internal-resolvers or external-resolvers"
         )
 
-    main(
-        args.domains_file,
-        args.output_dir,
-        args.resolvers,
-        verbose=args.verbose,
-        extreme=args.extreme,
-    )
+    single_mode = False
+    multi_mode = False
+    if args.resolvers:
+        single_mode = True
+
+    if args.internal_resolvers and args.external_resolvers:
+        multi_mode = True
+
+    if single_mode:
+        main(
+            args.domains_file,
+            args.output_dir,
+            mode="single",
+            resolvers=args.resolvers,
+            verbose=args.verbose,
+            extreme=args.extreme,
+        )
+    elif multi_mode:
+        main(
+            args.domains_file,
+            args.output_dir,
+            mode="multi",
+            internal_resolvers=args.internal_resolvers,
+            external_resolvers=args.external_resolvers,
+            verbose=args.verbose,
+            extreme=args.extreme,
+        )
+    else:
+        print("Mode selection has failed, exiting")
