@@ -153,7 +153,34 @@ if __name__ == "__main__":
         help="Comma-separated list of custom resolvers. Overrides system resolvers.",
     )
 
+    parser.add_argument(
+        "--internal-resolvers",
+        "-ir",
+        type=str,
+        help="Comma-separated list of internal custom resolvers.",
+    )
+
+    parser.add_argument(
+        "--external-resolvers",
+        "-er",
+        type=str,
+        help="Comma-separated list of external custom resolvers.",
+    )
+
     args = parser.parse_args()
+
+    # Check if both `internal_resolvers` and `external_resolvers` are set
+    if (args.internal_resolvers and not args.external_resolvers) or (
+        not args.internal_resolvers and args.external_resolvers
+    ):
+        parser.error(
+            "Both internal-resolvers and external-resolvers must be set together"
+        )
+
+    if args.resolvers and (args.internal_resolvers or args.external_resolvers):
+        parser.error(
+            "resolvers cannot be set along with internal-resolvers or external-resolvers"
+        )
 
     main(
         args.domains_file,
