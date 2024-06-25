@@ -32,7 +32,7 @@ def main(domains_file, output_dir, resolvers=None, verbose=False, extreme=False)
     direct_reference_file = os.path.join(
         output_dir, f"direct_reference_results_{timestamp}.txt"
     )
-    environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.txt")
+    environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.json")
 
     output_files = {
         "resolved": resolved_file,
@@ -49,7 +49,7 @@ def main(domains_file, output_dir, resolvers=None, verbose=False, extreme=False)
 
     environment_info = get_environment_info()
     with open(output_files["environment"], "w") as json_file:
-        json_file.write(json.dumps(environment_info))
+        json_file.write(json.dumps(environment_info, indent=4))
 
     # Prepare nameservers list if provided
     if resolvers:
