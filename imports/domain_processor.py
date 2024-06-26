@@ -21,8 +21,9 @@ optionally be printed to the console in verbose scenarios.
 
 import dns.resolver
 
-from imports.cloud_ip_ranges import is_in_ip_ranges
+from imports.cloud_csp_checks import is_in_ip_ranges
 from imports.dns_based_checks import check_dangling_cname
+from imports.cloud_csp_checks import perform_csp_checks
 
 
 def process_domain(
@@ -126,56 +127,19 @@ def process_domain(
                         f"Written resolved records to file: {output_files['resolved']}"
                     )
 
-            # Check if IPs are in cloud ranges
-            in_gcp = any(
-                is_in_ip_ranges(
-                    ip, gcp_ipv4, gcp_ipv6, verbose=verbose, extreme=extreme
-                )
-                for ip in final_ips
+            perform_csp_checks(
+                domain,
+                output_files,
+                final_ips,
+                gcp_ipv4,
+                gcp_ipv6,
+                aws_ipv4,
+                aws_ipv6,
+                azure_ipv4,
+                azure_ipv6,
+                verbose,
+                extreme,
             )
-            in_aws = any(
-                is_in_ip_ranges(
-                    ip, aws_ipv4, aws_ipv6, verbose=verbose, extreme=extreme
-                )
-                for ip in final_ips
-            )
-            in_azure = any(
-                is_in_ip_ranges(
-                    ip, azure_ipv4, azure_ipv6, verbose=verbose, extreme=extreme
-                )
-                for ip in final_ips
-            )
-
-            if in_gcp:
-                if verbose or extreme:
-                    print(f"Writing GCP resolved IPs for domain: {domain}")
-                with open(output_files["gcp"], "a", encoding="utf-8") as f:
-                    f.write(f"{domain}: {final_ips}\n")
-                if verbose or extreme:
-                    print(f"Written GCP records to file: {output_files['gcp']}")
-            if in_aws:
-                if verbose or extreme:
-                    print(f"Writing AWS resolved IPs for domain: {domain}")
-                with open(output_files["aws"], "a", encoding="utf-8") as f:
-                    f.write(f"{domain}: {final_ips}\n")
-                if verbose or extreme:
-                    print(f"Written AWS records to file: {output_files['aws']}")
-            if in_azure:
-                if verbose or extreme:
-                    print(f"Writing Azure resolved IPs for domain: {domain}")
-                with open(output_files["azure"], "a", encoding="utf-8") as f:
-                    f.write(f"{domain}: {final_ips}\n")
-                if verbose or extreme:
-                    print(f"Written Azure records to file: {output_files['azure']}")
-
-            if verbose or extreme:
-                print(f"{domain} resolved to {resolved_records}")
-                if in_gcp:
-                    print(f"{domain} is in Google Cloud IP ranges.")
-                if in_aws:
-                    print(f"{domain} is in AWS IP ranges.")
-                if in_azure:
-                    print(f"{domain} is in Azure IP ranges.")
 
     except dns.exception.DNSException as e:
         if verbose or extreme:
