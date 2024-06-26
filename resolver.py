@@ -1,14 +1,29 @@
+"""
+This python module resolves DNS records for a given list of domains
+and checks them against the known IP ranges of major cloud providers
+(AWS, GCP, and Azure).
+
+This script handles multithreading for DNS resolutions and provides
+different verbose levels for extra logging (default, verbose, and extreme).
+The results of DNS resolution and Cloud IPs matching are stored in the specified
+output directory.
+
+The script can be run directly with the use of command-line arguments for
+specifying the domains file, output directory, verbosity mode and custom resolvers.
+"""
+
 import argparse
+import json
 import os
 import threading
 from datetime import datetime
+
 from tqdm import tqdm
-import json
 
 from imports.cloud_ip_ranges import (
-    fetch_google_cloud_ip_ranges,
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
+    fetch_google_cloud_ip_ranges,
 )
 from imports.cname_checker import detect_direct_takeovers
 from imports.domain_processor import process_domain
@@ -21,18 +36,31 @@ def main(
     resolvers=None,
     verbose=False,
     extreme=False,
-    internal_resolvers=None,
-    external_resolvers=None,
-    single_mode=None,
-    multi_mode=None,
 ):
+    """
+    Main method for resolving domains and detecting potential cloud service takeovers.
+
+    :param domains_file: Path to a file containing domains to be resolved.
+    :type domains_file: str
+    :param output_dir: Directory where output files will be saved.
+    :type output_dir: str
+    :param resolvers: Optional comma-separated list of custom DNS resolvers.
+    :type resolvers: str, optional
+    :param verbose: If True, prints additional information during processing.
+    :type verbose: bool, optional
+    :param extreme: If True, fetches and prints cloud provider IP ranges.
+    :type extreme: bool, optional
+    :return: None
+    """
+
     # Create output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_dir, timestamp)
     os.makedirs(output_dir, exist_ok=True)
 
     # Output files
-    resolved_file = os.path.join(output_dir, f"resolved_results_{timestamp}.txt")
+    resolved_file = os.path.join(
+        output_dir, f"resolved_results_{timestamp}.txt")
     gcp_file = os.path.join(output_dir, f"gcp_results_{timestamp}.txt")
     aws_file = os.path.join(output_dir, f"aws_results_{timestamp}.txt")
     azure_file = os.path.join(output_dir, f"azure_results_{timestamp}.txt")
@@ -42,7 +70,8 @@ def main(
     direct_reference_file = os.path.join(
         output_dir, f"direct_reference_results_{timestamp}.txt"
     )
-    environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.json")
+    environment_file = os.path.join(
+        output_dir, f"environment_results_{timestamp}.json")
 
     output_files = {
         "resolved": resolved_file,
@@ -58,19 +87,13 @@ def main(
     create_empty_files(output_files)
 
     environment_info = get_environment_info()
-    with open(output_files["environment"], "w") as json_file:
+    with open(output_files["environment"], "w", encoding="utf-8") as json_file:
         json_file.write(json.dumps(environment_info, indent=4))
-    if single_mode:
-        # Prepare nameservers list if provided
-        if resolvers:
-            nameservers = resolvers.split(",")
-        else:
-            nameservers = None
-    if multi_mode:
-        nameservers = {
-            "internal_resolvers": internal_resolvers,
-            "external_resolvers": external_resolvers,
-        }
+
+    if resolvers:
+        nameservers = resolvers.split(",")
+    else:
+        nameservers = None
 
     # Fetch and parse cloud provider IP ranges
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(output_dir, extreme)
@@ -78,7 +101,7 @@ def main(
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(output_dir, extreme)
 
     # Read domains from input file
-    with open(domains_file, "r") as f:
+    with open(domains_file, "r", encoding="utf-8") as f:
         domains = f.read().splitlines()
 
     if verbose or extreme:
@@ -96,8 +119,7 @@ def main(
                 target=process_domain,
                 args=(
                     domain,
-                    nameservers,  # Values can be none for system resolution, a list for --resolvers, or a dict in
-                    # the case of internal/external
+                    nameservers,  # Values can be none for system resolution, a list for --resolvers
                     False,  # Set authoritative to False for now
                     False,  # Set resolve_all to False for now
                     output_files,
@@ -136,8 +158,7 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Resolve DNS records for domains and check against cloud provider IP ranges."
-    )
+        description="Resolve DNS records for domains and check against cloud provider IP ranges.")
     parser.add_argument(
         "domains_file",
         type=str,
@@ -185,47 +206,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Check if both `internal_resolvers` and `external_resolvers` are set
-    if (args.internal_resolvers and not args.external_resolvers) or (
-        not args.internal_resolvers and args.external_resolvers
-    ):
-        parser.error(
-            "Both internal-resolvers and external-resolvers must be set together"
-        )
-
-    if args.resolvers and (args.internal_resolvers or args.external_resolvers):
-        parser.error(
-            "resolvers cannot be set along with internal-resolvers or external-resolvers"
-        )
-
-    single_mode = False
-    multi_mode = False
-    if args.resolvers:
-        single_mode = True
-
-    if args.internal_resolvers and args.external_resolvers:
-        multi_mode = True
-
-    if single_mode:
-        main(
-            args.domains_file,
-            args.output_dir,
-            single_mode=single_mode,
-            multi_mode=multi_mode,
-            resolvers=args.resolvers,
-            verbose=args.verbose,
-            extreme=args.extreme,
-        )
-    elif multi_mode:
-        main(
-            args.domains_file,
-            args.output_dir,
-            single_mode=single_mode,
-            multi_mode=multi_mode,
-            internal_resolvers=args.internal_resolvers,
-            external_resolvers=args.external_resolvers,
-            verbose=args.verbose,
-            extreme=args.extreme,
-        )
-    else:
-        print("Mode selection has failed, exiting")
+    main(
+        args.domains_file,
+        args.output_dir,
+        resolvers=args.resolvers,
+        verbose=args.verbose,
+        extreme=args.extreme,
+    )
