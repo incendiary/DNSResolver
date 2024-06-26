@@ -1,5 +1,26 @@
+"""
+This module focuses on performing DNS record analyses for given domain names.
+It provides functionality to resolve a domain's CNAME chain,
+check for dangling CNAMEs, and resolve the
+domain's 'A' (IPv4) and 'AAAA' (IPv6) records.
+
+The main function in the module, `process_domain`, also verifies if the
+resolved IPs are within IP ranges of certain cloud platforms, specifically
+ Google Cloud Platform, Amazon Web Service, and Microsoft Azure.
+
+Functions defined in the `cloud_ip_ranges` and `cname_checker` modules are
+used to support these operations.
+
+In brief, this module is intended to provide a thorough DNS resolution process
+and relation check with known cloud platforms, aiding in identifying potential
+security pitfalls like dangling DNS records.
+
+The results of these operations are written to specified output files and can
+optionally be printed to the console in verbose scenarios.
+"""
+
 import dns.resolver
-from tqdm import tqdm
+
 from imports.cloud_ip_ranges import is_in_ip_ranges
 from imports.cname_checker import check_dangling_cname
 
@@ -7,8 +28,6 @@ from imports.cname_checker import check_dangling_cname
 def process_domain(
     domain,
     nameservers,
-    authoritative,
-    resolve_all,
     output_files,
     pbar,
     verbose,
@@ -20,6 +39,23 @@ def process_domain(
     azure_ipv4,
     azure_ipv6,
 ):
+    """
+    Resolve the given domain and process the results.
+
+    :param domain: The domain to process.
+    :param nameservers: The list of nameservers to use for resolving.
+    :param output_files: A dictionary containing output file paths.
+    :param pbar: An instance of ProgressBar to track progress.
+    :param verbose: Whether to print verbose output.
+    :param extreme: Whether to print extreme output.
+    :param gcp_ipv4: The list of Google Cloud Platform IPv4 ranges.
+    :param gcp_ipv6: The list of Google Cloud Platform IPv6 ranges.
+    :param aws_ipv4: The list of Amazon Web Services IPv4 ranges.
+    :param aws_ipv6: The list of Amazon Web Services IPv6 ranges.
+    :param azure_ipv4: The list of Microsoft Azure IPv4 ranges.
+    :param azure_ipv6: The list of Microsoft Azure IPv6 ranges.
+    :return: None
+    """
     resolver = dns.resolver.Resolver()
     if nameservers:
         resolver.nameservers = nameservers
@@ -41,9 +77,11 @@ def process_domain(
                     # Check if the domain is a dangling cname
                     if check_dangling_cname(current_domain, nameservers):
                         # Write the domain to output file
-                        with open(output_files["dangling"], "a") as file:
+                        with open(
+                            output_files["dangling"], "a", encoding="utf-8"
+                        ) as file:
                             file.write(f"{current_domain}\n")
-                            file.write(f"--------\n")
+                            file.write("--------\n")
                     break
                 except (
                     dns.resolver.NoAnswer,
@@ -76,13 +114,13 @@ def process_domain(
             if verbose:
                 print(output_files["resolved"])
 
-            with open(output_files["resolved"], "a") as f:
+            with open(output_files["resolved"], "a", encoding="utf-8") as f:
                 f.write(f"{domain}:\n")
                 for record_type, records in resolved_records:
                     f.write(f"  {record_type}:\n")
                     for record in records:
                         f.write(f"    {record}\n")
-                f.write(f"--------\n")
+                f.write("--------\n")
                 if verbose or extreme:
                     print(
                         f"Written resolved records to file: {output_files['resolved']}"
@@ -111,21 +149,21 @@ def process_domain(
             if in_gcp:
                 if verbose or extreme:
                     print(f"Writing GCP resolved IPs for domain: {domain}")
-                with open(output_files["gcp"], "a") as f:
+                with open(output_files["gcp"], "a", encoding="utf-8") as f:
                     f.write(f"{domain}: {final_ips}\n")
                 if verbose or extreme:
                     print(f"Written GCP records to file: {output_files['gcp']}")
             if in_aws:
                 if verbose or extreme:
                     print(f"Writing AWS resolved IPs for domain: {domain}")
-                with open(output_files["aws"], "a") as f:
+                with open(output_files["aws"], "a", encoding="utf-8") as f:
                     f.write(f"{domain}: {final_ips}\n")
                 if verbose or extreme:
                     print(f"Written AWS records to file: {output_files['aws']}")
             if in_azure:
                 if verbose or extreme:
                     print(f"Writing Azure resolved IPs for domain: {domain}")
-                with open(output_files["azure"], "a") as f:
+                with open(output_files["azure"], "a", encoding="utf-8") as f:
                     f.write(f"{domain}: {final_ips}\n")
                 if verbose or extreme:
                     print(f"Written Azure records to file: {output_files['azure']}")
