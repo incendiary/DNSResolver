@@ -22,7 +22,7 @@ optionally be printed to the console in verbose scenarios.
 import dns.resolver
 
 from imports.cloud_ip_ranges import is_in_ip_ranges
-from imports.cname_checker import check_dangling_cname
+from imports.dns_based_checks import check_dangling_cname
 
 
 def process_domain(

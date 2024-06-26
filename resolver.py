@@ -25,7 +25,7 @@ from imports.cloud_ip_ranges import (
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
-from imports.cname_checker import detect_direct_takeovers
+
 from imports.domain_processor import process_domain
 from imports.environment import create_empty_files, get_environment_info
 
@@ -59,8 +59,7 @@ def main(
     os.makedirs(output_dir, exist_ok=True)
 
     # Output files
-    resolved_file = os.path.join(
-        output_dir, f"resolved_results_{timestamp}.txt")
+    resolved_file = os.path.join(output_dir, f"resolved_results_{timestamp}.txt")
     gcp_file = os.path.join(output_dir, f"gcp_results_{timestamp}.txt")
     aws_file = os.path.join(output_dir, f"aws_results_{timestamp}.txt")
     azure_file = os.path.join(output_dir, f"azure_results_{timestamp}.txt")
@@ -70,8 +69,7 @@ def main(
     direct_reference_file = os.path.join(
         output_dir, f"direct_reference_results_{timestamp}.txt"
     )
-    environment_file = os.path.join(
-        output_dir, f"environment_results_{timestamp}.json")
+    environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.json")
 
     output_files = {
         "resolved": resolved_file,
@@ -120,8 +118,6 @@ def main(
                 args=(
                     domain,
                     nameservers,  # Values can be none for system resolution, a list for --resolvers
-                    False,  # Set authoritative to False for now
-                    False,  # Set resolve_all to False for now
                     output_files,
                     pbar,
                     verbose,
@@ -141,9 +137,6 @@ def main(
         for thread in threads:
             thread.join()
 
-    # Check for potential cloud service takeovers
-    detect_direct_takeovers(direct_reference_file, resolved_file)
-
     # Print final messages
     print("All resolutions completed. Results saved to", output_dir)
 
@@ -158,7 +151,8 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Resolve DNS records for domains and check against cloud provider IP ranges.")
+        description="Resolve DNS records for domains and check against cloud provider IP ranges."
+    )
     parser.add_argument(
         "domains_file",
         type=str,

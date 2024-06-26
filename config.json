@@ -1,5 +1,0 @@
-{
-    "aws": "\\.compute\\.amazonaws\\.com\\.|\\.elb\\.amazonaws\\.com\\.|\\.s3\\.amazonaws\\.com\\.|\\.cloudfront\\.net\\.",
-    "azure": "\\.cloudapp\\.net\\.|\\.database\\.windows\\.net\\.|\\.blob\\.core\\.windows\\.net\\.|\\.azurewebsites\\.net\\.",
-    "gcp": "\\.googleusercontent\\.com\\.|\\.appspot\\.com\\.|\\.cloudfunctions\\.net\\.|\\.cloud\\.google\\.com\\."
-}

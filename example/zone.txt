@@ -1,0 +1,123 @@
+$TTL 86400
+@   IN  SOA ns1.exampledomain.ovh. admin.exampledomain.ovh. (
+        2024062301 ; Serial
+        3600       ; Refresh
+        1800       ; Retry
+        1209600    ; Expire
+        86400 )    ; Minimum TTL
+
+; Name servers
+@   IN  NS  ns1.exampledomain.ovh.
+@   IN  NS  ns2.exampledomain.ovh.
+
+; Direct A record references to CSP resources
+aws-direct      IN  A   54.239.28.85       ; AWS direct reference
+gcp-direct      IN  A   34.102.136.180     ; GCP direct reference
+azure-direct    IN  A   20.38.128.60       ; Azure direct reference
+
+; Indirect CNAME references to CSP resources
+aws-indirect    IN  CNAME   ec2-54-239-28-85.compute-1.amazonaws.com.
+gcp-indirect    IN  CNAME   34.102.136.180.bc.googleusercontent.com.
+azure-indirect  IN  CNAME   azure-vm-20-38-128-60.cloudapp.net.
+
+; Indirect references via several CNAME chains
+aws-chain1      IN  CNAME   aws-chain2.exampledomain.ovh.
+aws-chain2      IN  CNAME   aws-chain3.exampledomain.ovh.
+aws-chain3      IN  CNAME   ec2-54-239-28-85.compute-1.amazonaws.com.
+
+gcp-chain1      IN  CNAME   gcp-chain2.exampledomain.ovh.
+gcp-chain2      IN  CNAME   gcp-chain3.exampledomain.ovh.
+gcp-chain3      IN  CNAME   34.102.136.180.bc.googleusercontent.com.
+
+azure-chain1    IN  CNAME   azure-chain2.exampledomain.ovh.
+azure-chain2    IN  CNAME   azure-chain3.exampledomain.ovh.
+azure-chain3    IN  CNAME   azure-vm-20-38-128-60.cloudapp.net.
+
+; Direct dangling CNAMEs
+aws-dangling    IN  CNAME   nonexistent-bucket.s3.amazonaws.com.
+gcp-dangling    IN  CNAME   nonexistent.appspot.com.
+azure-dangling  IN  CNAME   nonexistent.azurewebsites.net.
+
+; Indirect dangling CNAMEs
+aws-dangle-chain1  IN  CNAME   aws-dangle-chain2.exampledomain.ovh.
+aws-dangle-chain2  IN  CNAME   aws-dangle-chain3.exampledomain.ovh.
+aws-dangle-chain3  IN  CNAME   nonexistent-bucket.s3.amazonaws.com.
+
+gcp-dangle-chain1  IN  CNAME   gcp-dangle-chain2.exampledomain.ovh.
+gcp-dangle-chain2  IN  CNAME   gcp-dangle-chain3.exampledomain.ovh.
+gcp-dangle-chain3  IN  CNAME   nonexistent.appspot.com.
+
+azure-dangle-chain1 IN CNAME  azure-dangle-chain2.exampledomain.ovh.
+azure-dangle-chain2 IN CNAME  azure-dangle-chain3.exampledomain.ovh.
+azure-dangle-chain3 IN CNAME  nonexistent.azurewebsites.net.
+
+; Name server A records
+ns1 IN  A   192.0.2.1
+ns2 IN  A   192.0.2.2
+
+; Additional entries to match regex patterns for CSPs
+aws-matching   IN  CNAME   ec2-203-0-113-25.compute-1.amazonaws.com.
+gcp-matching   IN  CNAME   203.0.113.25.bc.googleusercontent.com.
+azure-matching IN  CNAME   azure-vm-203-0-113-25.cloudapp.net.
+
+; Indirect references matching CSP regex patterns
+aws-matching-chain1   IN  CNAME   aws-matching-chain2.exampledomain.ovh.
+aws-matching-chain2   IN  CNAME   aws-matching-chain3.exampledomain.ovh.
+aws-matching-chain3   IN  CNAME   ec2-203-0-113-25.compute-1.amazonaws.com.
+
+gcp-matching-chain1   IN  CNAME   gcp-matching-chain2.exampledomain.ovh.
+gcp-matching-chain2   IN  CNAME   gcp-matching-chain3.exampledomain.ovh.
+gcp-matching-chain3   IN  CNAME   203.0.113.25.bc.googleusercontent.com.
+
+azure-matching-chain1 IN  CNAME   azure-matching-chain2.exampledomain.ovh.
+azure-matching-chain2 IN  CNAME   azure-matching-chain3.exampledomain.ovh.
+azure-matching-chain3 IN  CNAME   azure-vm-203-0-113-25.cloudapp.net.
+
+; Direct dangling CNAMEs matching CSP regex patterns
+aws-dangling-matching    IN  CNAME   nonexistent-ec2.compute-1.amazonaws.com.
+gcp-dangling-matching    IN  CNAME   nonexistent.googleusercontent.com.
+azure-dangling-matching  IN  CNAME   nonexistent.cloudapp.net.
+
+; Indirect dangling CNAMEs matching CSP regex patterns
+aws-dangling-chain-matching1  IN  CNAME   aws-dangling-chain-matching2.exampledomain.ovh.
+aws-dangling-chain-matching2  IN  CNAME   aws-dangling-chain-matching3.exampledomain.ovh.
+aws-dangling-chain-matching3  IN  CNAME   nonexistent-ec2.compute-1.amazonaws.com.
+
+gcp-dangling-chain-matching1  IN  CNAME   gcp-dangling-chain-matching2.exampledomain.ovh.
+gcp-dangling-chain-matching2  IN  CNAME   gcp-dangling-chain-matching3.exampledomain.ovh.
+gcp-dangling-chain-matching3  IN  CNAME   nonexistent.googleusercontent.com.
+
+azure-dangling-chain-matching1 IN CNAME  azure-dangling-chain-matching2.exampledomain.ovh.
+azure-dangling-chain-matching2 IN CNAME  azure-dangling-chain-matching3.exampledomain.ovh.
+azure-dangling-chain-matching3 IN CNAME  nonexistent.cloudapp.net.
+
+; Additional entries to match the new regex patterns
+
+; AWS
+aws-api-gateway      IN  CNAME   execute-api.us-west-2.amazonaws.com.
+aws-rds              IN  CNAME   mydb.abcdefg123456.us-west-2.rds.amazonaws.com.
+aws-dynamodb         IN  CNAME   dynamodb.us-west-2.amazonaws.com.
+aws-ecs              IN  CNAME   ecs.us-west-2.amazonaws.com.
+aws-lambda           IN  CNAME   lambda.us-west-2.amazonaws.com.
+aws-elasticbeanstalk IN  CNAME   myapp.elasticbeanstalk.com.
+aws-route53          IN  CNAME   route53.amazonaws.com.
+
+; GCP
+gcp-compute          IN  CNAME   compute.googleapis.com.
+gcp-storage          IN  CNAME   storage.googleapis.com.
+gcp-bigquery         IN  CNAME   bigquery.googleapis.com.
+gcp-pubsub           IN  CNAME   pubsub.googleapis.com.
+gcp-firestore        IN  CNAME   firestore.googleapis.com.
+gcp-kubernetes       IN  CNAME   kubernetes.googleapis.com.
+gcp-cloudrun         IN  CNAME   myapp.run.app.
+gcp-cloudsql         IN  CNAME   mydb.cloudsql.googleapis.com.
+
+; Azure
+azure-cosmosdb       IN  CNAME   mycosmosdb.documents.azure.com.
+azure-table          IN  CNAME   mytable.table.core.windows.net.
+azure-queue          IN  CNAME   myqueue.queue.core.windows.net.
+azure-api            IN  CNAME   myapi.azure-api.net.
+azure-cdn            IN  CNAME   mycdn.azureedge.net.
+azure-devops         IN  CNAME   myproject.visualstudio.com.
+azure-logicapps      IN  CNAME   mylogicapp.logic.azure.com.
+azure-eventgrid      IN  CNAME   myeventgrid.eventgrid.azure.net.
