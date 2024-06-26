@@ -18,14 +18,14 @@ from imports.environment import create_empty_files, get_environment_info
 def main(
     domains_file,
     output_dir,
-    mode,
     resolvers=None,
     verbose=False,
     extreme=False,
     internal_resolvers=None,
     external_resolvers=None,
+    single_mode=None,
+    multi_mode=None,
 ):
-
     # Create output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_dir, timestamp)
@@ -60,12 +60,17 @@ def main(
     environment_info = get_environment_info()
     with open(output_files["environment"], "w") as json_file:
         json_file.write(json.dumps(environment_info, indent=4))
-
-    # Prepare nameservers list if provided
-    if resolvers:
-        nameservers = resolvers.split(",")
-    else:
-        nameservers = None
+    if single_mode:
+        # Prepare nameservers list if provided
+        if resolvers:
+            nameservers = resolvers.split(",")
+        else:
+            nameservers = None
+    if multi_mode:
+        nameservers = {
+            "internal_resolvers": internal_resolvers,
+            "external_resolvers": external_resolvers,
+        }
 
     # Fetch and parse cloud provider IP ranges
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(output_dir, extreme)
@@ -91,7 +96,8 @@ def main(
                 target=process_domain,
                 args=(
                     domain,
-                    nameservers,
+                    nameservers,  # Values can be none for system resolution, a list for --resolvers, or a dict in
+                    # the case of internal/external
                     False,  # Set authoritative to False for now
                     False,  # Set resolve_all to False for now
                     output_files,
@@ -204,7 +210,8 @@ if __name__ == "__main__":
         main(
             args.domains_file,
             args.output_dir,
-            mode="single",
+            single_mode=single_mode,
+            multi_mode=multi_mode,
             resolvers=args.resolvers,
             verbose=args.verbose,
             extreme=args.extreme,
@@ -213,7 +220,8 @@ if __name__ == "__main__":
         main(
             args.domains_file,
             args.output_dir,
-            mode="multi",
+            single_mode=single_mode,
+            multi_mode=multi_mode,
             internal_resolvers=args.internal_resolvers,
             external_resolvers=args.external_resolvers,
             verbose=args.verbose,
