@@ -1,7 +1,8 @@
-import dns.resolver
-import dns.query
-import dns.message
 import argparse
+
+import dns.message
+import dns.query
+import dns.resolver
 
 
 def query_ns(server_ip, domain):

@@ -25,17 +25,18 @@ from imports.cloud_ip_ranges import (
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
-from imports.cname_checker import detect_direct_takeovers
 from imports.domain_processor import process_domain
-from imports.environment import create_empty_files, get_environment_info
+from imports.environment import create_empty_files_or_directories, get_environment_info
 
 
 def main(
     domains_file,
     output_dir,
     resolvers=None,
+    max_threads=None,
     verbose=False,
     extreme=False,
+    perform_service_checks=True,
 ):
     """
     Main method for resolving domains and detecting potential cloud service takeovers.
@@ -59,8 +60,11 @@ def main(
     os.makedirs(output_dir, exist_ok=True)
 
     # Output files
-    resolved_file = os.path.join(
-        output_dir, f"resolved_results_{timestamp}.txt")
+    resolved_file = os.path.join(output_dir, f"resolved_results_{timestamp}.txt")
+    tcp_common_ports_unreachable_file = os.path.join(
+        output_dir, f"tls_common_ports_unreachable_{timestamp}.txt"
+    )
+    unresolved_file = os.path.join(output_dir, f"unresolved_results_{timestamp}.txt")
     gcp_file = os.path.join(output_dir, f"gcp_results_{timestamp}.txt")
     aws_file = os.path.join(output_dir, f"aws_results_{timestamp}.txt")
     azure_file = os.path.join(output_dir, f"azure_results_{timestamp}.txt")
@@ -70,21 +74,35 @@ def main(
     direct_reference_file = os.path.join(
         output_dir, f"direct_reference_results_{timestamp}.txt"
     )
-    environment_file = os.path.join(
-        output_dir, f"environment_results_{timestamp}.json")
+    environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.json")
+    ssl_tls_failure_file = os.path.join(
+        output_dir, f"ssl_tls_failure_results_{timestamp}.txt"
+    )
+    http_failure_file = os.path.join(
+        output_dir, f"http_failure_results_{timestamp}.txt"
+    )
+    failure_file = os.path.join(output_dir, f"failure_results_{timestamp}.txt")
+
+    screenshot_dir = os.path.join(output_dir, f"screenshot_results_{timestamp}")
 
     output_files = {
         "resolved": resolved_file,
+        "unresolved": unresolved_file,
         "gcp": gcp_file,
         "aws": aws_file,
         "azure": azure_file,
         "direct": direct_reference_file,
         "dangling": dangling_cname_file,
         "environment": environment_file,
+        "ssl_tls_failure_file": ssl_tls_failure_file,
+        "http_failure_file": http_failure_file,
+        "tcp_common_ports_unreachable_file": tcp_common_ports_unreachable_file,
+        "screenshot_dir": screenshot_dir,
+        "failures": failure_file,
     }
 
     # Create empty files to avoid FileNotFoundError
-    create_empty_files(output_files)
+    create_empty_files_or_directories(output_files)
 
     environment_info = get_environment_info()
     with open(output_files["environment"], "w", encoding="utf-8") as json_file:
@@ -107,6 +125,12 @@ def main(
     if verbose or extreme:
         print(f"Domains to process: {domains}")
 
+    if max_threads is None:
+        max_threads = os.cpu_count() or 1
+        if max_threads > 1:
+            max_threads -= 1
+    max_threads = max(1, max_threads)  # ensure at least one thread
+
     # Initialize progress bar
     with tqdm(total=len(domains), desc="Processing Domains") as pbar:
         threads = []
@@ -115,13 +139,15 @@ def main(
         for domain in domains:
             if verbose or extreme:
                 print(f"Starting thread for domain: {domain}")
+            if len(threads) >= max_threads:
+                threads.pop(
+                    0
+                ).join()  # remove the oldest thread and wait it to complete
             thread = threading.Thread(
                 target=process_domain,
                 args=(
                     domain,
                     nameservers,  # Values can be none for system resolution, a list for --resolvers
-                    False,  # Set authoritative to False for now
-                    False,  # Set resolve_all to False for now
                     output_files,
                     pbar,
                     verbose,
@@ -132,6 +158,7 @@ def main(
                     aws_ipv6,
                     azure_ipv4,
                     azure_ipv6,
+                    perform_service_checks,
                 ),
             )
             threads.append(thread)
@@ -140,9 +167,6 @@ def main(
         # Wait for all threads to complete
         for thread in threads:
             thread.join()
-
-    # Check for potential cloud service takeovers
-    detect_direct_takeovers(direct_reference_file, resolved_file)
 
     # Print final messages
     print("All resolutions completed. Results saved to", output_dir)
@@ -158,7 +182,8 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Resolve DNS records for domains and check against cloud provider IP ranges.")
+        description="Resolve DNS records for domains and check against cloud provider IP ranges."
+    )
     parser.add_argument(
         "domains_file",
         type=str,
@@ -189,27 +214,34 @@ if __name__ == "__main__":
         type=str,
         help="Comma-separated list of custom resolvers. Overrides system resolvers.",
     )
-
     parser.add_argument(
-        "--internal-resolvers",
-        "-ir",
-        type=str,
-        help="Comma-separated list of internal custom resolvers.",
+        "--service-checks",
+        "-sc",
+        action="store_true",
+        default=False,
+        help="Perform Service Checks",
     )
 
     parser.add_argument(
-        "--external-resolvers",
-        "-er",
-        type=str,
-        help="Comma-separated list of external custom resolvers.",
+        "--max-threads",
+        "-mt",
+        type=int,
+        help="Max number of threads to use for domain processing (default: number of CPU cores - 1)",
     )
+
+    args = parser.parse_args()
+    # If extreme is set, set verbose as well
+    if args.extreme:
+        args.verbose = True
 
     args = parser.parse_args()
 
     main(
         args.domains_file,
         args.output_dir,
+        max_threads=args.max_threads,
         resolvers=args.resolvers,
+        perform_service_checks=args.service_checks,
         verbose=args.verbose,
         extreme=args.extreme,
     )

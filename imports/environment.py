@@ -17,8 +17,9 @@ corresponding paths as values.
 - create_empty_file: Creates an empty file at the specified filename.
 """
 
-import sys
 import os
+import sys
+
 import requests
 from requests import RequestException
 
@@ -56,7 +57,7 @@ def get_environment_info():
     return environment_info
 
 
-def create_empty_files(output_files):
+def create_empty_files_or_directories(output_files):
     """
     Create empty files.
 
@@ -66,21 +67,28 @@ def create_empty_files(output_files):
     :return: None
     """
     for key, value in output_files.items():
-        create_empty_file(value)
+        create_empty_file_or_directory(value)
 
 
-def create_empty_file(filename):
+def create_empty_file_or_directory(filename):
     """
-    Create an empty file with the given filename.
-
-    :param filename: The name of the file to create.
+    Create an empty file or directory with the given filename.
+    If filename has extension (eg. .txt), file will be created;
+    otherwise a directory will be created.
+    :param filename: The name of the file or directory to create.
     :type filename: str
     :return: None
     """
     if not isinstance(filename, str):
         raise ValueError("filename must be a string")
+
+    name, extension = os.path.splitext(filename)
+
     try:
-        with open(filename, "w", encoding="utf-8") as f:
-            pass
-    except IOError as e:
-        print(f"Unable to create file {filename}. Error: {e}")
+        if not extension:
+            os.mkdir(filename)
+        else:
+            with open(filename, "w", encoding="utf-8") as f:
+                pass
+    except (IOError, OSError) as e:
+        print(f"Unable to create file or directory {filename}. Error: {e}")
