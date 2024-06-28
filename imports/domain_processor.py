@@ -39,22 +39,25 @@ def process_domain(
     azure_ipv6,
     perform_service_checks,
 ):
-    """Resolve the given domain and process the results.
+    """
+    Process a domain and resolve its DNS records and perform additional checks.
 
-    :param domain: The domain to process.
-    :param nameservers: The list of nameservers to use for resolving.
-    :param output_files: A dictionary containing output file paths.
-    :param pbar: An instance of ProgressBar to track progress.
-    :param verbose: Whether to print verbose output.
-    :param extreme: Whether to print extreme output.
-    :param gcp_ipv4: The list of Google Cloud Platform IPv4 ranges.
-    :param gcp_ipv6: The list of Google Cloud Platform IPv6 ranges.
-    :param aws_ipv4: The list of Amazon Web Services IPv4 ranges.
-    :param aws_ipv6: The list of Amazon Web Services IPv6 ranges.
-    :param azure_ipv4: The list of Microsoft Azure IPv4 ranges.
-    :param azure_ipv6: The list of Microsoft Azure IPv6 ranges.
+    :param domain: The domain to be processed.
+    :param nameservers: Optional list of nameservers to use for DNS resolution.
+    :param output_files: Dictionary of output file paths.
+    :param pbar: Progress bar object to update.
+    :param verbose: Boolean flag indicating whether to enable verbose logging.
+    :param extreme: Boolean flag indicating whether to enable extreme checks.
+    :param gcp_ipv4: List of GCP IPv4 CIDR ranges.
+    :param gcp_ipv6: List of GCP IPv6 CIDR ranges.
+    :param aws_ipv4: List of AWS IPv4 CIDR ranges.
+    :param aws_ipv6: List of AWS IPv6 CIDR ranges.
+    :param azure_ipv4: List of Azure IPv4 CIDR ranges.
+    :param azure_ipv6: List of Azure IPv6 CIDR ranges.
+    :param perform_service_checks: Boolean flag indicating whether to perform service checks.
     :return: None
     """
+
     resolver = dns.resolver.Resolver()
     if nameservers:
         resolver.nameservers = nameservers
@@ -77,7 +80,7 @@ def process_domain(
                     if check_dangling_cname(current_domain, nameservers):
                         # Write the domain to output file
                         with open(
-                            output_files["dangling"], "a", encoding="utf-8"
+                            output_files["standard"]["dangling"], "a", encoding="utf-8"
                         ) as file:
                             file.write(f"{current_domain}\n")
                             file.write("--------\n")
@@ -107,23 +110,18 @@ def process_domain(
                 continue
 
         if resolved_records:
-            if verbose or extreme:
-                print(f"Writing resolved records for domain: {domain}")
-
             if verbose:
-                print(output_files["resolved"])
+                print(
+                    f"Writing resolved records for domain: {domain} to {output_files['standard']['resolved']}"
+                )
 
-            with open(output_files["resolved"], "a", encoding="utf-8") as f:
+            with open(output_files["standard"]["resolved"], "a", encoding="utf-8") as f:
                 f.write(f"{domain}:\n")
                 for record_type, records in resolved_records:
                     f.write(f"  {record_type}:\n")
                     for record in records:
                         f.write(f"    {record}\n")
                 f.write("--------\n")
-                if verbose or extreme:
-                    print(
-                        f"Written resolved records to file: {output_files['resolved']}"
-                    )
 
             perform_csp_checks(
                 domain,
@@ -146,7 +144,7 @@ def process_domain(
 
     except dns.exception.DNSException as e:
 
-        with open(output_files["unresolved"], "a", encoding="utf-8") as f:
+        with open(output_files["standard"]["unresolved"], "a", encoding="utf-8") as f:
             f.write(f"{domain}:\n")
             for record_type, records in resolved_records:
                 f.write(f"  {record_type}:\n")
@@ -154,7 +152,7 @@ def process_domain(
                     f.write(f"    {record}\n")
             f.write("--------\n")
 
-        if verbose or extreme:
+        if verbose:
             print(f"Failed to resolve {domain}: {e}")
 
     finally:

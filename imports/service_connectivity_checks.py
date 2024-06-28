@@ -315,8 +315,12 @@ def perform_service_connectivity_checks(hostname, output_files, verbose, extreme
     http_results = check_http_service(hostname, verbose)
 
     if any(certificate_results.values()) or any(http_results.values()):
-        take_screenshot(hostname, output_files["screenshot_dir"], verbose)
+        take_screenshot(
+            hostname, output_files["service_checks"]["screenshot_dir"], verbose
+        )
     else:
-        with open(output_files["failures"], "a", encoding="utf-8") as file:
+        with open(
+            output_files["service_checks"]["screenshot_failures"], "a", encoding="utf-8"
+        ) as file:
             file.write(f"{hostname}\n")
             file.write("--------\n")
