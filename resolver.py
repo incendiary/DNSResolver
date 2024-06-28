@@ -81,31 +81,38 @@ def main(
     http_failure_file = os.path.join(
         output_dir, f"http_failure_results_{timestamp}.txt"
     )
-    failure_file = os.path.join(output_dir, f"failure_results_{timestamp}.txt")
+    screenshot_failure_file = os.path.join(
+        output_dir, f"failure_results_{timestamp}.txt"
+    )
 
     screenshot_dir = os.path.join(output_dir, f"screenshot_results_{timestamp}")
 
     output_files = {
-        "resolved": resolved_file,
-        "unresolved": unresolved_file,
-        "gcp": gcp_file,
-        "aws": aws_file,
-        "azure": azure_file,
-        "direct": direct_reference_file,
-        "dangling": dangling_cname_file,
-        "environment": environment_file,
-        "ssl_tls_failure_file": ssl_tls_failure_file,
-        "http_failure_file": http_failure_file,
-        "tcp_common_ports_unreachable_file": tcp_common_ports_unreachable_file,
-        "screenshot_dir": screenshot_dir,
-        "failures": failure_file,
+        "standard": {
+            "resolved": resolved_file,
+            "unresolved": unresolved_file,
+            "gcp": gcp_file,
+            "aws": aws_file,
+            "azure": azure_file,
+            "dangling": dangling_cname_file,
+            "environment": environment_file,
+        },
+        "service_checks": {
+            "ssl_tls_failure_file": ssl_tls_failure_file,
+            "http_failure_file": http_failure_file,
+            "tcp_common_ports_unreachable_file": tcp_common_ports_unreachable_file,
+            "screenshot_dir": screenshot_dir,
+            "screenshot_failures": screenshot_failure_file,
+        },
     }
 
     # Create empty files to avoid FileNotFoundError
-    create_empty_files_or_directories(output_files)
+    create_empty_files_or_directories(output_files, perform_service_checks)
 
     environment_info = get_environment_info()
-    with open(output_files["environment"], "w", encoding="utf-8") as json_file:
+    with open(
+        output_files["standard"]["environment"], "w", encoding="utf-8"
+    ) as json_file:
         json_file.write(json.dumps(environment_info, indent=4))
 
     if resolvers:
@@ -122,14 +129,11 @@ def main(
     with open(domains_file, "r", encoding="utf-8") as f:
         domains = f.read().splitlines()
 
-    if verbose or extreme:
+    if verbose:
         print(f"Domains to process: {domains}")
 
     if max_threads is None:
-        max_threads = os.cpu_count() or 1
-        if max_threads > 1:
-            max_threads -= 1
-    max_threads = max(1, max_threads)  # ensure at least one thread
+        max_threads = 10  # Default to 10 threads if not specified
 
     # Initialize progress bar
     with tqdm(total=len(domains), desc="Processing Domains") as pbar:
@@ -137,7 +141,7 @@ def main(
 
         # Process each domain using threads
         for domain in domains:
-            if verbose or extreme:
+            if verbose:
                 print(f"Starting thread for domain: {domain}")
             if len(threads) >= max_threads:
                 threads.pop(
@@ -226,7 +230,7 @@ if __name__ == "__main__":
         "--max-threads",
         "-mt",
         type=int,
-        help="Max number of threads to use for domain processing (default: number of CPU cores - 1)",
+        help="Max number of threads to use for domain processing (default: 10)",
     )
 
     args = parser.parse_args()

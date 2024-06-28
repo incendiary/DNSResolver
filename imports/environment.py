@@ -57,17 +57,26 @@ def get_environment_info():
     return environment_info
 
 
-def create_empty_files_or_directories(output_files):
+def create_empty_files_or_directories(output_files, perform_service_checks):
     """
-    Create empty files.
+    Create empty files or directories.
 
-    :param output_files: a dictionary containing file names as keys
-        and their corresponding paths as values
+    :param output_files: A dictionary containing file names as keys
+        and their corresponding paths as values.
     :type output_files: dict
+    :param perform_service_checks: A boolean indicating whether to create
+        service check related files.
+    :type perform_service_checks: bool
     :return: None
     """
-    for key, value in output_files.items():
+    # Create standard files or directories
+    for key, value in output_files.get("standard", {}).items():
         create_empty_file_or_directory(value)
+
+    # Create service check files or directories if perform_service_checks is True
+    if perform_service_checks:
+        for key, value in output_files.get("service_checks", {}).items():
+            create_empty_file_or_directory(value)
 
 
 def create_empty_file_or_directory(filename):

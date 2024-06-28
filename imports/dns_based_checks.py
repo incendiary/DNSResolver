@@ -4,9 +4,6 @@ potential cloud service takeovers by identifying dangling CNAME records.
 
 Functions:
 --------
-detect_direct_takeovers(direct_reference_file, output_file):
-    Detect potential takeover candidates from a list of dangling CNAME records.
-
 check_dangling_cname(current_domain, nameservers):
     Check if a domain has a dangling CNAME record.
 """

@@ -81,9 +81,15 @@ def perform_csp_checks(
     in_azure = check_ip_ranges((azure_ipv4, azure_ipv6), final_ips, verbose, extreme)
 
     # Write to files
-    write_to_files(in_gcp, domain, output_files["gcp"], final_ips, verbose, extreme)
-    write_to_files(in_aws, domain, output_files["aws"], final_ips, verbose, extreme)
-    write_to_files(in_azure, domain, output_files["azure"], final_ips, verbose, extreme)
+    write_to_files(
+        in_gcp, domain, output_files["standard"]["gcp"], final_ips, verbose, extreme
+    )
+    write_to_files(
+        in_aws, domain, output_files["standard"]["aws"], final_ips, verbose, extreme
+    )
+    write_to_files(
+        in_azure, domain, output_files["standard"]["azure"], final_ips, verbose, extreme
+    )
 
     # Further output
     if verbose or extreme:
