@@ -1,8 +1,6 @@
-"""
-This module focuses on performing DNS record analyses for given domain names.
-It provides functionality to resolve a domain's CNAME chain,
-check for dangling CNAMEs, and resolve the
-domain's 'A' (IPv4) and 'AAAA' (IPv6) records.
+"""This module focuses on performing DNS record analyses for given domain
+names. It provides functionality to resolve a domain's CNAME chain, check for
+dangling CNAMEs, and resolve the domain's 'A' (IPv4) and 'AAAA' (IPv6) records.
 
 The main function in the module, `process_domain`, also verifies if the
 resolved IPs are within IP ranges of certain cloud platforms, specifically
@@ -21,9 +19,9 @@ optionally be printed to the console in verbose scenarios.
 
 import dns.resolver
 
-from imports.cloud_csp_checks import is_in_ip_ranges
-from imports.dns_based_checks import check_dangling_cname
 from imports.cloud_csp_checks import perform_csp_checks
+from imports.dns_based_checks import check_dangling_cname
+from imports.service_connectivity_checks import perform_service_connectivity_checks
 
 
 def process_domain(
@@ -39,9 +37,9 @@ def process_domain(
     aws_ipv6,
     azure_ipv4,
     azure_ipv6,
+    perform_service_checks,
 ):
-    """
-    Resolve the given domain and process the results.
+    """Resolve the given domain and process the results.
 
     :param domain: The domain to process.
     :param nameservers: The list of nameservers to use for resolving.
@@ -141,7 +139,21 @@ def process_domain(
                 extreme,
             )
 
+            if perform_service_checks:
+                perform_service_connectivity_checks(
+                    domain, output_files, verbose, extreme
+                )
+
     except dns.exception.DNSException as e:
+
+        with open(output_files["unresolved"], "a", encoding="utf-8") as f:
+            f.write(f"{domain}:\n")
+            for record_type, records in resolved_records:
+                f.write(f"  {record_type}:\n")
+                for record in records:
+                    f.write(f"    {record}\n")
+            f.write("--------\n")
+
         if verbose or extreme:
             print(f"Failed to resolve {domain}: {e}")
 
