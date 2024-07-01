@@ -37,6 +37,7 @@ def main(
     verbose=False,
     extreme=False,
     perform_service_checks=True,
+    timeout=10,
 ):
     """
     Main method for resolving domains and detecting potential cloud service takeovers.
@@ -60,7 +61,7 @@ def main(
     os.makedirs(output_dir, exist_ok=True)
 
     # Output files
-    resolved_file = os.path.join(output_dir, f"resolved_results_{timestamp}.txt")
+    resolution_file = os.path.join(output_dir, f"resolution_results_{timestamp}.txt")
     tcp_common_ports_unreachable_file = os.path.join(
         output_dir, f"tls_common_ports_unreachable_{timestamp}.txt"
     )
@@ -70,9 +71,6 @@ def main(
     azure_file = os.path.join(output_dir, f"azure_results_{timestamp}.txt")
     dangling_cname_file = os.path.join(
         output_dir, f"dangling_cname_results_{timestamp}.txt"
-    )
-    direct_reference_file = os.path.join(
-        output_dir, f"direct_reference_results_{timestamp}.txt"
     )
     environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.json")
     ssl_tls_failure_file = os.path.join(
@@ -84,18 +82,21 @@ def main(
     screenshot_failure_file = os.path.join(
         output_dir, f"failure_results_{timestamp}.txt"
     )
+    ns_takeover_file = os.path.join(output_dir, f"ns_takeover_results_{timestamp}.txt")
 
     screenshot_dir = os.path.join(output_dir, f"screenshot_results_{timestamp}")
-
+    timeout_file = os.path.join(output_dir, f"timeout_results_{timestamp}.txt")
     output_files = {
         "standard": {
-            "resolved": resolved_file,
+            "resolved": resolution_file,
             "unresolved": unresolved_file,
             "gcp": gcp_file,
             "aws": aws_file,
             "azure": azure_file,
             "dangling": dangling_cname_file,
+            "ns_takeover": ns_takeover_file,
             "environment": environment_file,
+            "timeout": timeout_file,
         },
         "service_checks": {
             "ssl_tls_failure_file": ssl_tls_failure_file,
@@ -163,6 +164,7 @@ def main(
                     azure_ipv4,
                     azure_ipv6,
                     perform_service_checks,
+                    timeout,
                 ),
             )
             threads.append(thread)
@@ -233,6 +235,14 @@ if __name__ == "__main__":
         help="Max number of threads to use for domain processing (default: 10)",
     )
 
+    parser.add_argument(
+        "--timeout",
+        "-t",
+        type=int,
+        default=10,  # default timeout in seconds
+        help="Timeout for DNS resolution process in seconds",
+    )
+
     args = parser.parse_args()
     # If extreme is set, set verbose as well
     if args.extreme:
@@ -248,4 +258,5 @@ if __name__ == "__main__":
         perform_service_checks=args.service_checks,
         verbose=args.verbose,
         extreme=args.extreme,
+        timeout=args.timeout,
     )
