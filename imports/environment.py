@@ -90,7 +90,7 @@ def parse_arguments():
     # If extreme is set, set verbose as well
     if args.extreme:
         args.verbose = True
-    return
+    return args
 
 
 def get_environment_info():
@@ -151,7 +151,7 @@ def create_empty_files_or_directories(output_files, perform_service_checks):
 def create_empty_file_or_directory(filename):
     """
     Create an empty file or directory with the given filename.
-    If filename has extension (eg. .txt), file will be created;
+    If filename has extension (e.g.txt), file will be created;
     otherwise a directory will be created.
     :param filename: The name of the file or directory to create.
     :type filename: str
