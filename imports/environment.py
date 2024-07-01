@@ -19,9 +19,78 @@ corresponding paths as values.
 
 import os
 import sys
+import argparse
 
 import requests
 from requests import RequestException
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Resolve DNS records for domains and check against cloud provider IP ranges."
+    )
+    parser.add_argument(
+        "domains_file",
+        type=str,
+        help="Path to the file containing domains (one per line)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        type=str,
+        default="output",
+        help="Directory to save output files (default: output)",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose mode to display more information",
+    )
+    parser.add_argument(
+        "--extreme",
+        "-e",
+        action="store_true",
+        help="Enable extreme mode to display extensive information (including IP ranges)",
+    )
+    parser.add_argument(
+        "--resolvers",
+        "-r",
+        type=str,
+        help="Comma-separated list of custom resolvers. Overrides system resolvers.",
+    )
+    parser.add_argument(
+        "--service-checks",
+        "-sc",
+        action="store_true",
+        default=False,
+        help="Perform Service Checks",
+    )
+
+    parser.add_argument(
+        "--max-threads",
+        "-mt",
+        type=int,
+        help="Max number of threads to use for domain processing (default: 10)",
+    )
+
+    parser.add_argument(
+        "--timeout",
+        "-t",
+        type=int,
+        default=10,  # default timeout in seconds
+        help="Timeout for DNS resolution process in seconds",
+    )
+
+    parser.add_argument(
+        "--retries", type=int, default=3, help="Number of retry attempts for timeouts"
+    )
+
+    args = parser.parse_args()
+    # If extreme is set, set verbose as well
+    if args.extreme:
+        args.verbose = True
+    return
 
 
 def get_environment_info():

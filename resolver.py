@@ -12,11 +12,12 @@ The script can be run directly with the use of command-line arguments for
 specifying the domains file, output directory, verbosity mode and custom resolvers.
 """
 
-import argparse
 import json
 import os
 import threading
 from datetime import datetime
+
+from imports.environment import parse_arguments
 
 from tqdm import tqdm
 
@@ -187,68 +188,8 @@ def main(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Resolve DNS records for domains and check against cloud provider IP ranges."
-    )
-    parser.add_argument(
-        "domains_file",
-        type=str,
-        help="Path to the file containing domains (one per line)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        "-o",
-        type=str,
-        default="output",
-        help="Directory to save output files (default: output)",
-    )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable verbose mode to display more information",
-    )
-    parser.add_argument(
-        "--extreme",
-        "-e",
-        action="store_true",
-        help="Enable extreme mode to display extensive information (including IP ranges)",
-    )
-    parser.add_argument(
-        "--resolvers",
-        "-r",
-        type=str,
-        help="Comma-separated list of custom resolvers. Overrides system resolvers.",
-    )
-    parser.add_argument(
-        "--service-checks",
-        "-sc",
-        action="store_true",
-        default=False,
-        help="Perform Service Checks",
-    )
 
-    parser.add_argument(
-        "--max-threads",
-        "-mt",
-        type=int,
-        help="Max number of threads to use for domain processing (default: 10)",
-    )
-
-    parser.add_argument(
-        "--timeout",
-        "-t",
-        type=int,
-        default=10,  # default timeout in seconds
-        help="Timeout for DNS resolution process in seconds",
-    )
-
-    args = parser.parse_args()
-    # If extreme is set, set verbose as well
-    if args.extreme:
-        args.verbose = True
-
-    args = parser.parse_args()
+    args = parse_arguments()
 
     main(
         args.domains_file,
