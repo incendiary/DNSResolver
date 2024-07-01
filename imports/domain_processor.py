@@ -37,7 +37,8 @@ def process_domain(
     azure_ipv4,
     azure_ipv6,
     perform_service_checks,
-    timeout=10.0,
+    timeout,
+    retries,
 ):
     """
     Process a domain and resolve its DNS records and perform additional checks.
@@ -66,6 +67,9 @@ def process_domain(
     success, final_ips = resolve_domain(
         resolver, domain, nameservers, output_files, verbose
     )
+
+    print(final_ips)
+
     # returns true if domain completed resolution
     if success:
         perform_csp_checks(
