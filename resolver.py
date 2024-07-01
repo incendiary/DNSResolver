@@ -39,6 +39,7 @@ def main(
     extreme=False,
     perform_service_checks=True,
     timeout=10,
+    retries=3,
 ):
     """
     Main method for resolving domains and detecting potential cloud service takeovers.
@@ -166,6 +167,7 @@ def main(
                     azure_ipv6,
                     perform_service_checks,
                     timeout,
+                    retries,
                 ),
             )
             threads.append(thread)
@@ -200,4 +202,5 @@ if __name__ == "__main__":
         verbose=args.verbose,
         extreme=args.extreme,
         timeout=args.timeout,
+        retries=args.retries,
     )

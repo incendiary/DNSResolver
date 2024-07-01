@@ -21,7 +21,13 @@ def create_resolver(timeout, nameservers):
     return resolver
 
 
-def resolve_domain(resolver, domain, nameservers, output_files, verbose):
+def resolve_domain(
+    resolver,
+    domain,
+    nameservers,
+    output_files,
+    verbose,
+):
 
     resolved_records = []
 
