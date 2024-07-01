@@ -2,7 +2,7 @@
 
 The `DNSResolver` project is a script that performs DNS resolution for a list of domains, optionally using custom resolvers, and handles timeouts and failures. The main functionalities include:
 1. Reading domains from an input file.
-2. Using the system DNS resolver or a list of custom resolvers provided via a CSV file or command-line input.
+2. Using the system DNS resolver or a list of custom resolvers provided via command-line input.
 3. Writing successful resolutions to an output file.
 4. Writing failed resolutions (due to timeouts) to a timeout file.
 
