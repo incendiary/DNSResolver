@@ -9,19 +9,29 @@ check_dangling_cname(current_domain, nameservers):
 
 import json
 import re
+
 import dns.resolver
 
 
-def load_domain_categorisation_regexes(config_file="config.json"):
+def load_domain_categorisation_patterns(config_file="config.json"):
+    """
+    Load domain categorization regex patterns from a JSON config file.
+    """
     with open(config_file, "r", encoding="utf-8") as f:
         config = json.load(f)
-    patterns = config.get("domain_categorisation", {})
-    return {k: re.compile(v) for k, v in patterns.items()}
+    return config.get("domain_categorization", {})
 
 
 def categorise_domain(domain, patterns):
+    """
+    Categorize the given domain based on the provided regex patterns.
+
+    :param domain: The domain to categorize.
+    :param patterns: A dictionary of category names and their corresponding regex patterns.
+    :return: The category name if a match is found, otherwise 'unknown'.
+    """
     for category, pattern in patterns.items():
-        if pattern.search(domain):
+        if re.search(pattern, domain):
             return category
     return "unknown"
 
