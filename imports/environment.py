@@ -17,10 +17,10 @@ corresponding paths as values.
 - create_empty_file: Creates an empty file at the specified filename.
 """
 
-import os
-import sys
 import argparse
 import json
+import os
+import sys
 from datetime import datetime
 
 import requests
