@@ -28,6 +28,7 @@ from imports.cloud_ip_ranges import (
 )
 from imports.domain_processor import process_domain
 from imports.environment import create_empty_files_or_directories, get_environment_info
+from imports.dns_based_checks import load_domain_categorisation_regexes
 
 
 def main(
@@ -135,6 +136,8 @@ def main(
     if verbose:
         print(f"Domains to process: {domains}")
 
+    patterns = load_domain_categorisation_regexes()
+
     if max_threads is None:
         max_threads = 10  # Default to 10 threads if not specified
 
@@ -168,6 +171,7 @@ def main(
                     perform_service_checks,
                     timeout,
                     retries,
+                    patterns,
                 ),
             )
             threads.append(thread)
