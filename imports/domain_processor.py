@@ -17,7 +17,6 @@ The results of these operations are written to specified output files and can
 optionally be printed to the console in verbose scenarios.
 """
 
-import dns.resolver
 from imports.cloud_csp_checks import perform_csp_checks
 from imports.dns_based_checks import resolve_domain, create_resolver
 from imports.service_connectivity_checks import perform_service_connectivity_checks
@@ -39,6 +38,7 @@ def process_domain(
     perform_service_checks,
     timeout,
     retries,
+    patterns,
 ):
     """
     Process a domain and resolve its DNS records and perform additional checks.
@@ -63,10 +63,9 @@ def process_domain(
     resolver = create_resolver(timeout, nameservers)
 
     success, final_ips = resolve_domain(
-        resolver, domain, nameservers, output_files, verbose, retries
+        resolver, domain, nameservers, output_files, verbose, retries, patterns
     )
 
-    # returns true if domain completed resolution
     if success:
         perform_csp_checks(
             domain,
