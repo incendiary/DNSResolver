@@ -13,18 +13,23 @@ specifying the domains file, output directory, verbosity mode and custom resolve
 """
 
 import threading
-from datetime import datetime
 
 from tqdm import tqdm
 
-from imports.cloud_ip_ranges import (fetch_aws_ip_ranges,
-                                     fetch_azure_ip_ranges,
-                                     fetch_google_cloud_ip_ranges)
+from imports.cloud_ip_ranges import (
+    fetch_aws_ip_ranges,
+    fetch_azure_ip_ranges,
+    fetch_google_cloud_ip_ranges,
+)
 from imports.dns_based_checks import load_domain_categorisation_patterns
 from imports.domain_processor import process_domain
-from imports.environment import (get_environment_info, initialize_environment,
-                                 parse_arguments, read_domains,
-                                 save_environment_info)
+from imports.environment import (
+    get_environment_info,
+    initialize_environment,
+    parse_arguments,
+    read_domains,
+    save_environment_info,
+)
 
 
 def main(
