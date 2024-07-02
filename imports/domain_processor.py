@@ -62,13 +62,9 @@ def process_domain(
 
     resolver = create_resolver(timeout, nameservers)
 
-    print(verbose)
-
     success, final_ips = resolve_domain(
-        resolver, domain, nameservers, output_files, verbose
+        resolver, domain, nameservers, output_files, verbose, retries
     )
-
-    print(final_ips)
 
     # returns true if domain completed resolution
     if success:
