@@ -20,6 +20,8 @@ corresponding paths as values.
 import os
 import sys
 import argparse
+import json
+from datetime import datetime
 
 import requests
 from requests import RequestException
@@ -66,14 +68,12 @@ def parse_arguments():
         default=False,
         help="Perform Service Checks",
     )
-
     parser.add_argument(
         "--max-threads",
         "-mt",
         type=int,
         help="Max number of threads to use for domain processing (default: 10)",
     )
-
     parser.add_argument(
         "--timeout",
         "-t",
@@ -81,7 +81,6 @@ def parse_arguments():
         default=10,  # default timeout in seconds
         help="Timeout for DNS resolution process in seconds",
     )
-
     parser.add_argument(
         "--retries", type=int, default=3, help="Number of retry attempts for timeouts"
     )
@@ -170,3 +169,71 @@ def create_empty_file_or_directory(filename):
                 pass
     except (IOError, OSError) as e:
         print(f"Unable to create file or directory {filename}. Error: {e}")
+
+
+def initialize_environment(output_dir, perform_service_checks):
+    """
+    Initialize the environment and create necessary directories and files.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = os.path.join(output_dir, timestamp)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Output files
+    output_files = {
+        "standard": {
+            "resolved": os.path.join(output_dir, f"resolution_results_{timestamp}.txt"),
+            "unresolved": os.path.join(
+                output_dir, f"unresolved_results_{timestamp}.txt"
+            ),
+            "gcp": os.path.join(output_dir, f"gcp_results_{timestamp}.txt"),
+            "aws": os.path.join(output_dir, f"aws_results_{timestamp}.txt"),
+            "azure": os.path.join(output_dir, f"azure_results_{timestamp}.txt"),
+            "dangling": os.path.join(
+                output_dir, f"dangling_cname_results_{timestamp}.txt"
+            ),
+            "ns_takeover": os.path.join(
+                output_dir, f"ns_takeover_results_{timestamp}.txt"
+            ),
+            "environment": os.path.join(
+                output_dir, f"environment_results_{timestamp}.json"
+            ),
+            "timeout": os.path.join(output_dir, f"timeout_results_{timestamp}.txt"),
+        },
+        "service_checks": {
+            "ssl_tls_failure_file": os.path.join(
+                output_dir, f"ssl_tls_failure_results_{timestamp}.txt"
+            ),
+            "http_failure_file": os.path.join(
+                output_dir, f"http_failure_results_{timestamp}.txt"
+            ),
+            "tcp_common_ports_unreachable_file": os.path.join(
+                output_dir, f"tls_common_ports_unreachable_{timestamp}.txt"
+            ),
+            "screenshot_dir": os.path.join(
+                output_dir, f"screenshot_results_{timestamp}"
+            ),
+            "screenshot_failures": os.path.join(
+                output_dir, f"failure_results_{timestamp}.txt"
+            ),
+        },
+    }
+
+    create_empty_files_or_directories(output_files, perform_service_checks)
+    return timestamp, output_dir, output_files
+
+
+def save_environment_info(environment_file, environment_info):
+    """
+    Save environment information to a file.
+    """
+    with open(environment_file, "w", encoding="utf-8") as json_file:
+        json_file.write(json.dumps(environment_info, indent=4))
+
+
+def read_domains(domains_file):
+    """
+    Read and return domains from a file.
+    """
+    with open(domains_file, "r", encoding="utf-8") as f:
+        return f.read().splitlines()
