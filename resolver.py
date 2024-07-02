@@ -12,12 +12,8 @@ The script can be run directly with the use of command-line arguments for
 specifying the domains file, output directory, verbosity mode and custom resolvers.
 """
 
-import json
-import os
 import threading
 from datetime import datetime
-
-from imports.environment import parse_arguments
 
 from tqdm import tqdm
 
@@ -27,7 +23,13 @@ from imports.cloud_ip_ranges import (
     fetch_google_cloud_ip_ranges,
 )
 from imports.domain_processor import process_domain
-from imports.environment import create_empty_files_or_directories, get_environment_info
+from imports.environment import (
+    parse_arguments,
+    initialize_environment,
+    save_environment_info,
+    get_environment_info,
+    read_domains,
+)
 from imports.dns_based_checks import load_domain_categorisation_regexes
 
 
@@ -44,80 +46,16 @@ def main(
 ):
     """
     Main method for resolving domains and detecting potential cloud service takeovers.
-
-    :param domains_file: Path to a file containing domains to be resolved.
-    :type domains_file: str
-    :param output_dir: Directory where output files will be saved.
-    :type output_dir: str
-    :param resolvers: Optional comma-separated list of custom DNS resolvers.
-    :type resolvers: str, optional
-    :param verbose: If True, prints additional information during processing.
-    :type verbose: bool, optional
-    :param extreme: If True, fetches and prints cloud provider IP ranges.
-    :type extreme: bool, optional
-    :return: None
     """
 
-    # Create output directory with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(output_dir, timestamp)
-    os.makedirs(output_dir, exist_ok=True)
+    # Initialize the environment and fetch the required configurations
+    timestamp, output_dir, output_files = initialize_environment(
+        output_dir, perform_service_checks
+    )
 
-    # Output files
-    resolution_file = os.path.join(output_dir, f"resolution_results_{timestamp}.txt")
-    tcp_common_ports_unreachable_file = os.path.join(
-        output_dir, f"tls_common_ports_unreachable_{timestamp}.txt"
-    )
-    unresolved_file = os.path.join(output_dir, f"unresolved_results_{timestamp}.txt")
-    gcp_file = os.path.join(output_dir, f"gcp_results_{timestamp}.txt")
-    aws_file = os.path.join(output_dir, f"aws_results_{timestamp}.txt")
-    azure_file = os.path.join(output_dir, f"azure_results_{timestamp}.txt")
-    dangling_cname_file = os.path.join(
-        output_dir, f"dangling_cname_results_{timestamp}.txt"
-    )
-    environment_file = os.path.join(output_dir, f"environment_results_{timestamp}.json")
-    ssl_tls_failure_file = os.path.join(
-        output_dir, f"ssl_tls_failure_results_{timestamp}.txt"
-    )
-    http_failure_file = os.path.join(
-        output_dir, f"http_failure_results_{timestamp}.txt"
-    )
-    screenshot_failure_file = os.path.join(
-        output_dir, f"failure_results_{timestamp}.txt"
-    )
-    ns_takeover_file = os.path.join(output_dir, f"ns_takeover_results_{timestamp}.txt")
-
-    screenshot_dir = os.path.join(output_dir, f"screenshot_results_{timestamp}")
-    timeout_file = os.path.join(output_dir, f"timeout_results_{timestamp}.txt")
-    output_files = {
-        "standard": {
-            "resolved": resolution_file,
-            "unresolved": unresolved_file,
-            "gcp": gcp_file,
-            "aws": aws_file,
-            "azure": azure_file,
-            "dangling": dangling_cname_file,
-            "ns_takeover": ns_takeover_file,
-            "environment": environment_file,
-            "timeout": timeout_file,
-        },
-        "service_checks": {
-            "ssl_tls_failure_file": ssl_tls_failure_file,
-            "http_failure_file": http_failure_file,
-            "tcp_common_ports_unreachable_file": tcp_common_ports_unreachable_file,
-            "screenshot_dir": screenshot_dir,
-            "screenshot_failures": screenshot_failure_file,
-        },
-    }
-
-    # Create empty files to avoid FileNotFoundError
-    create_empty_files_or_directories(output_files, perform_service_checks)
-
+    # Save environment information
     environment_info = get_environment_info()
-    with open(
-        output_files["standard"]["environment"], "w", encoding="utf-8"
-    ) as json_file:
-        json_file.write(json.dumps(environment_info, indent=4))
+    save_environment_info(output_files["standard"]["environment"], environment_info)
 
     if resolvers:
         nameservers = resolvers.split(",")
@@ -130,8 +68,7 @@ def main(
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(output_dir, extreme)
 
     # Read domains from input file
-    with open(domains_file, "r", encoding="utf-8") as f:
-        domains = f.read().splitlines()
+    domains = read_domains(domains_file)
 
     if verbose:
         print(f"Domains to process: {domains}")
@@ -152,12 +89,12 @@ def main(
             if len(threads) >= max_threads:
                 threads.pop(
                     0
-                ).join()  # remove the oldest thread and wait it to complete
+                ).join()  # remove the oldest thread and wait for it to complete
             thread = threading.Thread(
                 target=process_domain,
                 args=(
                     domain,
-                    nameservers,  # Values can be none for system resolution, a list for --resolvers
+                    nameservers,
                     output_files,
                     pbar,
                     verbose,
@@ -194,7 +131,6 @@ def main(
 
 
 if __name__ == "__main__":
-
     args = parse_arguments()
 
     main(
