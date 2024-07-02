@@ -7,7 +7,23 @@ check_dangling_cname(current_domain, nameservers):
     Check if a domain has a dangling CNAME record.
 """
 
+import json
+import re
 import dns.resolver
+
+
+def load_domain_categorisation_regexes(config_file="config.json"):
+    with open(config_file, "r", encoding="utf-8") as f:
+        config = json.load(f)
+    patterns = config.get("domain_categorisation", {})
+    return {k: re.compile(v) for k, v in patterns.items()}
+
+
+def categorise_domain(domain, patterns):
+    for category, pattern in patterns.items():
+        if pattern.search(domain):
+            return category
+    return "unknown"
 
 
 def is_dangling_record(resolver, domain, record_type):
@@ -94,7 +110,9 @@ def create_resolver(timeout, nameservers):
     return resolver
 
 
-def resolve_domain(resolver, domain, nameservers, output_files, verbose, retries):
+def resolve_domain(
+    resolver, domain, nameservers, output_files, verbose, retries, patterns
+):
     resolved_records = []
     current_domain = domain
     while True:
@@ -113,7 +131,9 @@ def resolve_domain(resolver, domain, nameservers, output_files, verbose, retries
                     with open(
                         output_files["standard"]["dangling"], "a", encoding="utf-8"
                     ) as file:
-                        file.write(f"{domain}|{current_domain}\n")
+                        category = categorise_domain(current_domain, patterns)
+                        file.write(f"{domain}|{current_domain}|{category}\n")
+
                 break
         if not cname_chain_resolved:
             break
