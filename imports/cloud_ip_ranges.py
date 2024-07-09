@@ -1,7 +1,6 @@
 """Module for fetching and parsing IP ranges from Google Cloud, AWS, Azure, and
 checking if an IP address is in given IP ranges."""
 
-import ipaddress
 import json
 import os
 import re
