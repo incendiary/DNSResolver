@@ -38,28 +38,28 @@ def process_domain(
     patterns,
     dangling_domains,
     failed_domains,
+    evidence_enabled,
 ):
     """
-    Process a domain by performing DNS resolution, CSP checks, and service connectivity checks.
-
     :param domain: The domain to be processed.
-    :param nameservers: The nameservers to be used for DNS resolution.
-    :param output_files: The output files to store the results.
-    :param pbar: The progress bar to update.
-    :param verbose: Set to True for verbose output.
-    :param extreme: Set to True to enable extreme mode.
-    :param gcp_ipv4: The IPv4 ranges for Google Cloud Platform.
-    :param gcp_ipv6: The IPv6 ranges for Google Cloud Platform.
-    :param aws_ipv4: The IPv4 ranges for Amazon Web Services.
-    :param aws_ipv6: The IPv6 ranges for Amazon Web Services.
-    :param azure_ipv4: The IPv4 ranges for Microsoft Azure.
-    :param azure_ipv6: The IPv6 ranges for Microsoft Azure.
-    :param perform_service_checks: Set to True to perform service connectivity checks.
-    :param timeout: The timeout for DNS resolution.
-    :param retries: The number of DNS resolution retries.
-    :param patterns: The patterns to match against DNS responses.
-    :param dangling_domains: List to store dangling domain results.
-    :param failed_domains: List to store failed domain results.
+    :param nameservers: The list of nameservers to use for DNS resolution.
+    :param output_files: The list of output files to write results to.
+    :param pbar: The progress bar object to update.
+    :param verbose: Boolean flag indicating whether to print verbose output.
+    :param extreme: Boolean flag indicating whether to run extreme checks.
+    :param gcp_ipv4: The list of GCP IPv4 addresses to check against.
+    :param gcp_ipv6: The list of GCP IPv6 addresses to check against.
+    :param aws_ipv4: The list of AWS IPv4 addresses to check against.
+    :param aws_ipv6: The list of AWS IPv6 addresses to check against.
+    :param azure_ipv4: The list of Azure IPv4 addresses to check against.
+    :param azure_ipv6: The list of Azure IPv6 addresses to check against.
+    :param perform_service_checks: Boolean flag indicating whether to perform service connectivity checks.
+    :param timeout: The timeout value for DNS resolution.
+    :param retries: The number of times to retry DNS resolution.
+    :param patterns: The list of patterns to match against resolved IP addresses.
+    :param dangling_domains: The list of dangling domains found during resolution.
+    :param failed_domains: The list of failed domains during resolution.
+    :param evidence_enabled: Boolean flag indicating whether to enable evidence collection.
     :return: None
     """
     resolver = create_resolver(timeout, nameservers)
@@ -74,6 +74,7 @@ def process_domain(
         patterns,
         dangling_domains,
         failed_domains,
+        evidence_enabled,
     )
 
     if success:
