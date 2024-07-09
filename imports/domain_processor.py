@@ -1,26 +1,22 @@
-"""This module focuses on performing DNS record analyses for given domain
-names. It provides functionality to resolve a domain's CNAME chain, check for
-dangling CNAMEs, and resolve the domain's 'A' (IPv4) and 'AAAA' (IPv6) records.
+"""
+This module provides functions related to DNS resolution, CSP checks, and service connectivity checks for domains.
 
-The main function in the module, `process_domain`, also verifies if the
-resolved IPs are within IP ranges of certain cloud platforms, specifically
-Google Cloud Platform, Amazon Web Service, and Microsoft Azure.
+It imports functions from three other modules:
+- cloud_csp_checks for performing CSP (Content Security Policy) checks
+- dns_based_checks for creating a DNS resolver and resolving domains
+- service_connectivity_checks for performing checks for service connectivity
 
-Functions defined in the `cloud_ip_ranges` and `cname_checker` modules are
-used to support these operations.
+The main function in this module, process_domain, combines these checks to
+perform a comprehensive domain analysis.
 
-In brief, this module is intended to provide a thorough DNS resolution process
-and relation check with known cloud platforms, aiding in identifying potential
-security pitfalls like dangling DNS records.
-
-The results of these operations are written to specified output files and can
-optionally be printed to the console in verbose scenarios.
+Functions:
+  process_domain : Processes a domain by performing DNS resolution,
+                   CSP checks, and service connectivity checks.
 """
 
 from imports.cloud_csp_checks import perform_csp_checks
 from imports.dns_based_checks import create_resolver, resolve_domain
-from imports.service_connectivity_checks import \
-    perform_service_connectivity_checks
+from imports.service_connectivity_checks import perform_service_connectivity_checks
 
 
 def process_domain(
@@ -40,31 +36,44 @@ def process_domain(
     timeout,
     retries,
     patterns,
+    dangling_domains,
+    failed_domains,
 ):
     """
-    Process a domain and resolve its DNS records and perform additional checks.
+    Process a domain by performing DNS resolution, CSP checks, and service connectivity checks.
 
     :param domain: The domain to be processed.
-    :param nameservers: Optional list of nameservers to use for DNS resolution.
-    :param output_files: Dictionary of output file paths.
-    :param pbar: Progress bar object to update.
-    :param verbose: Boolean flag indicating whether to enable verbose logging.
-    :param extreme: Boolean flag indicating whether to enable extreme checks.
-    :param gcp_ipv4: List of GCP IPv4 CIDR ranges.
-    :param gcp_ipv6: List of GCP IPv6 CIDR ranges.
-    :param aws_ipv4: List of AWS IPv4 CIDR ranges.
-    :param aws_ipv6: List of AWS IPv6 CIDR ranges.
-    :param azure_ipv4: List of Azure IPv4 CIDR ranges.
-    :param azure_ipv6: List of Azure IPv6 CIDR ranges.
-    :param perform_service_checks: Boolean flag indicating whether to perform service checks.
-    :param timeout: Timeout for DNS resolution in seconds.
+    :param nameservers: The nameservers to be used for DNS resolution.
+    :param output_files: The output files to store the results.
+    :param pbar: The progress bar to update.
+    :param verbose: Set to True for verbose output.
+    :param extreme: Set to True to enable extreme mode.
+    :param gcp_ipv4: The IPv4 ranges for Google Cloud Platform.
+    :param gcp_ipv6: The IPv6 ranges for Google Cloud Platform.
+    :param aws_ipv4: The IPv4 ranges for Amazon Web Services.
+    :param aws_ipv6: The IPv6 ranges for Amazon Web Services.
+    :param azure_ipv4: The IPv4 ranges for Microsoft Azure.
+    :param azure_ipv6: The IPv6 ranges for Microsoft Azure.
+    :param perform_service_checks: Set to True to perform service connectivity checks.
+    :param timeout: The timeout for DNS resolution.
+    :param retries: The number of DNS resolution retries.
+    :param patterns: The patterns to match against DNS responses.
+    :param dangling_domains: List to store dangling domain results.
+    :param failed_domains: List to store failed domain results.
     :return: None
     """
-
     resolver = create_resolver(timeout, nameservers)
 
     success, final_ips = resolve_domain(
-        resolver, domain, nameservers, output_files, verbose, retries, patterns
+        resolver,
+        domain,
+        nameservers,
+        output_files,
+        verbose,
+        retries,
+        patterns,
+        dangling_domains,
+        failed_domains,
     )
 
     if success:
