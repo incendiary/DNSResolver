@@ -44,15 +44,20 @@ def main(
     retries=3,
 ):
     """
-    Main method for resolving domains and detecting potential cloud service takeovers.
+    :param domains_file: The path to the file containing the list of domains to process.
+    :param output_dir: The path to the directory where the output files will be saved.
+    :param resolvers: A comma-separated list of custom DNS resolvers to use.
+    :param max_threads: The maximum number of concurrent threads to use for processing domains.
+    :param verbose: Flag indicating whether to print verbose output during processing.
+    :param extreme: Flag indicating whether to perform extreme checks (fetching IP ranges) for AWS, Google Cloud, and Azure.
+    :param perform_service_checks: Flag indicating whether to perform service checks for each resolved IP address.
+    :param timeout: The timeout value (in seconds) for DNS resolution and service checks.
+    :param retries: The number of times to retry failed resolutions.
+    :return: None
     """
-
-    # Initialize the environment and fetch the required configurations
     timestamp, output_dir, output_files = initialize_environment(
         output_dir, perform_service_checks
     )
-
-    # Save environment information
     environment_info = get_environment_info()
     save_environment_info(output_files["standard"]["environment"], environment_info)
 
@@ -61,12 +66,10 @@ def main(
     else:
         nameservers = None
 
-    # Fetch and parse cloud provider IP ranges
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(output_dir, extreme)
     aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(output_dir, extreme)
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(output_dir, extreme)
 
-    # Read domains from input file
     domains = read_domains(domains_file)
 
     if verbose:
@@ -75,49 +78,58 @@ def main(
     patterns = load_domain_categorisation_patterns()
 
     if max_threads is None:
-        max_threads = 10  # Default to 10 threads if not specified
+        max_threads = 10
 
-    # Initialize progress bar
-    with tqdm(total=len(domains), desc="Processing Domains") as pbar:
-        threads = []
+    dangling_domains = set()
+    failed_domains = set(domains)
 
-        # Process each domain using threads
-        for domain in domains:
-            if verbose:
-                print(f"Starting thread for domain: {domain}")
-            if len(threads) >= max_threads:
-                threads.pop(
-                    0
-                ).join()  # remove the oldest thread and wait for it to complete
-            thread = threading.Thread(
-                target=process_domain,
-                args=(
-                    domain,
-                    nameservers,
-                    output_files,
-                    pbar,
-                    verbose,
-                    extreme,
-                    gcp_ipv4,
-                    gcp_ipv6,
-                    aws_ipv4,
-                    aws_ipv6,
-                    azure_ipv4,
-                    azure_ipv6,
-                    perform_service_checks,
-                    timeout,
-                    retries,
-                    patterns,
-                ),
-            )
-            threads.append(thread)
-            thread.start()
+    for attempt in range(retries + 1):
+        if not failed_domains:
+            break
 
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
+        current_failed_domains = list(failed_domains)
+        failed_domains.clear()
 
-    # Print final messages
+        with tqdm(
+            total=len(current_failed_domains),
+            desc=f"Processing Domains (Attempt {attempt + 1})",
+        ) as pbar:
+            threads = []
+
+            for domain in current_failed_domains:
+                if verbose:
+                    print(f"Starting thread for domain: {domain}")
+                if len(threads) >= max_threads:
+                    threads.pop(0).join()
+                thread = threading.Thread(
+                    target=process_domain,
+                    args=(
+                        domain,
+                        nameservers,
+                        output_files,
+                        pbar,
+                        verbose,
+                        extreme,
+                        gcp_ipv4,
+                        gcp_ipv6,
+                        aws_ipv4,
+                        aws_ipv6,
+                        azure_ipv4,
+                        azure_ipv6,
+                        perform_service_checks,
+                        timeout,
+                        retries,
+                        patterns,
+                        dangling_domains,
+                        failed_domains,
+                    ),
+                )
+                threads.append(thread)
+                thread.start()
+
+            for thread in threads:
+                thread.join()
+
     print("All resolutions completed. Results saved to", output_dir)
 
     if extreme:
