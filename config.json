@@ -1,4 +1,15 @@
 {
+    "config": {
+        "output_dir": "output",
+        "resolvers": "1.1.1.1,8.8.8.8,208.67.222.22",
+        "max_threads": 2,
+        "timeout": 1,
+        "verbose": true,
+        "retries": 2,
+        "evidence": true,
+        "service_checks": true,
+        "extreme": false
+    },
     "ssl_tls_ports": [443, 8443, 8080, 8888, 8000],
     "http_ports": [80, 8080, 8000, 8888],
     "domain_categorization": {
