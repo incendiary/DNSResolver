@@ -57,7 +57,6 @@ def main(
     :param retries: Number of times to retry failed resolutions. (int)
     :param evidence: Flag to enable evidence collection during domain resolution. (bool)
     :return: None
-
     """
 
     # Initialize environment and create necessary directories and files
