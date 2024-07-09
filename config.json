@@ -2,57 +2,260 @@
     "ssl_tls_ports": [443, 8443, 8080, 8888, 8000],
     "http_ports": [80, 8080, 8000, 8888],
     "domain_categorization": {
-        "aws": "\\.acm-validations\\.aws\\.|\\.cloudfront\\.net\\.",
-        "microsoft": "\\.onmicrosoft\\.com\\.",
-        "salesforce": "\\.custdkim\\.salesforce\\.com\\.",
-        "sendgrid": "\\.sendgrid\\.net\\.",
-        "amazon_ses": "\\.dkim\\.amazonses\\.com\\.",
-        "digital_platforms": "bizportal\\.digital\\.singtel\\.com|clcf\\.singtelinsurance\\.com",
-        "docusign": "\\.docusign\\.net\\.",
-        "incapsula": "\\.incapdns\\.net\\.",
-        "google": "\\.googlehosted\\.com\\.|\\.googledomains\\.com\\.|\\.googleapis\\.com\\.|\\.googleusercontent\\.com\\.|\\.gstatic\\.com\\.|\\.google\\.",
-        "akamai": "\\.akamai\\.net\\.|\\.akamaihd\\.net\\.",
-        "cloudflare": "\\.cloudflare\\.com\\.|\\.cf\\.cloudflare\\.com\\.|\\.cloudflare-dns\\.com\\.",
-        "vercel": "\\.vercel\\.app\\.|\\.now\\.sh\\.",
-        "heroku": "\\.herokuapp\\.com\\.|\\.herokussl\\.com\\.",
-        "fastly": "\\.fastly\\.net\\.|\\.fastlylb\\.net\\.",
-        "netlify": "\\.netlify\\.com\\.|\\.netlifyglobalcdn\\.com\\.",
-        "pantheon": "\\.pantheonsite\\.io\\.|\\.pantheon\\.io\\.",
-        "github": "\\.github\\.io\\.|\\.githubusercontent\\.com\\.",
-        "bitbucket": "\\.bitbucket\\.io\\.|\\.bitbucket\\.org\\.",
-        "digitalocean": "\\.digitaloceanspaces\\.com\\.|\\.do\\.digitaloceanspaces\\.com\\.",
-        "cloudfront": "\\.cloudfront\\.net\\.",
-        "azure": "\\.azurewebsites\\.net\\.|\\.blob\\.core\\.windows\\.net\\.|\\.table\\.core\\.windows\\.net\\.|\\.queue\\.core\\.windows\\.net\\.|\\.database\\.windows\\.net\\.|\\.azureedge\\.net\\.|\\.azure-api\\.net\\.|\\.microsoftonline\\.com\\.",
-        "dyn": "\\.dynect\\.net\\.|\\.dyn\\.com\\.",
-        "shopify": "\\.myshopify\\.com\\.|\\.shopify\\.com\\.",
-        "wordpress": "\\.wordpress\\.com\\.|\\.wp\\.com\\.",
-        "wix": "\\.wix\\.com\\.|\\.editorx\\.com\\.|\\.wixsite\\.com\\.",
-        "squarespace": "\\.squarespace\\.com\\.",
-        "weebly": "\\.weebly\\.com\\.",
-        "zendesk": "\\.zendesk\\.com\\.",
-        "jira": "\\.jira\\.com\\.|\\.atlassian\\.net\\.",
-        "box": "\\.box\\.com\\.",
-        "dropbox": "\\.dropboxusercontent\\.com\\.|\\.dropbox\\.com\\.",
-        "slack": "\\.slack\\.com\\.",
-        "trello": "\\.trello\\.com\\.",
-        "zoom": "\\.zoom\\.us\\.",
-        "algolia": "\\.algolia\\.net\\.|\\.algolianet\\.com\\.",
-        "firebase": "\\.firebaseio\\.com\\.|\\.firebasedatabase\\.app\\.",
-        "cloudflare_ips": "\\.cf\\.cloudflareresolve\\.com\\.|\\.cloudflareresolve\\.com\\.",
-        "datadog": "\\.datadoghq\\.com\\.",
-        "newrelic": "\\.newrelic\\.com\\.",
-        "heroku_legacy": "\\.herokudns\\.com\\.|\\.herokussl\\.com\\.|\\.herokuapp\\.com\\.",
-        "oracle": "\\.oraclecloud\\.com\\.|\\.oracle\\.com\\.",
-        "cloud_functions": "\\.cloudfunctions\\.net\\.",
-        "strikingly": "\\.strikingly\\.com\\.",
-        "unbounce": "\\.unbouncepages\\.com\\.",
-        "launchrock": "\\.launchrock\\.com\\.",
-        "firebaseio": "\\.firebaseio\\.com\\.",
-        "acquia": "\\.acquia\\.com\\.",
-        "ngrok": "\\.ngrok\\.io\\.",
-        "strapi": "\\.strapi\\.io\\.",
-        "netlify_edge": "\\.netlifyglobalcdn\\.com\\.",
-        "aws_amplify": "\\.amplifyapp\\.com\\.",
-        "api_gateway": "\\.execute-api\\.amazonaws\\.com\\."
+        "aws_acm": {
+            "regex": "\\.acm-validations\\.aws\\.",
+            "recommendation": "Do not remove",
+            "evidence": "https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html#cnames-overview"
+        },
+        "cloudfront": {
+            "regex": "\\.cloudfront\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://aws.amazon.com/premiumsupport/knowledge-center/delete-cloudfront-cname-entry/"
+        },
+        "microsoft": {
+            "regex": "\\.onmicrosoft\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.microsoft.com/en-us/azure/active-directory/fundamentals/customize-tenant-name"
+        },
+        "salesforce": {
+            "regex": "\\.custdkim\\.salesforce\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://help.salesforce.com/articleView?id=000313497&type=1&mode=1"
+        },
+        "sendgrid": {
+            "regex": "\\.sendgrid\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://sendgrid.com/docs/ui/account-and-settings/how-to-set-up-domain-authentication/"
+        },
+        "amazon_ses": {
+            "regex": "\\.dkim\\.amazonses\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.aws.amazon.com/ses/latest/DeveloperGuide/send-email-authentication-dkim.html"
+        },
+        "digital_platforms": {
+            "regex": "bizportal\\.digital\\.singtel\\.com|clcf\\.singtelinsurance\\.com",
+            "recommendation": "Unclassified",
+            "evidence": "https://www.singtel.com"
+        },
+        "docusign": {
+            "regex": "\\.docusign\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.docusign.com/en/guides/DocuSign-Signing-Signing-FAQs"
+        },
+        "incapsula": {
+            "regex": "\\.incapdns\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.imperva.com/bundle/cloud-application-security/page/more/faq/incapsula-nameserver.html"
+        },
+        "google": {
+            "regex": "\\.googlehosted\\.com\\.|\\.googledomains\\.com\\.|\\.googleapis\\.com\\.|\\.googleusercontent\\.com\\.|\\.gstatic\\.com\\.|\\.google\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://developers.google.com"
+        },
+        "akamai": {
+            "regex": "\\.akamai\\.net\\.|\\.akamaihd\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://www.akamai.com/us/en/resources/faq.jsp"
+        },
+        "cloudflare": {
+            "regex": "\\.cloudflare\\.com\\.|\\.cf\\.cloudflare\\.com\\.|\\.cloudflare-dns\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://developers.cloudflare.com"
+        },
+        "vercel": {
+            "regex": "\\.vercel\\.app\\.|\\.now\\.sh\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://vercel.com/docs"
+        },
+        "heroku": {
+            "regex": "\\.herokuapp\\.com\\.|\\.herokussl\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://devcenter.heroku.com"
+        },
+        "fastly": {
+            "regex": "\\.fastly\\.net\\.|\\.fastlylb\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.fastly.com"
+        },
+        "netlify": {
+            "regex": "\\.netlify\\.com\\.|\\.netlifyglobalcdn\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.netlify.com"
+        },
+        "pantheon": {
+            "regex": "\\.pantheonsite\\.io\\.|\\.pantheon\\.io\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://pantheon.io/docs"
+        },
+        "github": {
+            "regex": "\\.github\\.io\\.|\\.githubusercontent\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.github.com"
+        },
+        "bitbucket": {
+            "regex": "\\.bitbucket\\.io\\.|\\.bitbucket\\.org\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.atlassian.com/bitbucket-cloud/docs/"
+        },
+        "digitalocean": {
+            "regex": "\\.digitaloceanspaces\\.com\\.|\\.do\\.digitaloceanspaces\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://www.digitalocean.com/docs/spaces/"
+        },
+        "azure": {
+            "regex": "\\.azurewebsites\\.net\\.|\\.blob\\.core\\.windows\\.net\\.|\\.table\\.core\\.windows\\.net\\.|\\.queue\\.core\\.windows\\.net\\.|\\.database\\.windows\\.net\\.|\\.azureedge\\.net\\.|\\.azure-api\\.net\\.|\\.microsoftonline\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.microsoft.com/en-us/azure/"
+        },
+        "dyn": {
+            "regex": "\\.dynect\\.net\\.|\\.dyn\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://help.dyn.com"
+        },
+        "shopify": {
+            "regex": "\\.myshopify\\.com\\.|\\.shopify\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://help.shopify.com"
+        },
+        "wordpress": {
+            "regex": "\\.wordpress\\.com\\.|\\.wp\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://wordpress.org/support/"
+        },
+        "wix": {
+            "regex": "\\.wix\\.com\\.|\\.editorx\\.com\\.|\\.wixsite\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.wix.com"
+        },
+        "squarespace": {
+            "regex": "\\.squarespace\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.squarespace.com"
+        },
+        "weebly": {
+            "regex": "\\.weebly\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://www.weebly.com/app/help/us/en"
+        },
+        "zendesk": {
+            "regex": "\\.zendesk\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.zendesk.com"
+        },
+        "jira": {
+            "regex": "\\.jira\\.com\\.|\\.atlassian\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.atlassian.com/jira-cloud/"
+        },
+        "box": {
+            "regex": "\\.box\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.box.com"
+        },
+        "dropbox": {
+            "regex": "\\.dropboxusercontent\\.com\\.|\\.dropbox\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://help.dropbox.com"
+        },
+        "slack": {
+            "regex": "\\.slack\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://slack.com/help"
+        },
+        "trello": {
+            "regex": "\\.trello\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://help.trello.com"
+        },
+        "zoom": {
+            "regex": "\\.zoom\\.us\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.zoom.us"
+        },
+        "algolia": {
+            "regex": "\\.algolia\\.net\\.|\\.algolianet\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://www.algolia.com/doc/"
+        },
+        "firebase": {
+            "regex": "\\.firebaseio\\.com\\.|\\.firebasedatabase\\.app\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://firebase.google.com/docs"
+        },
+        "cloudflare_ips": {
+            "regex": "\\.cf\\.cloudflareresolve\\.com\\.|\\.cloudflareresolve\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://developers.cloudflare.com"
+        },
+        "datadog": {
+            "regex": "\\.datadoghq\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.datadoghq.com"
+        },
+        "newrelic": {
+            "regex": "\\.newrelic\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.newrelic.com"
+        },
+        "heroku_legacy": {
+            "regex": "\\.herokudns\\.com\\.|\\.herokussl\\.com\\.|\\.herokuapp\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://devcenter.heroku.com"
+        },
+        "oracle": {
+            "regex": "\\.oraclecloud\\.com\\.|\\.oracle\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.oracle.com/en/cloud/"
+        },
+        "cloud_functions": {
+            "regex": "\\.cloudfunctions\\.net\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://cloud.google.com/functions/docs"
+        },
+        "strikingly": {
+            "regex": "\\.strikingly\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.strikingly.com"
+        },
+        "unbounce": {
+            "regex": "\\.unbouncepages\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://documentation.unbounce.com"
+        },
+        "launchrock": {
+            "regex": "\\.launchrock\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://support.launchrock.com"
+        },
+        "acquia": {
+            "regex": "\\.acquia\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.acquia.com"
+        },
+        "ngrok": {
+            "regex": "\\.ngrok\\.io\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://ngrok.com/docs"
+        },
+        "strapi": {
+            "regex": "\\.strapi\\.io\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://strapi.io/documentation"
+        },
+        "netlify_edge": {
+            "regex": "\\.netlifyglobalcdn\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.netlify.com"
+        },
+        "aws_amplify": {
+            "regex": "\\.amplifyapp\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.amplify.aws"
+        },
+        "api_gateway": {
+            "regex": "\\.execute-api\\.amazonaws\\.com\\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://docs.aws.amazon.com/apigateway/latest/developerguide/"
+        }
     }
 }
