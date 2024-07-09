@@ -23,6 +23,7 @@ import os
 import re
 import json
 import subprocess
+
 import dns.resolver
 from imports.environment import setup_logger
 
@@ -61,9 +62,6 @@ def perform_dig(domain, nameserver, reason, evidence_dir):
         f.write(result.stdout)
         f.write("\n")
         f.write(result.stderr)
-    logger.info(
-        f"Performed dig for {domain} with reason {reason}, output saved to {filename}"
-    )
 
 
 def check_dangling_cname(
@@ -87,7 +85,6 @@ def check_dangling_cname(
             output_files["standard"]["ns_takeover"], "a", encoding="utf-8"
         ) as file:
             file.write(f"{original_domain}|{current_domain}\n")
-        logger.info(f"NS takeover detected for {original_domain}|{current_domain}")
         return False
 
     category, recommendation, evidence_link = categorise_domain(
@@ -97,9 +94,6 @@ def check_dangling_cname(
         file.write(
             f"{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}\n"
         )
-    logger.info(
-        f"Dangling CNAME detected: {original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}"
-    )
 
     if evidence_enabled:
         perform_dig(
@@ -134,15 +128,16 @@ def dns_query_with_retry(
             dns.resolver.NoNameservers,
         ) as e:
             if verbose and retry < retries - 1:
-                logger.warning(
+                logger.info(
                     f"Failed to resolve DNS for {domain} - retry {retry + 1} of {retries}: {e}"
                 )
             elif retry == retries - 1:
                 if domain not in dangling_domains:
                     failed_domains.add(domain)  # Track domain for retry
-                    logger.error(
-                        f"DNS resolution for {domain} timed out - Final Timeout: {e}"
-                    )
+                    if verbose:
+                        logger.info(
+                            f"DNS resolution for {domain} timed out - Final Timeout: {e}"
+                        )
                 if evidence_enabled:
                     perform_dig(
                         domain,
