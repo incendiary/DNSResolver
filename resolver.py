@@ -14,6 +14,7 @@ specifying the domains file, output directory, verbosity mode and custom resolve
 
 import threading
 
+from imports.environment import parse_arguments
 from tqdm import tqdm
 
 from imports.cloud_ip_ranges import (
@@ -21,15 +22,14 @@ from imports.cloud_ip_ranges import (
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
-from imports.dns_based_checks import load_domain_categorisation_patterns
 from imports.domain_processor import process_domain
 from imports.environment import (
     get_environment_info,
     initialize_environment,
-    parse_arguments,
-    read_domains,
     save_environment_info,
+    read_domains,
 )
+from imports.dns_based_checks import load_domain_categorisation_patterns
 
 
 def main(
@@ -42,34 +42,44 @@ def main(
     perform_service_checks=True,
     timeout=10,
     retries=3,
+    evidence=False,
 ):
     """
-    :param domains_file: The path to the file containing the list of domains to process.
-    :param output_dir: The path to the directory where the output files will be saved.
-    :param resolvers: A comma-separated list of custom DNS resolvers to use.
-    :param max_threads: The maximum number of concurrent threads to use for processing domains.
-    :param verbose: Flag indicating whether to print verbose output during processing.
-    :param extreme: Flag indicating whether to perform extreme checks (fetching IP ranges) for AWS, Google Cloud, and Azure.
-    :param perform_service_checks: Flag indicating whether to perform service checks for each resolved IP address.
-    :param timeout: The timeout value (in seconds) for DNS resolution and service checks.
-    :param retries: The number of times to retry failed resolutions.
+    :param domains_file: Path to the input file containing the list of domains to process. (str)
+    :param output_dir: Path to the directory where the output files will be saved. (str)
+    :param resolvers: Comma-separated list of custom resolvers to use for DNS resolution. (Optional[str])
+    :param max_threads: Maximum number of threads to use for parallel processing. (Optional[int])
+    :param verbose: Flag to enable verbose mode for printing additional information. (bool)
+    :param extreme: Flag to enable extreme mode for fetching IP ranges from cloud providers. (bool)
+    :param perform_service_checks: Flag to enable service checks during domain resolution. (bool)
+    :param timeout: Timeout value (in seconds) for DNS resolution. (int)
+    :param retries: Number of times to retry failed resolutions. (int)
+    :param evidence: Flag to enable evidence collection during domain resolution. (bool)
     :return: None
+
     """
+
+    # Initialize environment and create necessary directories and files
     timestamp, output_dir, output_files = initialize_environment(
-        output_dir, perform_service_checks
+        output_dir, perform_service_checks, evidence
     )
+
+    # Get and save environment information
     environment_info = get_environment_info()
     save_environment_info(output_files["standard"]["environment"], environment_info)
 
+    # Set custom resolvers if provided
     if resolvers:
         nameservers = resolvers.split(",")
     else:
         nameservers = None
 
+    # Fetch and parse cloud provider IP ranges
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(output_dir, extreme)
     aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(output_dir, extreme)
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(output_dir, extreme)
 
+    # Read domains from input file
     domains = read_domains(domains_file)
 
     if verbose:
@@ -78,7 +88,7 @@ def main(
     patterns = load_domain_categorisation_patterns()
 
     if max_threads is None:
-        max_threads = 10
+        max_threads = 10  # Default to 10 threads if not specified
 
     dangling_domains = set()
     failed_domains = set(domains)
@@ -122,6 +132,7 @@ def main(
                         patterns,
                         dangling_domains,
                         failed_domains,
+                        evidence,  # Pass the evidence flag to process_domain
                     ),
                 )
                 threads.append(thread)
@@ -130,6 +141,7 @@ def main(
             for thread in threads:
                 thread.join()
 
+    # Print final messages
     print("All resolutions completed. Results saved to", output_dir)
 
     if extreme:
@@ -154,4 +166,5 @@ if __name__ == "__main__":
         extreme=args.extreme,
         timeout=args.timeout,
         retries=args.retries,
+        evidence=args.evidence,
     )
