@@ -55,11 +55,16 @@ def parse_arguments():
         help="Path to the file containing domains (one per line)",
     )
     parser.add_argument(
+        "--config-file",
+        type=str,
+        default=None,
+        help="Path to the configuration file (default: None)",
+    )
+    parser.add_argument(
         "--output-dir",
         "-o",
         type=str,
-        default="output",
-        help="Directory to save output files (default: output)",
+        help="Directory to save output files (overrides config file)",
     )
     parser.add_argument(
         "--verbose",
@@ -83,35 +88,46 @@ def parse_arguments():
         "--service-checks",
         "-sc",
         action="store_true",
-        default=False,
-        help="Perform Service Checks",
+        help="Perform Service Checks (overrides config file)",
     )
     parser.add_argument(
         "--max-threads",
         "-mt",
         type=int,
-        help="Max number of threads to use for domain processing (default: 10)",
+        help="Max number of threads to use for domain processing (overrides config file)",
     )
     parser.add_argument(
         "--timeout",
         "-t",
         type=int,
-        default=10,  # default timeout in seconds
-        help="Timeout for DNS resolution process in seconds",
+        help="Timeout for DNS resolution process in seconds (overrides config file)",
     )
     parser.add_argument(
-        "--retries", type=int, default=3, help="Number of retry attempts for timeouts"
+        "--retries",
+        type=int,
+        help="Number of retry attempts for timeouts (overrides config file)",
     )
     parser.add_argument(
         "--evidence",
         action="store_true",
-        help="Enable evidence collection for DNS queries",
+        help="Enable evidence collection for DNS queries (overrides config file)",
     )
 
     args = parser.parse_args()
+
+    if args.config_file:
+        with open(args.config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        config_args = config.get("config", {})
+        for key, value in config_args.items():
+            if getattr(args, key, None) is None:
+                setattr(args, key, value)
+
     # If extreme is set, set verbose as well
     if args.extreme:
         args.verbose = True
+
     return args
 
 
@@ -251,27 +267,28 @@ def initialize_environment(
     return timestamp, output_dir, output_files
 
 
+def read_domains(domains_file):
+    """
+    Read the domain names from the provided file.
+
+    :param domains_file: The path to the file containing the domain names.
+    :type domains_file: str
+    :return: A list of domain names.
+    :rtype: list
+    """
+    with open(domains_file, "r", encoding="utf-8") as f:
+        return f.read().splitlines()
+
+
 def save_environment_info(environment_file, environment_info):
     """
-    Save Environment Info
-
-    This method is used to save the environment information to a JSON file.
+    Save environment information to a JSON file.
 
     :param environment_file: The file path where the environment information will be saved.
     :type environment_file: str
-
     :param environment_info: The environment information that needs to be saved.
     :type environment_info: dict
-
     :return: None
-
     """
     with open(environment_file, "w", encoding="utf-8") as json_file:
         json_file.write(json.dumps(environment_info, indent=4))
-
-
-def read_domains(domains_file):
-    """
-    Read the domain names"""
-    with open(domains_file, "r", encoding="utf-8") as f:
-        return f.read().splitlines()
