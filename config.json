@@ -2,57 +2,265 @@
     "ssl_tls_ports": [443, 8443, 8080, 8888, 8000],
     "http_ports": [80, 8080, 8000, 8888],
     "domain_categorization": {
-        "aws": "\\.acm-validations\\.aws\\.|\\.cloudfront\\.net\\.",
-        "microsoft": "\\.onmicrosoft\\.com\\.",
-        "salesforce": "\\.custdkim\\.salesforce\\.com\\.",
-        "sendgrid": "\\.sendgrid\\.net\\.",
-        "amazon_ses": "\\.dkim\\.amazonses\\.com\\.",
-        "digital_platforms": "bizportal\\.digital\\.singtel\\.com|clcf\\.singtelinsurance\\.com",
-        "docusign": "\\.docusign\\.net\\.",
-        "incapsula": "\\.incapdns\\.net\\.",
-        "google": "\\.googlehosted\\.com\\.|\\.googledomains\\.com\\.|\\.googleapis\\.com\\.|\\.googleusercontent\\.com\\.|\\.gstatic\\.com\\.|\\.google\\.",
-        "akamai": "\\.akamai\\.net\\.|\\.akamaihd\\.net\\.",
-        "cloudflare": "\\.cloudflare\\.com\\.|\\.cf\\.cloudflare\\.com\\.|\\.cloudflare-dns\\.com\\.",
-        "vercel": "\\.vercel\\.app\\.|\\.now\\.sh\\.",
-        "heroku": "\\.herokuapp\\.com\\.|\\.herokussl\\.com\\.",
-        "fastly": "\\.fastly\\.net\\.|\\.fastlylb\\.net\\.",
-        "netlify": "\\.netlify\\.com\\.|\\.netlifyglobalcdn\\.com\\.",
-        "pantheon": "\\.pantheonsite\\.io\\.|\\.pantheon\\.io\\.",
-        "github": "\\.github\\.io\\.|\\.githubusercontent\\.com\\.",
-        "bitbucket": "\\.bitbucket\\.io\\.|\\.bitbucket\\.org\\.",
-        "digitalocean": "\\.digitaloceanspaces\\.com\\.|\\.do\\.digitaloceanspaces\\.com\\.",
-        "cloudfront": "\\.cloudfront\\.net\\.",
-        "azure": "\\.azurewebsites\\.net\\.|\\.blob\\.core\\.windows\\.net\\.|\\.table\\.core\\.windows\\.net\\.|\\.queue\\.core\\.windows\\.net\\.|\\.database\\.windows\\.net\\.|\\.azureedge\\.net\\.|\\.azure-api\\.net\\.|\\.microsoftonline\\.com\\.",
-        "dyn": "\\.dynect\\.net\\.|\\.dyn\\.com\\.",
-        "shopify": "\\.myshopify\\.com\\.|\\.shopify\\.com\\.",
-        "wordpress": "\\.wordpress\\.com\\.|\\.wp\\.com\\.",
-        "wix": "\\.wix\\.com\\.|\\.editorx\\.com\\.|\\.wixsite\\.com\\.",
-        "squarespace": "\\.squarespace\\.com\\.",
-        "weebly": "\\.weebly\\.com\\.",
-        "zendesk": "\\.zendesk\\.com\\.",
-        "jira": "\\.jira\\.com\\.|\\.atlassian\\.net\\.",
-        "box": "\\.box\\.com\\.",
-        "dropbox": "\\.dropboxusercontent\\.com\\.|\\.dropbox\\.com\\.",
-        "slack": "\\.slack\\.com\\.",
-        "trello": "\\.trello\\.com\\.",
-        "zoom": "\\.zoom\\.us\\.",
-        "algolia": "\\.algolia\\.net\\.|\\.algolianet\\.com\\.",
-        "firebase": "\\.firebaseio\\.com\\.|\\.firebasedatabase\\.app\\.",
-        "cloudflare_ips": "\\.cf\\.cloudflareresolve\\.com\\.|\\.cloudflareresolve\\.com\\.",
-        "datadog": "\\.datadoghq\\.com\\.",
-        "newrelic": "\\.newrelic\\.com\\.",
-        "heroku_legacy": "\\.herokudns\\.com\\.|\\.herokussl\\.com\\.|\\.herokuapp\\.com\\.",
-        "oracle": "\\.oraclecloud\\.com\\.|\\.oracle\\.com\\.",
-        "cloud_functions": "\\.cloudfunctions\\.net\\.",
-        "strikingly": "\\.strikingly\\.com\\.",
-        "unbounce": "\\.unbouncepages\\.com\\.",
-        "launchrock": "\\.launchrock\\.com\\.",
-        "firebaseio": "\\.firebaseio\\.com\\.",
-        "acquia": "\\.acquia\\.com\\.",
-        "ngrok": "\\.ngrok\\.io\\.",
-        "strapi": "\\.strapi\\.io\\.",
-        "netlify_edge": "\\.netlifyglobalcdn\\.com\\.",
-        "aws_amplify": "\\.amplifyapp\\.com\\.",
-        "api_gateway": "\\.execute-api\\.amazonaws\\.com\\."
+        "aws_acm": {
+            "pattern": "\\.acm-validations\\.aws\\.",
+            "recommendation": "Leave by Default",
+            "evidence": "https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html#cnames-overview"
+        },
+        "aws_cloudfront": {
+            "pattern": "\\.cloudfront\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://aws.amazon.com/cloudfront/"
+        },
+        "microsoft": {
+            "pattern": "\\.onmicrosoft\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://docs.microsoft.com/"
+        },
+        "salesforce": {
+            "pattern": "\\.custdkim\\.salesforce\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.salesforce.com/"
+        },
+        "sendgrid": {
+            "pattern": "\\.sendgrid\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://sendgrid.com/"
+        },
+        "amazon_ses": {
+            "pattern": "\\.dkim\\.amazonses\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://aws.amazon.com/ses/"
+        },
+        "digital_platforms": {
+            "pattern": "bizportal\\.digital\\.singtel\\.com|clcf\\.singtelinsurance\\.com",
+            "recommendation": "Review",
+            "evidence": "https://www.singtel.com/"
+        },
+        "docusign": {
+            "pattern": "\\.docusign\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.docusign.com/"
+        },
+        "incapsula": {
+            "pattern": "\\.incapdns\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.incapsula.com/"
+        },
+        "google": {
+            "pattern": "\\.googlehosted\\.com\\.|\\.googledomains\\.com\\.|\\.googleapis\\.com\\.|\\.googleusercontent\\.com\\.|\\.gstatic\\.com\\.|\\.google\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.google.com/"
+        },
+        "akamai": {
+            "pattern": "\\.akamai\\.net\\.|\\.akamaihd\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.akamai.com/"
+        },
+        "cloudflare": {
+            "pattern": "\\.cloudflare\\.com\\.|\\.cf\\.cloudflare\\.com\\.|\\.cloudflare-dns\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.cloudflare.com/"
+        },
+        "vercel": {
+            "pattern": "\\.vercel\\.app\\.|\\.now\\.sh\\.",
+            "recommendation": "Review",
+            "evidence": "https://vercel.com/"
+        },
+        "heroku": {
+            "pattern": "\\.herokuapp\\.com\\.|\\.herokussl\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.heroku.com/"
+        },
+        "fastly": {
+            "pattern": "\\.fastly\\.net\\.|\\.fastlylb\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.fastly.com/"
+        },
+        "netlify": {
+            "pattern": "\\.netlify\\.com\\.|\\.netlifyglobalcdn\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.netlify.com/"
+        },
+        "pantheon": {
+            "pattern": "\\.pantheonsite\\.io\\.|\\.pantheon\\.io\\.",
+            "recommendation": "Review",
+            "evidence": "https://pantheon.io/"
+        },
+        "github": {
+            "pattern": "\\.github\\.io\\.|\\.githubusercontent\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://github.com/"
+        },
+        "bitbucket": {
+            "pattern": "\\.bitbucket\\.io\\.|\\.bitbucket\\.org\\.",
+            "recommendation": "Review",
+            "evidence": "https://bitbucket.org/"
+        },
+        "digitalocean": {
+            "pattern": "\\.digitaloceanspaces\\.com\\.|\\.do\\.digitaloceanspaces\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.digitalocean.com/"
+        },
+        "azure": {
+            "pattern": "\\.azurewebsites\\.net\\.|\\.blob\\.core\\.windows\\.net\\.|\\.table\\.core\\.windows\\.net\\.|\\.queue\\.core\\.windows\\.net\\.|\\.database\\.windows\\.net\\.|\\.azureedge\\.net\\.|\\.azure-api\\.net\\.|\\.microsoftonline\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://azure.microsoft.com/"
+        },
+        "dyn": {
+            "pattern": "\\.dynect\\.net\\.|\\.dyn\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://dyn.com/"
+        },
+        "shopify": {
+            "pattern": "\\.myshopify\\.com\\.|\\.shopify\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.shopify.com/"
+        },
+        "wordpress": {
+            "pattern": "\\.wordpress\\.com\\.|\\.wp\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://wordpress.com/"
+        },
+        "wix": {
+            "pattern": "\\.wix\\.com\\.|\\.editorx\\.com\\.|\\.wixsite\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.wix.com/"
+        },
+        "squarespace": {
+            "pattern": "\\.squarespace\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.squarespace.com/"
+        },
+        "weebly": {
+            "pattern": "\\.weebly\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.weebly.com/"
+        },
+        "zendesk": {
+            "pattern": "\\.zendesk\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.zendesk.com/"
+        },
+        "jira": {
+            "pattern": "\\.jira\\.com\\.|\\.atlassian\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.atlassian.com/software/jira"
+        },
+        "box": {
+            "pattern": "\\.box\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.box.com/"
+        },
+        "dropbox": {
+            "pattern": "\\.dropboxusercontent\\.com\\.|\\.dropbox\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.dropbox.com/"
+        },
+        "slack": {
+            "pattern": "\\.slack\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://slack.com/"
+        },
+        "trello": {
+            "pattern": "\\.trello\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://trello.com/"
+        },
+        "zoom": {
+            "pattern": "\\.zoom\\.us\\.",
+            "recommendation": "Review",
+            "evidence": "https://zoom.us/"
+        },
+        "algolia": {
+            "pattern": "\\.algolia\\.net\\.|\\.algolianet\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.algolia.com/"
+        },
+        "firebase": {
+            "pattern": "\\.firebaseio\\.com\\.|\\.firebasedatabase\\.app\\.",
+            "recommendation": "Review",
+            "evidence": "https://firebase.google.com/"
+        },
+        "cloudflare_ips": {
+            "pattern": "\\.cf\\.cloudflareresolve\\.com\\.|\\.cloudflareresolve\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.cloudflare.com/"
+        },
+        "datadog": {
+            "pattern": "\\.datadoghq\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.datadoghq.com/"
+        },
+        "newrelic": {
+            "pattern": "\\.newrelic\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://newrelic.com/"
+        },
+        "heroku_legacy": {
+            "pattern": "\\.herokudns\\.com\\.|\\.herokussl\\.com\\.|\\.herokuapp\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.heroku.com/"
+        },
+        "oracle": {
+            "pattern": "\\.oraclecloud\\.com\\.|\\.oracle\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.oracle.com/cloud/"
+        },
+        "cloud_functions": {
+            "pattern": "\\.cloudfunctions\\.net\\.",
+            "recommendation": "Review",
+            "evidence": "https://cloud.google.com/functions"
+        },
+        "strikingly": {
+            "pattern": "\\.strikingly\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.strikingly.com/"
+        },
+        "unbounce": {
+            "pattern": "\\.unbouncepages\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://unbounce.com/"
+        },
+        "launchrock": {
+            "pattern": "\\.launchrock\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.launchrock.com/"
+        },
+        "firebaseio": {
+            "pattern": "\\.firebaseio\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://firebase.google.com/"
+        },
+        "acquia": {
+            "pattern": "\\.acquia\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.acquia.com/"
+        },
+        "ngrok": {
+            "pattern": "\\.ngrok\\.io\\.",
+            "recommendation": "Review",
+            "evidence": "https://ngrok.com/"
+        },
+        "strapi": {
+            "pattern": "\\.strapi\\.io\\.",
+            "recommendation": "Review",
+            "evidence": "https://strapi.io/"
+        },
+        "netlify_edge": {
+            "pattern": "\\.netlifyglobalcdn\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://www.netlify.com/"
+        },
+        "aws_amplify": {
+            "pattern": "\\.amplifyapp\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://aws.amazon.com/amplify/"
+        },
+        "api_gateway": {
+            "pattern": "\\.execute-api\\.amazonaws\\.com\\.",
+            "recommendation": "Review",
+            "evidence": "https://aws.amazon.com/api-gateway/"
+        }
     }
 }
