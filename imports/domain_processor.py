@@ -14,9 +14,12 @@ Functions:
                    CSP checks, and service connectivity checks.
 """
 
-from imports.cloud_csp_checks import perform_csp_checks
+from imports.cloud_service_provider_checks import perform_csp_checks
 from imports.dns_based_checks import create_resolver, resolve_domain
 from imports.service_connectivity_checks import perform_service_connectivity_checks
+from imports.environment import setup_logger
+
+logger = setup_logger()
 
 
 def process_domain(
@@ -64,6 +67,8 @@ def process_domain(
     """
     resolver = create_resolver(timeout, nameservers)
 
+    logger.info(f"Processing domain: {domain}")
+
     success, final_ips = resolve_domain(
         resolver,
         domain,
@@ -93,6 +98,7 @@ def process_domain(
         )
 
         if perform_service_checks:
-            perform_service_connectivity_checks(domain, output_files, verbose, extreme)
+            perform_service_connectivity_checks(domain, output_files, verbose)
 
     pbar.update(1)
+    logger.info(f"Finished processing domain: {domain}")

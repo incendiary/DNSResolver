@@ -17,7 +17,7 @@ certificate for a given hostname across various ports.
 certificate of a particular port on a given hostname.
 
 5. `check_http_service(hostname, verbose)`: Checks the HTTP service for a
-given hostname across different ports
+given hostname across different ports.
 
 6. `check_http_port(hostname, port, verbose=False)`: Checks if an HTTP
 service is available and matches the given hostname on a specified port.
@@ -36,9 +36,12 @@ import re
 import socket
 import ssl
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
 
 import requests
 from selenium import webdriver
+
+logger = logging.getLogger("DNSResolver")
 
 
 def is_port_reachable(hostname, port, timeout=5):
@@ -53,7 +56,8 @@ def is_port_reachable(hostname, port, timeout=5):
     try:
         with socket.create_connection((hostname, port), timeout=timeout):
             return True
-    except (socket.timeout, socket.error):
+    except (socket.timeout, socket.error) as e:
+        logger.warning(f"Port {port} on {hostname} is not reachable: {e}")
         return False
 
 
@@ -90,58 +94,18 @@ def take_screenshot(hostname, screenshot_dir, verbose=False):
                     driver.save_screenshot(screenshot_path)
 
                     if verbose:
-                        print(f"Screenshot saved to {screenshot_path}")
+                        logger.info(f"Screenshot saved to {screenshot_path}")
                 except Exception as e:
-                    if verbose:
-                        print(f"Failed to take screenshot of {hostname} at {url}: {e}")
+                    logger.error(
+                        f"Failed to take screenshot of {hostname} at {url}: {e}"
+                    )
             else:
                 if verbose:
-                    print(f"Port {port} on {hostname} is not reachable.")
+                    logger.warning(f"Port {port} on {hostname} is not reachable.")
 
         driver.quit()
     except Exception as e:
-        if verbose:
-            print(f"Failed to take screenshot of {hostname}: {e}")
-
-
-def check_ssl_tls_certificate(hostname, verbose):
-    """
-    :param hostname: The hostname for which to check SSL/TLS certificates.
-    :param verbose: Set to True if additional information should be printed
-     during the check.
-    :return: A dictionary containing the results of the SSL/TLS certificate
-     check for each port. The keys are the ports, and the values are Boolean
-    values indicating whether the certificate is valid or not.
-    """
-    try:
-        with open("config.json", "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except FileNotFoundError:
-        print("Config file not found.")
-        return False
-
-    ssl_tls_ports = config["ssl_tls_ports"]
-
-    results = {}
-    with ThreadPoolExecutor() as executor:
-        futures = {
-            executor.submit(check_port_ssl_certificate, hostname, port, verbose): port
-            for port in ssl_tls_ports
-        }
-
-        for future in as_completed(futures):
-            port = futures[future]
-            try:
-                result = future.result()
-                results[port] = result
-            except Exception as e:
-                if verbose:
-                    print(
-                        f"Failed to verify SSL certificate for {hostname} on port {port}: {e}"
-                    )
-                results[port] = False
-
-    return results
+        logger.error(f"Failed to take screenshot of {hostname}: {e}")
 
 
 def check_port_ssl_certificate(hostname, port, verbose):
@@ -155,7 +119,7 @@ def check_port_ssl_certificate(hostname, port, verbose):
     """
     if not is_port_reachable(hostname, port):
         if verbose:
-            print(f"Port {port} on {hostname} is not reachable.")
+            logger.warning(f"Port {port} on {hostname} is not reachable.")
         return False
 
     try:
@@ -166,7 +130,7 @@ def check_port_ssl_certificate(hostname, port, verbose):
                 cert = ssock.getpeercert()
 
         if verbose:
-            print(f"Certificate for {hostname} on port {port}: {cert}")
+            logger.info(f"Certificate for {hostname} on port {port}: {cert}")
 
         # Extract SANs
         san = cert.get("subjectAltName", ())
@@ -181,7 +145,7 @@ def check_port_ssl_certificate(hostname, port, verbose):
             dns_names.append(cn)
 
         if verbose:
-            print(
+            logger.info(
                 f"DNS Names in certificate for {hostname} on port {port}: {dns_names}"
             )
 
@@ -189,14 +153,14 @@ def check_port_ssl_certificate(hostname, port, verbose):
         for name in dns_names:
             if re.fullmatch(name.replace("*", "[^.]*"), hostname, re.IGNORECASE):
                 if verbose:
-                    print(
+                    logger.info(
                         f"Hostname {hostname} matches DNS name {name} in "
                         f"certificate on port {port}."
                     )
                 return True
 
         if verbose:
-            print(
+            logger.warning(
                 f"Hostname {hostname} does not match any DNS names in the "
                 f"certificate on port {port}."
             )
@@ -204,34 +168,26 @@ def check_port_ssl_certificate(hostname, port, verbose):
 
     except Exception as e:
         if verbose:
-            print(
+            logger.error(
                 f"Failed to verify SSL certificate for {hostname} on port {port}: {e}"
             )
         return False
 
 
-def check_http_service(hostname, verbose):
-    """Check HTTP service for a given hostname.
+def check_service_ports(hostname, ports, check_function, verbose):
+    """Check a service for a given hostname on specified ports using a provided check function.
 
     :param hostname: The hostname to check.
+    :param ports: The list of ports to check.
+    :param check_function: The function to use for checking each port.
     :param verbose: Whether to display verbose output.
-    :return: A dictionary containing the results of the HTTP service
-        check for each port.
+    :return: A dictionary containing the results of the check for each port.
     """
-    try:
-        with open("config.json", "r", encoding="utf-8") as f:
-            config = json.load(f)
-    except FileNotFoundError:
-        print("Config file not found.")
-        return False
-
-    http_ports = config["http_ports"]
-
     results = {}
     with ThreadPoolExecutor() as executor:
         futures = {
-            executor.submit(check_http_port, hostname, port, verbose): port
-            for port in http_ports
+            executor.submit(check_function, hostname, port, verbose): port
+            for port in ports
         }
 
         for future in as_completed(futures):
@@ -241,12 +197,55 @@ def check_http_service(hostname, verbose):
                 results[port] = result
             except Exception as e:
                 if verbose:
-                    print(
-                        f"Failed to check HTTP service for {hostname} on port {port}: {e}"
+                    logger.error(
+                        f"Failed to check service for {hostname} on port {port}: {e}"
                     )
                 results[port] = False
 
     return results
+
+
+def check_http_service(hostname, verbose):
+    """Check HTTP service for a given hostname.
+
+    :param hostname: The hostname to check.
+    :param verbose: Whether to display verbose output.
+    :return: A dictionary containing the results of the HTTP service check for each port.
+    """
+    config = load_config()
+    if not config:
+        return False
+
+    http_ports = config["http_ports"]
+    return check_service_ports(hostname, http_ports, check_http_port, verbose)
+
+
+def load_config():
+    """Load the configuration file."""
+    try:
+        with open("config.json", "r", encoding="utf-8") as f:
+            config = json.load(f)
+        return config
+    except FileNotFoundError:
+        logger.error("Config file not found.")
+        return None
+
+
+def check_ssl_tls_certificate(hostname, verbose):
+    """Check SSL/TLS certificate for a given hostname.
+
+    :param hostname: The hostname to check.
+    :param verbose: Whether to display verbose output.
+    :return: A dictionary containing the results of the SSL/TLS certificate check for each port.
+    """
+    config = load_config()
+    if not config:
+        return False
+
+    ssl_tls_ports = config["ssl_tls_ports"]
+    return check_service_ports(
+        hostname, ssl_tls_ports, check_port_ssl_certificate, verbose
+    )
 
 
 def check_http_port(hostname, port, verbose=False):
@@ -265,36 +264,37 @@ def check_http_port(hostname, port, verbose=False):
         if response.status_code == 200:
             if hostname in response.text:
                 if verbose:
-                    print(
+                    logger.info(
                         f"HTTP service on {hostname}:{port} is available and matches the hostname."
                     )
                 return True
             else:
                 if verbose:
-                    print(
+                    logger.warning(
                         f"HTTP service on {hostname}:{port} is available but does not match the hostname."
                     )
                 return False
         else:
             if verbose:
-                print(
+                logger.warning(
                     f"HTTP service on {hostname}:{port} returned status code {response.status_code}."
                 )
             return False
     except requests.RequestException as e:
         if verbose:
-            print(f"Failed to check HTTP service for {hostname} on port {port}: {e}")
+            logger.error(
+                f"Failed to check HTTP service for {hostname} on port {port}: {e}"
+            )
         return False
 
 
-def perform_service_connectivity_checks(hostname, output_files, verbose, extreme):
+def perform_service_connectivity_checks(hostname, output_files, verbose):
     """
     :param hostname: A string representing the hostname to perform connectivity checks on.
     :param output_files: A dictionary containing the output file paths.
         - "screenshot_dir": A string representing the directory path to save the screenshot.
         - "failures": A string representing the file path to save the failures.
     :param verbose: A boolean indicating whether to print detailed information during the checks.
-    :param extreme: A boolean indicating whether to perform extreme checks.
 
     :return: None
 
@@ -304,12 +304,13 @@ def perform_service_connectivity_checks(hostname, output_files, verbose, extreme
     the hostname is appended to the failures file.
 
     Note: This method depends on the following helper methods:
-    - check_ssl_tls_certificate(hostname, verbose): Checks the SSL/TLS certificate for the hostname and returns a dictionary of results.
-    - check_http_service(hostname, verbose): Checks the HTTP service for the hostname and returns a dictionary of results.
-    - take_screenshot(hostname, screenshot_dir, verbose): Takes a screenshot of the hostname and saves it in the specified directory.
+    - check_ssl_tls_certificate(hostname, verbose): Checks the SSL/TLS certificate for the hostname and returns a
+    dictionary of results.
+    - check_http_service(hostname, verbose): Checks the HTTP service for the hostname and returns a dictionary of
+     results.
+    - take_screenshot(hostname, screenshot_dir, verbose): Takes a screenshot of the hostname and saves it in the
+    specified directory.
 
-    Example usage:
-        perform_service_connectivity_checks("example.com", {"screenshot_dir": "/path/to/screenshots", "failures": "/path/to/failures.txt"}, True, False)
     """
     certificate_results = check_ssl_tls_certificate(hostname, verbose)
     http_results = check_http_service(hostname, verbose)

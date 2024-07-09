@@ -1,22 +1,22 @@
 """
 This module provides functions to categorize and resolve DNS domains for security research.
 
-The `load_domain_categorisation_patterns` function loads domain classification patterns from a given configuration file.
+The load_domain_categorisation_patterns function loads domain classification patterns from a given configuration file.
 
-The `categorise_domain` function categorizes a domain based on provided patterns. If a match is not found, the domain
+The categorise_domain function categorizes a domain based on provided patterns. If a match is not found, the domain
  will be categorized as "unknown".
 
-The `is_dangling_record` function checks whether a DNS record of a particular type is dangling or not for a
+The is_dangling_record function checks whether a DNS record of a particular type is dangling or not for a
 given domain.
 
-The `check_dangling_cname` function checks whether a given domain is a dangling CNAME and returns boolean.
+The check_dangling_cname function checks whether a given domain is a dangling CNAME and returns boolean.
 
-The `dns_query_with_retry` function attempts to resolve a DNS query and includes retry logic for cases when initial
+The dns_query_with_retry function attempts to resolve a DNS query and includes retry logic for cases when initial
 attempts fail, helpful in case of network issues or server failures.
 
-The `resolve_domain` function completes the DNS resolution for a domain using several parameters.
+The resolve_domain function completes the DNS resolution for a domain using several parameters.
 
-The `create_resolver` function creates a DNS resolver object configured with a specified timeout and nameservers.
+The create_resolver function creates a DNS resolver object configured with a specified timeout and nameservers.
 """
 
 import os
@@ -25,6 +25,9 @@ import json
 import subprocess
 
 import dns.resolver
+from imports.environment import setup_logger
+
+logger = setup_logger()
 
 
 def load_domain_categorisation_patterns(config_file="config.json"):
@@ -125,14 +128,14 @@ def dns_query_with_retry(
             dns.resolver.NoNameservers,
         ) as e:
             if verbose and retry < retries - 1:
-                print(
+                logger.info(
                     f"Failed to resolve DNS for {domain} - retry {retry + 1} of {retries}: {e}"
                 )
             elif retry == retries - 1:
                 if domain not in dangling_domains:
                     failed_domains.add(domain)  # Track domain for retry
                     if verbose:
-                        print(
+                        logger.info(
                             f"DNS resolution for {domain} timed out - Final Timeout: {e}"
                         )
                 if evidence_enabled:
@@ -210,7 +213,7 @@ def resolve_domain(
 
     if resolved_records:
         if verbose:
-            print(
+            logger.info(
                 f"Writing resolved records for domain: {domain} to {output_files['standard']['resolved']}"
             )
         with open(output_files["standard"]["resolved"], "a", encoding="utf-8") as f:

@@ -25,6 +25,19 @@ from datetime import datetime
 
 import requests
 from requests import RequestException
+import logging
+
+
+def setup_logger():
+    logger = logging.getLogger("DNSResolver")
+    logger.setLevel(logging.DEBUG)
+    file_handler = logging.FileHandler("dns_resolver.log")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    return logger
 
 
 def parse_arguments():
@@ -132,37 +145,13 @@ def get_environment_info():
     return environment_info
 
 
-def create_empty_files_or_directories(output_files, perform_service_checks):
-    """
-    :param output_files: A dictionary containing the paths of the output files or directories. It should have the
-    following structure:
-    :param perform_service_checks: A boolean value indicating whether service checks should be performed or not.
-    :return: None
-
-    This function creates empty files or directories based on the provided output file paths. It loops through the
-    "standard" paths first and creates empty files or directories using the corresponding values.
-    If perform_service_checks is True, it then loops through the "service_checks" paths and creates
-    empty files or directories. Finally, if "evidence" is present in output_files, it loops through the
-     "evidence" paths and creates empty files or directories.
-    """
-    for key, value in output_files.get("standard", {}).items():
-        create_empty_file_or_directory(value)
-
-    if perform_service_checks:
-        for key, value in output_files.get("service_checks", {}).items():
-            create_empty_file_or_directory(value)
-
-    if "evidence" in output_files:
-        for value in output_files["evidence"].values():
-            create_empty_file_or_directory(value)
-
-
-def create_empty_file_or_directory(filename):
+def create_empty_file_or_directory(filename, logger):
     """
     Create an empty file or directory.
 
     :param filename: A string representing the filename or directory path.
     :type filename: str
+    :param logger: Logger instance for logging errors.
     :raises ValueError: If the provided filename is not a string.
     """
     if not isinstance(filename, str):
@@ -177,10 +166,38 @@ def create_empty_file_or_directory(filename):
             with open(filename, "w", encoding="utf-8"):
                 pass
     except (IOError, OSError) as e:
-        print(f"Unable to create file or directory {filename}. Error: {e}")
+        logger.error(f"Unable to create file or directory {filename}. Error: {e}")
 
 
-def initialize_environment(output_dir, perform_service_checks, evidence_enabled):
+def create_empty_files_or_directories(output_files, perform_service_checks, logger):
+    """
+    :param output_files: A dictionary containing the paths of the output files or directories. It should have the
+    following structure:
+    :param perform_service_checks: A boolean value indicating whether service checks should be performed or not.
+    :param logger: Logger instance for logging errors.
+    :return: None
+
+    This function creates empty files or directories based on the provided output file paths. It loops through the
+    "standard" paths first and creates empty files or directories using the corresponding values.
+    If perform_service_checks is True, it then loops through the "service_checks" paths and creates
+    empty files or directories. Finally, if "evidence" is present in output_files, it loops through the
+     "evidence" paths and creates empty files or directories.
+    """
+    for key, value in output_files.get("standard", {}).items():
+        create_empty_file_or_directory(value, logger)
+
+    if perform_service_checks:
+        for key, value in output_files.get("service_checks", {}).items():
+            create_empty_file_or_directory(value, logger)
+
+    if "evidence" in output_files:
+        for value in output_files["evidence"].values():
+            create_empty_file_or_directory(value, logger)
+
+
+def initialize_environment(
+    output_dir, perform_service_checks, evidence_enabled, logger
+):
     """ """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_dir, timestamp)
@@ -230,7 +247,7 @@ def initialize_environment(output_dir, perform_service_checks, evidence_enabled)
             "dig": os.path.join(output_dir, "evidence", "dig"),
         }
 
-    create_empty_files_or_directories(output_files, perform_service_checks)
+    create_empty_files_or_directories(output_files, perform_service_checks, logger)
     return timestamp, output_dir, output_files
 
 
