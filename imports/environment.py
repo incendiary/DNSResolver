@@ -4,16 +4,11 @@ and file management.
 
 Functions:
 ---------
-- get_environment_info: Gathers and returns information about the current
-environment basis.
-  It returns the command executed, an indication of whether the script runs
-  in a docker environment,
+- get_environment_info: Gathers and returns information about the current environment.
+  It returns the command executed, an indication of whether the script runs in a docker environment,
   and the external IP address of the machine.
-
-- create_empty_files: Takes a dictionary with file names as keys and their
-corresponding paths as values.
+- create_empty_files: Takes a dictionary with file names as keys and their corresponding paths as values.
   It uses this information to create empty files at the specified locations.
-
 - create_empty_file: Creates an empty file at the specified filename.
 """
 
@@ -25,6 +20,22 @@ from datetime import datetime
 
 import requests
 from requests import RequestException
+import logging
+
+
+def setup_logger():
+    logger = logging.getLogger("DNSResolver")
+    logger.setLevel(logging.DEBUG)
+    file_handler = logging.FileHandler("dns_resolver.log")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    return logger
+
+
+logger = setup_logger()
 
 
 def parse_arguments():
@@ -129,21 +140,18 @@ def get_environment_info():
         "run_in_docker": running_in_docker,
     }
 
+    logger.debug(f"Environment info: {environment_info}")
+
     return environment_info
 
 
 def create_empty_files_or_directories(output_files, perform_service_checks):
     """
-    :param output_files: A dictionary containing the paths of the output files or directories. It should have the
-    following structure:
+    Create empty files or directories based on the provided output file paths.
+
+    :param output_files: A dictionary containing the paths of the output files or directories.
     :param perform_service_checks: A boolean value indicating whether service checks should be performed or not.
     :return: None
-
-    This function creates empty files or directories based on the provided output file paths. It loops through the
-    "standard" paths first and creates empty files or directories using the corresponding values.
-    If perform_service_checks is True, it then loops through the "service_checks" paths and creates
-    empty files or directories. Finally, if "evidence" is present in output_files, it loops through the
-     "evidence" paths and creates empty files or directories.
     """
     for key, value in output_files.get("standard", {}).items():
         create_empty_file_or_directory(value)
@@ -173,18 +181,28 @@ def create_empty_file_or_directory(filename):
     try:
         if not extension:
             os.makedirs(filename, exist_ok=True)
+            logger.debug(f"Created directory: {filename}")
         else:
             with open(filename, "w", encoding="utf-8"):
                 pass
+            logger.debug(f"Created file: {filename}")
     except (IOError, OSError) as e:
-        print(f"Unable to create file or directory {filename}. Error: {e}")
+        logger.error(f"Unable to create file or directory {filename}. Error: {e}")
 
 
 def initialize_environment(output_dir, perform_service_checks, evidence_enabled):
-    """ """
+    """
+    Initialize the environment by creating necessary directories and files.
+
+    :param output_dir: The base directory for output files.
+    :param perform_service_checks: Flag to indicate whether service checks are enabled.
+    :param evidence_enabled: Flag to indicate whether evidence collection is enabled.
+    :return: tuple of timestamp, output_dir, and output_files dictionary.
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_dir, timestamp)
     os.makedirs(output_dir, exist_ok=True)
+    logger.info(f"Output directory created: {output_dir}")
 
     output_files = {
         "standard": {
@@ -242,19 +260,23 @@ def save_environment_info(environment_file, environment_info):
 
     :param environment_file: The file path where the environment information will be saved.
     :type environment_file: str
-
     :param environment_info: The environment information that needs to be saved.
     :type environment_info: dict
-
     :return: None
-
     """
     with open(environment_file, "w", encoding="utf-8") as json_file:
         json_file.write(json.dumps(environment_info, indent=4))
+    logger.info(f"Environment information saved to {environment_file}")
 
 
 def read_domains(domains_file):
     """
-    Read the domain names"""
+    Read the domain names from the specified file.
+
+    :param domains_file: The file path containing domain names (one per line).
+    :return: List of domain names.
+    """
     with open(domains_file, "r", encoding="utf-8") as f:
-        return f.read().splitlines()
+        domains = f.read().splitlines()
+    logger.info(f"Read {len(domains)} domains from {domains_file}")
+    return domains

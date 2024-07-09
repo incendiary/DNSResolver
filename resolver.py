@@ -9,27 +9,28 @@ The results of DNS resolution and Cloud IPs matching are stored in the specified
 output directory.
 
 The script can be run directly with the use of command-line arguments for
-specifying the domains file, output directory, verbosity mode and custom resolvers.
+specifying the domains file, output directory, verbosity mode, and custom resolvers.
 """
 
 import threading
-
-from imports.environment import parse_arguments
 from tqdm import tqdm
-
+from imports.environment import (
+    parse_arguments,
+    setup_logger,
+    get_environment_info,
+    initialize_environment,
+    save_environment_info,
+    read_domains,
+)
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
 from imports.domain_processor import process_domain
-from imports.environment import (
-    get_environment_info,
-    initialize_environment,
-    save_environment_info,
-    read_domains,
-)
 from imports.dns_based_checks import load_domain_categorisation_patterns
+
+logger = setup_logger()
 
 
 def main(
@@ -45,6 +46,8 @@ def main(
     evidence=False,
 ):
     """
+    Main function to handle DNS resolution and domain processing.
+
     :param domains_file: Path to the input file containing the list of domains to process. (str)
     :param output_dir: Path to the directory where the output files will be saved. (str)
     :param resolvers: Comma-separated list of custom resolvers to use for DNS resolution. (Optional[str])
@@ -56,39 +59,28 @@ def main(
     :param retries: Number of times to retry failed resolutions. (int)
     :param evidence: Flag to enable evidence collection during domain resolution. (bool)
     :return: None
-
     """
-
-    # Initialize environment and create necessary directories and files
     timestamp, output_dir, output_files = initialize_environment(
         output_dir, perform_service_checks, evidence
     )
-
-    # Get and save environment information
     environment_info = get_environment_info()
     save_environment_info(output_files["standard"]["environment"], environment_info)
 
-    # Set custom resolvers if provided
     if resolvers:
         nameservers = resolvers.split(",")
     else:
         nameservers = None
 
-    # Fetch and parse cloud provider IP ranges
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(output_dir, extreme)
     aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(output_dir, extreme)
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(output_dir, extreme)
 
-    # Read domains from input file
     domains = read_domains(domains_file)
-
-    if verbose:
-        print(f"Domains to process: {domains}")
+    logger.info(f"Domains to process: {domains}")
 
     patterns = load_domain_categorisation_patterns()
-
     if max_threads is None:
-        max_threads = 10  # Default to 10 threads if not specified
+        max_threads = 10
 
     dangling_domains = set()
     failed_domains = set(domains)
@@ -107,8 +99,7 @@ def main(
             threads = []
 
             for domain in current_failed_domains:
-                if verbose:
-                    print(f"Starting thread for domain: {domain}")
+                logger.info(f"Starting thread for domain: {domain}")
                 if len(threads) >= max_threads:
                     threads.pop(0).join()
                 thread = threading.Thread(
@@ -132,7 +123,7 @@ def main(
                         patterns,
                         dangling_domains,
                         failed_domains,
-                        evidence,  # Pass the evidence flag to process_domain
+                        evidence,
                     ),
                 )
                 threads.append(thread)
@@ -141,16 +132,15 @@ def main(
             for thread in threads:
                 thread.join()
 
-    # Print final messages
-    print("All resolutions completed. Results saved to", output_dir)
+    logger.info(f"All resolutions completed. Results saved to {output_dir}")
 
     if extreme:
-        print("AWS IPv4 Ranges:", aws_ipv4)
-        print("AWS IPv6 Ranges:", aws_ipv6)
-        print("Google Cloud IPv4 Ranges:", gcp_ipv4)
-        print("Google Cloud IPv6 Ranges:", gcp_ipv6)
-        print("Azure IPv4 Ranges:", azure_ipv4)
-        print("Azure IPv6 Ranges:", azure_ipv6)
+        logger.debug(f"AWS IPv4 Ranges: {aws_ipv4}")
+        logger.debug(f"AWS IPv6 Ranges: {aws_ipv6}")
+        logger.debug(f"Google Cloud IPv4 Ranges: {gcp_ipv4}")
+        logger.debug(f"Google Cloud IPv6 Ranges: {gcp_ipv6}")
+        logger.debug(f"Azure IPv4 Ranges: {azure_ipv4}")
+        logger.debug(f"Azure IPv6 Ranges: {azure_ipv6}")
 
 
 if __name__ == "__main__":
