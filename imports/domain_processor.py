@@ -17,6 +17,9 @@ Functions:
 from imports.cloud_csp_checks import perform_csp_checks
 from imports.dns_based_checks import create_resolver, resolve_domain
 from imports.service_connectivity_checks import perform_service_connectivity_checks
+from imports.environment import setup_logger
+
+logger = setup_logger()
 
 
 def process_domain(
@@ -62,6 +65,7 @@ def process_domain(
     :param evidence_enabled: Boolean flag indicating whether to enable evidence collection.
     :return: None
     """
+    logger.info(f"Processing domain: {domain}")
     resolver = create_resolver(timeout, nameservers)
 
     success, final_ips = resolve_domain(
@@ -78,6 +82,7 @@ def process_domain(
     )
 
     if success:
+        logger.info(f"Successfully resolved domain: {domain}")
         perform_csp_checks(
             domain,
             output_files,
@@ -93,6 +98,9 @@ def process_domain(
         )
 
         if perform_service_checks:
+            logger.info(f"Performing service connectivity checks for domain: {domain}")
             perform_service_connectivity_checks(domain, output_files, verbose, extreme)
+    else:
+        logger.warning(f"Failed to resolve domain: {domain}")
 
     pbar.update(1)
