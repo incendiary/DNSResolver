@@ -26,6 +26,7 @@ def perform_csp_checks(
     azure_ipv6,
     verbose,
     extreme,
+    logger,
 ):
     """
     :param domain: The domain being checked.

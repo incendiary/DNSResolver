@@ -25,9 +25,6 @@ import json
 import subprocess
 
 import dns.resolver
-from imports.environment import setup_logger
-
-logger = setup_logger()
 
 
 def load_domain_categorisation_patterns(config_file="config.json"):
@@ -71,6 +68,7 @@ def check_dangling_cname(
     output_files,
     patterns,
     evidence_enabled,
+    logger,
 ):
     resolver = dns.resolver.Resolver()
     if nameservers:
@@ -116,6 +114,7 @@ def dns_query_with_retry(
     failed_domains,
     output_files,
     evidence_enabled,
+    logger,
 ):
     for retry in range(retries):
         try:
@@ -160,6 +159,7 @@ def resolve_domain(
     dangling_domains,
     failed_domains,
     evidence_enabled,
+    logger,
 ):
     resolved_records = []
     current_domain = domain
@@ -176,6 +176,7 @@ def resolve_domain(
                 failed_domains,
                 output_files,
                 evidence_enabled,
+                logger,
             )
             if answer:
                 resolved_records.append((record_type, answer))
@@ -188,6 +189,7 @@ def resolve_domain(
                     output_files,
                     patterns,
                     evidence_enabled,
+                    logger,
                 ):
                     dangling_domains.add(current_domain)
                 break
@@ -206,6 +208,7 @@ def resolve_domain(
             failed_domains,
             output_files,
             evidence_enabled,
+            logger,
         )
         if answer:
             final_ips.extend(answer)

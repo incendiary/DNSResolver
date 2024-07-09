@@ -13,87 +13,47 @@ specifying the domains file, output directory, verbosity mode and custom resolve
 """
 
 import threading
-from imports.environment import parse_arguments
 from tqdm import tqdm
+from imports.environment import EnvironmentManager
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
 from imports.domain_processor import process_domain
-from imports.environment import (
-    setup_logger,
-    get_environment_info,
-    initialize_environment,
-    save_environment_info,
-    read_domains,
-)
 from imports.dns_based_checks import load_domain_categorisation_patterns
 
-logger = setup_logger()
 
+def main():
+    env_manager = EnvironmentManager()
+    env_manager.parse_arguments()
 
-def main(
-    domains_file,
-    output_dir,
-    resolvers=None,
-    max_threads=None,
-    verbose=False,
-    extreme=False,
-    perform_service_checks=True,
-    timeout=10,
-    retries=3,
-    evidence=False,
-):
-    """
-    :param domains_file: Path to the input file containing the list of domains to process. (str)
-    :param output_dir: Path to the directory where the output files will be saved. (str)
-    :param resolvers: Comma-separated list of custom resolvers to use for DNS resolution. (Optional[str])
-    :param max_threads: Maximum number of threads to use for parallel processing. (Optional[int])
-    :param verbose: Flag to enable verbose mode for printing additional information. (bool)
-    :param extreme: Flag to enable extreme mode for fetching IP ranges from cloud providers. (bool)
-    :param perform_service_checks: Flag to enable service checks during domain resolution. (bool)
-    :param timeout: Timeout value (in seconds) for DNS resolution. (int)
-    :param retries: Number of times to retry failed resolutions. (int)
-    :param evidence: Flag to enable evidence collection during domain resolution. (bool)
-    :return: None
-    """
+    timestamp, output_dir, output_files = env_manager.initialize_environment()
 
-    # Initialize environment and create necessary directories and files
-    timestamp, output_dir, output_files = initialize_environment(
-        output_dir, perform_service_checks, evidence, logger
+    environment_info = env_manager.get_environment_info()
+    env_manager.save_environment_info(
+        output_files["standard"]["environment"], environment_info
     )
 
-    # Get and save environment information
-    environment_info = get_environment_info()
-    save_environment_info(output_files["standard"]["environment"], environment_info)
+    nameservers = env_manager.resolvers.split(",") if env_manager.resolvers else None
 
-    # Set custom resolvers if provided
-    if resolvers:
-        nameservers = resolvers.split(",")
-    else:
-        nameservers = None
+    gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(output_dir, env_manager.extreme)
+    aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(output_dir, env_manager.extreme)
+    azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(output_dir, env_manager.extreme)
 
-    # Fetch and parse cloud provider IP ranges
-    gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(output_dir, extreme)
-    aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(output_dir, extreme)
-    azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(output_dir, extreme)
+    domains = env_manager.read_domains(env_manager.domains_file)
 
-    # Read domains from input file
-    domains = read_domains(domains_file)
-
-    if verbose:
-        logger.info(f"Domains to process: {domains}")
+    if env_manager.verbose:
+        env_manager.get_logger().info(f"Domains to process: {domains}")
 
     patterns = load_domain_categorisation_patterns()
 
-    if max_threads is None:
-        max_threads = 10  # Default to 10 threads if not specified
+    max_threads = env_manager.max_threads or 10
 
     dangling_domains = set()
     failed_domains = set(domains)
 
-    for attempt in range(retries + 1):
+    for attempt in range(env_manager.retries + 1):
         if not failed_domains:
             break
 
@@ -107,8 +67,10 @@ def main(
             threads = []
 
             for domain in current_failed_domains:
-                if verbose:
-                    logger.info(f"Starting thread for domain: {domain}")
+                if env_manager.verbose:
+                    env_manager.get_logger().info(
+                        f"Starting thread for domain: {domain}"
+                    )
                 if len(threads) >= max_threads:
                     threads.pop(0).join()
                 thread = threading.Thread(
@@ -118,21 +80,22 @@ def main(
                         nameservers,
                         output_files,
                         pbar,
-                        verbose,
-                        extreme,
+                        env_manager.verbose,
+                        env_manager.extreme,
                         gcp_ipv4,
                         gcp_ipv6,
                         aws_ipv4,
                         aws_ipv6,
                         azure_ipv4,
                         azure_ipv6,
-                        perform_service_checks,
-                        timeout,
-                        retries,
+                        env_manager.service_checks,
+                        env_manager.timeout,
+                        env_manager.retries,
                         patterns,
                         dangling_domains,
                         failed_domains,
-                        evidence,  # Pass the evidence flag to process_domain
+                        env_manager.evidence,
+                        env_manager.get_logger(),  # Pass the logger to process_domain
                     ),
                 )
                 threads.append(thread)
@@ -142,29 +105,18 @@ def main(
                 thread.join()
 
     # Print final messages
-    logger.info("All resolutions completed. Results saved to %s", output_dir)
+    env_manager.get_logger().info(
+        "All resolutions completed. Results saved to %s", output_dir
+    )
 
-    if extreme:
-        logger.info("AWS IPv4 Ranges: %s", aws_ipv4)
-        logger.info("AWS IPv6 Ranges: %s", aws_ipv6)
-        logger.info("Google Cloud IPv4 Ranges: %s", gcp_ipv4)
-        logger.info("Google Cloud IPv6 Ranges: %s", gcp_ipv6)
-        logger.info("Azure IPv4 Ranges: %s", azure_ipv4)
-        logger.info("Azure IPv6 Ranges: %s", azure_ipv6)
+    if env_manager.extreme:
+        env_manager.get_logger().info("AWS IPv4 Ranges: %s", aws_ipv4)
+        env_manager.get_logger().info("AWS IPv6 Ranges: %s", aws_ipv6)
+        env_manager.get_logger().info("Google Cloud IPv4 Ranges: %s", gcp_ipv4)
+        env_manager.get_logger().info("Google Cloud IPv6 Ranges: %s", gcp_ipv6)
+        env_manager.get_logger().info("Azure IPv4 Ranges: %s", azure_ipv4)
+        env_manager.get_logger().info("Azure IPv6 Ranges: %s", azure_ipv6)
 
 
 if __name__ == "__main__":
-    args = parse_arguments()
-
-    main(
-        args.domains_file,
-        args.output_dir,
-        max_threads=args.max_threads,
-        resolvers=args.resolvers,
-        perform_service_checks=args.service_checks,
-        verbose=args.verbose,
-        extreme=args.extreme,
-        timeout=args.timeout,
-        retries=args.retries,
-        evidence=args.evidence,
-    )
+    main()
