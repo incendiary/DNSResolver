@@ -29,9 +29,9 @@ from requests import RequestException
 
 def parse_arguments():
     """
-    Parses the command line arguments for the script.
+    Parse command line arguments.
 
-    :return: The parsed command line arguments.
+    :return: argparse.Namespace containing the parsed command line arguments.
     """
     parser = argparse.ArgumentParser(
         description="Resolve DNS records for domains and check against cloud provider IP ranges."
@@ -89,6 +89,11 @@ def parse_arguments():
     parser.add_argument(
         "--retries", type=int, default=3, help="Number of retry attempts for timeouts"
     )
+    parser.add_argument(
+        "--evidence",
+        action="store_true",
+        help="Enable evidence collection for DNS queries",
+    )
 
     args = parser.parse_args()
     # If extreme is set, set verbose as well
@@ -99,12 +104,12 @@ def parse_arguments():
 
 def get_environment_info():
     """
-    Get information about the current environment.
+    Returns information about the current environment.
 
     :return: A dictionary containing the following information:
-        * command_executed (str) - The command executed to run the script.
-        * external_ip (str) - The external IP address of the machine running the script.
-        * run_in_docker (bool) - True if script is running in a Docker container, False otherwise.
+             - command_executed: The command executed to run the script.
+             - external_ip: The external IP address.
+             - run_in_docker: Boolean value indicating if the script is running inside a Docker container.
     """
     command_executed = " ".join(sys.argv)
 
@@ -129,38 +134,26 @@ def get_environment_info():
 
 def create_empty_files_or_directories(output_files, perform_service_checks):
     """
-    .. function:: create_empty_files_or_directories(output_files, perform_service_checks)
-       :param output_files: A dictionary containing the paths of the files or directories to be created. The keys are the types of files ("standard" or "service_checks"), and the values are dictionaries with the filenames as keys and the file paths as values.
-       :param perform_service_checks: A boolean indicating whether to create service check files or directories.
-       :return: None
+    :param output_files: A dictionary containing the paths of the output files or directories. It should have the
+    following structure:
+    :param perform_service_checks: A boolean value indicating whether service checks should be performed or not.
+    :return: None
 
-       This function takes a dictionary of file paths and creates empty files or directories based on the specified paths. It first creates standard files or directories by iterating over the items in the "standard" key of the output_files dictionary. Then, if perform_service_checks is True, it creates service check files or directories by iterating over the items in the "service_checks" key of the output_files dictionary.
-
-       Example usage:
-
-       .. code-block:: python
-
-          output_files = {
-             "standard": {
-                "file1": "/path/to/file1",
-                "file2": "/path/to/file2"
-             },
-             "service_checks": {
-                "file3": "/path/to/file3",
-                "file4": "/path/to/file4"
-             }
-          }
-          perform_service_checks = True
-
-          create_empty_files_or_directories(output_files, perform_service_checks)
+    This function creates empty files or directories based on the provided output file paths. It loops through the
+    "standard" paths first and creates empty files or directories using the corresponding values.
+    If perform_service_checks is True, it then loops through the "service_checks" paths and creates
+    empty files or directories. Finally, if "evidence" is present in output_files, it loops through the
+     "evidence" paths and creates empty files or directories.
     """
-    # Create standard files or directories
     for key, value in output_files.get("standard", {}).items():
         create_empty_file_or_directory(value)
 
-    # Create service check files or directories if perform_service_checks is True
     if perform_service_checks:
         for key, value in output_files.get("service_checks", {}).items():
+            create_empty_file_or_directory(value)
+
+    if "evidence" in output_files:
+        for value in output_files["evidence"].values():
             create_empty_file_or_directory(value)
 
 
@@ -168,13 +161,9 @@ def create_empty_file_or_directory(filename):
     """
     Create an empty file or directory.
 
-    :param filename: The name of the file or directory to be created.
-    :return: None
-
-    Raises:
-        ValueError: If the `filename` is not a string.
-        IOError: If an input/output error occurs while creating the file or directory.
-        OSError: If an operating system error occurs while creating the file or directory.
+    :param filename: A string representing the filename or directory path.
+    :type filename: str
+    :raises ValueError: If the provided filename is not a string.
     """
     if not isinstance(filename, str):
         raise ValueError("filename must be a string")
@@ -183,7 +172,7 @@ def create_empty_file_or_directory(filename):
 
     try:
         if not extension:
-            os.mkdir(filename)
+            os.makedirs(filename, exist_ok=True)
         else:
             with open(filename, "w", encoding="utf-8"):
                 pass
@@ -191,22 +180,12 @@ def create_empty_file_or_directory(filename):
         print(f"Unable to create file or directory {filename}. Error: {e}")
 
 
-def initialize_environment(output_dir, perform_service_checks):
-    """
-    Initialize the environment for the tool.
-
-    :param output_dir: The directory where the output files will be stored.
-    :param perform_service_checks: Flag indicating whether to perform service checks or not.
-    :return: A tuple containing the timestamp, output directory, and a dictionary of output files.
-
-    The output directory will be created with the current timestamp appended to it.
-    The output files dictionary will contain paths to different types of output files.
-    """
+def initialize_environment(output_dir, perform_service_checks, evidence_enabled):
+    """ """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(output_dir, timestamp)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Output files
     output_files = {
         "standard": {
             "resolved": os.path.join(output_dir, f"resolution_results_{timestamp}.txt"),
@@ -246,17 +225,29 @@ def initialize_environment(output_dir, perform_service_checks):
         },
     }
 
+    if evidence_enabled:
+        output_files["evidence"] = {
+            "dig": os.path.join(output_dir, "evidence", "dig"),
+        }
+
     create_empty_files_or_directories(output_files, perform_service_checks)
     return timestamp, output_dir, output_files
 
 
 def save_environment_info(environment_file, environment_info):
     """
-    Save environment information to a JSON file.
+    Save Environment Info
 
-    :param environment_file: Path to the JSON file to be saved.
-    :param environment_info: Dictionary containing the environment information to be saved.
+    This method is used to save the environment information to a JSON file.
+
+    :param environment_file: The file path where the environment information will be saved.
+    :type environment_file: str
+
+    :param environment_info: The environment information that needs to be saved.
+    :type environment_info: dict
+
     :return: None
+
     """
     with open(environment_file, "w", encoding="utf-8") as json_file:
         json_file.write(json.dumps(environment_info, indent=4))
@@ -264,10 +255,6 @@ def save_environment_info(environment_file, environment_info):
 
 def read_domains(domains_file):
     """
-    Reads a text file containing a list of domains and returns a list of domain names.
-
-    :param domains_file: The path to the text file containing domain names.
-    :return: A list of domain names read from the file.
-    """
+    Read the domain names"""
     with open(domains_file, "r", encoding="utf-8") as f:
         return f.read().splitlines()
