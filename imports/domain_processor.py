@@ -17,9 +17,6 @@ Functions:
 from imports.cloud_service_provider_checks import perform_csp_checks
 from imports.dns_based_checks import create_resolver, resolve_domain
 from imports.service_connectivity_checks import perform_service_connectivity_checks
-from imports.environment import setup_logger
-
-logger = setup_logger()
 
 
 def process_domain(
@@ -42,6 +39,7 @@ def process_domain(
     dangling_domains,
     failed_domains,
     evidence_enabled,
+    logger,
 ):
     """
     :param domain: The domain to be processed.
@@ -63,6 +61,7 @@ def process_domain(
     :param dangling_domains: The list of dangling domains found during resolution.
     :param failed_domains: The list of failed domains during resolution.
     :param evidence_enabled: Boolean flag indicating whether to enable evidence collection.
+    :param logger: Logger instance for logging information.
     :return: None
     """
     resolver = create_resolver(timeout, nameservers)
@@ -80,6 +79,7 @@ def process_domain(
         dangling_domains,
         failed_domains,
         evidence_enabled,
+        logger,
     )
 
     if success:
@@ -95,10 +95,11 @@ def process_domain(
             azure_ipv6,
             verbose,
             extreme,
+            logger,
         )
 
         if perform_service_checks:
-            perform_service_connectivity_checks(domain, output_files, verbose)
+            perform_service_connectivity_checks(domain, output_files, verbose, logger)
 
     pbar.update(1)
     logger.info(f"Finished processing domain: {domain}")

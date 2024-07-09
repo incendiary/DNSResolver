@@ -1,28 +1,8 @@
-"""
-This module provides utility functions for retrieving environment information
-and file management.
-
-Functions:
----------
-- get_environment_info: Gathers and returns information about the current
-environment basis.
-  It returns the command executed, an indication of whether the script runs
-  in a docker environment,
-  and the external IP address of the machine.
-
-- create_empty_files: Takes a dictionary with file names as keys and their
-corresponding paths as values.
-  It uses this information to create empty files at the specified locations.
-
-- create_empty_file: Creates an empty file at the specified filename.
-"""
-
 import argparse
 import json
 import os
 import sys
 from datetime import datetime
-
 import requests
 from requests import RequestException
 import logging
@@ -40,255 +20,244 @@ def setup_logger():
     return logger
 
 
-def parse_arguments():
-    """
-    Parse command line arguments.
+class EnvironmentManager:
+    def __init__(self):
+        self.config = {}
+        self.logger = self.setup_logger()
+        self.domains_file = None
+        self.output_dir = None
+        self.verbose = None
+        self.extreme = None
+        self.resolvers = None
+        self.service_checks = None
+        self.max_threads = None
+        self.timeout = None
+        self.retries = None
+        self.evidence = None
 
-    :return: argparse.Namespace containing the parsed command line arguments.
-    """
-    parser = argparse.ArgumentParser(
-        description="Resolve DNS records for domains and check against cloud provider IP ranges."
-    )
-    parser.add_argument(
-        "domains_file",
-        type=str,
-        help="Path to the file containing domains (one per line)",
-    )
-    parser.add_argument(
-        "--config-file",
-        type=str,
-        default=None,
-        help="Path to the configuration file (default: None)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        "-o",
-        type=str,
-        help="Directory to save output files (overrides config file)",
-    )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Enable verbose mode to display more information",
-    )
-    parser.add_argument(
-        "--extreme",
-        "-e",
-        action="store_true",
-        help="Enable extreme mode to display extensive information (including IP ranges)",
-    )
-    parser.add_argument(
-        "--resolvers",
-        "-r",
-        type=str,
-        help="Comma-separated list of custom resolvers. Overrides system resolvers.",
-    )
-    parser.add_argument(
-        "--service-checks",
-        "-sc",
-        action="store_true",
-        help="Perform Service Checks (overrides config file)",
-    )
-    parser.add_argument(
-        "--max-threads",
-        "-mt",
-        type=int,
-        help="Max number of threads to use for domain processing (overrides config file)",
-    )
-    parser.add_argument(
-        "--timeout",
-        "-t",
-        type=int,
-        help="Timeout for DNS resolution process in seconds (overrides config file)",
-    )
-    parser.add_argument(
-        "--retries",
-        type=int,
-        help="Number of retry attempts for timeouts (overrides config file)",
-    )
-    parser.add_argument(
-        "--evidence",
-        action="store_true",
-        help="Enable evidence collection for DNS queries (overrides config file)",
-    )
+    def setup_logger(self):
+        logger = logging.getLogger("DNSResolver")
+        logger.setLevel(logging.DEBUG)
+        file_handler = logging.FileHandler("dns_resolver.log")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        return logger
 
-    args = parser.parse_args()
+    def get_logger(self):
+        return self.logger
 
-    if args.config_file:
-        with open(args.config_file, "r", encoding="utf-8") as f:
-            config = json.load(f)
-
-        config_args = config.get("config", {})
-        for key, value in config_args.items():
-            if getattr(args, key, None) is None:
-                setattr(args, key, value)
-
-    # If extreme is set, set verbose as well
-    if args.extreme:
-        args.verbose = True
-
-    return args
-
-
-def get_environment_info():
-    """
-    Returns information about the current environment.
-
-    :return: A dictionary containing the following information:
-             - command_executed: The command executed to run the script.
-             - external_ip: The external IP address.
-             - run_in_docker: Boolean value indicating if the script is running inside a Docker container.
-    """
-    command_executed = " ".join(sys.argv)
-
-    running_in_docker = os.path.exists("/.dockerenv")
-
-    try:
-        response = requests.get("https://ifconfig.io/ip", timeout=10)
-        external_ip = response.text.strip()
-    except RequestException as error:
-        external_ip = (
-            f"An error occurred while trying to retrieve the external ip: {error}"
+    def parse_arguments(self):
+        parser = argparse.ArgumentParser(
+            description="Resolve DNS records for domains and check against cloud provider IP ranges."
+        )
+        parser.add_argument(
+            "domains_file",
+            type=str,
+            help="Path to the file containing domains (one per line)",
+        )
+        parser.add_argument(
+            "--config-file",
+            type=str,
+            default=None,
+            help="Path to the configuration file (default: None)",
+        )
+        parser.add_argument(
+            "--output-dir",
+            "-o",
+            type=str,
+            help="Directory to save output files (overrides config file)",
+        )
+        parser.add_argument(
+            "--verbose",
+            "-v",
+            action="store_true",
+            help="Enable verbose mode to display more information",
+        )
+        parser.add_argument(
+            "--extreme",
+            "-e",
+            action="store_true",
+            help="Enable extreme mode to display extensive information (including IP ranges)",
+        )
+        parser.add_argument(
+            "--resolvers",
+            "-r",
+            type=str,
+            help="Comma-separated list of custom resolvers. Overrides system resolvers.",
+        )
+        parser.add_argument(
+            "--service-checks",
+            "-sc",
+            action="store_true",
+            help="Perform Service Checks (overrides config file)",
+        )
+        parser.add_argument(
+            "--max-threads",
+            "-mt",
+            type=int,
+            help="Max number of threads to use for domain processing (overrides config file)",
+        )
+        parser.add_argument(
+            "--timeout",
+            "-t",
+            type=int,
+            help="Timeout for DNS resolution process in seconds (overrides config file)",
+        )
+        parser.add_argument(
+            "--retries",
+            type=int,
+            help="Number of retry attempts for timeouts (overrides config file)",
+        )
+        parser.add_argument(
+            "--evidence",
+            action="store_true",
+            help="Enable evidence collection for DNS queries (overrides config file)",
         )
 
-    environment_info = {
-        "command_executed": command_executed,
-        "external_ip": external_ip,
-        "run_in_docker": running_in_docker,
-    }
+        args = parser.parse_args()
 
-    return environment_info
+        if args.config_file:
+            with open(args.config_file, "r", encoding="utf-8") as f:
+                self.config = json.load(f)
 
+            config_args = self.config.get("config", {})
+            for key, value in config_args.items():
+                if getattr(args, key, None) is None:
+                    setattr(args, key, value)
 
-def create_empty_file_or_directory(filename, logger):
-    """
-    Create an empty file or directory.
+        # If extreme is set, set verbose as well
+        if args.extreme:
+            args.verbose = True
 
-    :param filename: A string representing the filename or directory path.
-    :type filename: str
-    :param logger: Logger instance for logging errors.
-    :raises ValueError: If the provided filename is not a string.
-    """
-    if not isinstance(filename, str):
-        raise ValueError("filename must be a string")
+        self.log_effective_configuration(args)
+        self.set_arguments(args)
 
-    name, extension = os.path.splitext(filename)
+    def log_effective_configuration(self, args):
+        self.logger.info(f"Effective Configuration: {vars(args)}")
+        print(f"Effective Configuration: {vars(args)}")
 
-    try:
-        if not extension:
-            os.makedirs(filename, exist_ok=True)
-        else:
-            with open(filename, "w", encoding="utf-8"):
-                pass
-    except (IOError, OSError) as e:
-        logger.error(f"Unable to create file or directory {filename}. Error: {e}")
+    def set_arguments(self, args):
+        self.domains_file = args.domains_file
+        self.output_dir = args.output_dir
+        self.verbose = args.verbose
+        self.extreme = args.extreme
+        self.resolvers = args.resolvers
+        self.service_checks = args.service_checks
+        self.max_threads = args.max_threads
+        self.timeout = args.timeout
+        self.retries = args.retries
+        self.evidence = args.evidence
 
+    def get_environment_info(self):
+        command_executed = " ".join(sys.argv)
+        running_in_docker = os.path.exists("/.dockerenv")
 
-def create_empty_files_or_directories(output_files, perform_service_checks, logger):
-    """
-    :param output_files: A dictionary containing the paths of the output files or directories. It should have the
-    following structure:
-    :param perform_service_checks: A boolean value indicating whether service checks should be performed or not.
-    :param logger: Logger instance for logging errors.
-    :return: None
+        try:
+            response = requests.get("https://ifconfig.io/ip", timeout=10)
+            external_ip = response.text.strip()
+        except RequestException as error:
+            external_ip = (
+                f"An error occurred while trying to retrieve the external ip: {error}"
+            )
 
-    This function creates empty files or directories based on the provided output file paths. It loops through the
-    "standard" paths first and creates empty files or directories using the corresponding values.
-    If perform_service_checks is True, it then loops through the "service_checks" paths and creates
-    empty files or directories. Finally, if "evidence" is present in output_files, it loops through the
-     "evidence" paths and creates empty files or directories.
-    """
-    for key, value in output_files.get("standard", {}).items():
-        create_empty_file_or_directory(value, logger)
-
-    if perform_service_checks:
-        for key, value in output_files.get("service_checks", {}).items():
-            create_empty_file_or_directory(value, logger)
-
-    if "evidence" in output_files:
-        for value in output_files["evidence"].values():
-            create_empty_file_or_directory(value, logger)
-
-
-def initialize_environment(
-    output_dir, perform_service_checks, evidence_enabled, logger
-):
-    """ """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join(output_dir, timestamp)
-    os.makedirs(output_dir, exist_ok=True)
-
-    output_files = {
-        "standard": {
-            "resolved": os.path.join(output_dir, f"resolution_results_{timestamp}.txt"),
-            "unresolved": os.path.join(
-                output_dir, f"unresolved_results_{timestamp}.txt"
-            ),
-            "gcp": os.path.join(output_dir, f"gcp_results_{timestamp}.txt"),
-            "aws": os.path.join(output_dir, f"aws_results_{timestamp}.txt"),
-            "azure": os.path.join(output_dir, f"azure_results_{timestamp}.txt"),
-            "dangling": os.path.join(
-                output_dir, f"dangling_cname_results_{timestamp}.txt"
-            ),
-            "ns_takeover": os.path.join(
-                output_dir, f"ns_takeover_results_{timestamp}.txt"
-            ),
-            "environment": os.path.join(
-                output_dir, f"environment_results_{timestamp}.json"
-            ),
-            "timeout": os.path.join(output_dir, f"timeout_results_{timestamp}.txt"),
-        },
-        "service_checks": {
-            "ssl_tls_failure_file": os.path.join(
-                output_dir, f"ssl_tls_failure_results_{timestamp}.txt"
-            ),
-            "http_failure_file": os.path.join(
-                output_dir, f"http_failure_results_{timestamp}.txt"
-            ),
-            "tcp_common_ports_unreachable_file": os.path.join(
-                output_dir, f"tls_common_ports_unreachable_{timestamp}.txt"
-            ),
-            "screenshot_dir": os.path.join(
-                output_dir, f"screenshot_results_{timestamp}"
-            ),
-            "screenshot_failures": os.path.join(
-                output_dir, f"failure_results_{timestamp}.txt"
-            ),
-        },
-    }
-
-    if evidence_enabled:
-        output_files["evidence"] = {
-            "dig": os.path.join(output_dir, "evidence", "dig"),
+        environment_info = {
+            "command_executed": command_executed,
+            "external_ip": external_ip,
+            "run_in_docker": running_in_docker,
         }
 
-    create_empty_files_or_directories(output_files, perform_service_checks, logger)
-    return timestamp, output_dir, output_files
+        return environment_info
 
+    def create_empty_file_or_directory(self, filename):
+        if not isinstance(filename, str):
+            raise ValueError("filename must be a string")
 
-def read_domains(domains_file):
-    """
-    Read the domain names from the provided file.
+        name, extension = os.path.splitext(filename)
 
-    :param domains_file: The path to the file containing the domain names.
-    :type domains_file: str
-    :return: A list of domain names.
-    :rtype: list
-    """
-    with open(domains_file, "r", encoding="utf-8") as f:
-        return f.read().splitlines()
+        try:
+            if not extension:
+                os.makedirs(filename, exist_ok=True)
+            else:
+                with open(filename, "w", encoding="utf-8"):
+                    pass
+        except (IOError, OSError) as e:
+            self.logger.error(
+                f"Unable to create file or directory {filename}. Error: {e}"
+            )
 
+    def create_empty_files_or_directories(self, output_files, perform_service_checks):
+        for key, value in output_files.get("standard", {}).items():
+            self.create_empty_file_or_directory(value)
 
-def save_environment_info(environment_file, environment_info):
-    """
-    Save environment information to a JSON file.
+        if perform_service_checks:
+            for key, value in output_files.get("service_checks", {}).items():
+                self.create_empty_file_or_directory(value)
 
-    :param environment_file: The file path where the environment information will be saved.
-    :type environment_file: str
-    :param environment_info: The environment information that needs to be saved.
-    :type environment_info: dict
-    :return: None
-    """
-    with open(environment_file, "w", encoding="utf-8") as json_file:
-        json_file.write(json.dumps(environment_info, indent=4))
+        if "evidence" in output_files:
+            for value in output_files["evidence"].values():
+                self.create_empty_file_or_directory(value)
+
+    def initialize_environment(self):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = os.path.join(self.output_dir, timestamp)
+        os.makedirs(output_dir, exist_ok=True)
+
+        output_files = {
+            "standard": {
+                "resolved": os.path.join(
+                    output_dir, f"resolution_results_{timestamp}.txt"
+                ),
+                "unresolved": os.path.join(
+                    output_dir, f"unresolved_results_{timestamp}.txt"
+                ),
+                "gcp": os.path.join(output_dir, f"gcp_results_{timestamp}.txt"),
+                "aws": os.path.join(output_dir, f"aws_results_{timestamp}.txt"),
+                "azure": os.path.join(output_dir, f"azure_results_{timestamp}.txt"),
+                "dangling": os.path.join(
+                    output_dir, f"dangling_cname_results_{timestamp}.txt"
+                ),
+                "ns_takeover": os.path.join(
+                    output_dir, f"ns_takeover_results_{timestamp}.txt"
+                ),
+                "environment": os.path.join(
+                    output_dir, f"environment_results_{timestamp}.json"
+                ),
+                "timeout": os.path.join(output_dir, f"timeout_results_{timestamp}.txt"),
+            },
+            "service_checks": {
+                "ssl_tls_failure_file": os.path.join(
+                    output_dir, f"ssl_tls_failure_results_{timestamp}.txt"
+                ),
+                "http_failure_file": os.path.join(
+                    output_dir, f"http_failure_results_{timestamp}.txt"
+                ),
+                "tcp_common_ports_unreachable_file": os.path.join(
+                    output_dir, f"tls_common_ports_unreachable_{timestamp}.txt"
+                ),
+                "screenshot_dir": os.path.join(
+                    output_dir, f"screenshot_results_{timestamp}"
+                ),
+                "screenshot_failures": os.path.join(
+                    output_dir, f"failure_results_{timestamp}.txt"
+                ),
+            },
+        }
+
+        if self.evidence:
+            output_files["evidence"] = {
+                "dig": os.path.join(output_dir, "evidence", "dig"),
+            }
+
+        self.create_empty_files_or_directories(output_files, self.service_checks)
+        return timestamp, output_dir, output_files
+
+    def save_environment_info(self, environment_file, environment_info):
+        with open(environment_file, "w", encoding="utf-8") as json_file:
+            json_file.write(json.dumps(environment_info, indent=4))
+
+    def read_domains(self, domains_file):
+        with open(domains_file, "r", encoding="utf-8") as f:
+            return f.read().splitlines()
