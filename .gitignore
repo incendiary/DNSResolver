@@ -2,3 +2,4 @@ hostnames
 results
 output
 Source/*
+dns_resolver.log
