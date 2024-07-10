@@ -31,12 +31,12 @@ modules and execute the appropriate function with the required parameters.
 """
 
 import json
+import logging
 import os
 import re
 import socket
 import ssl
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
 
 import requests
 from selenium import webdriver

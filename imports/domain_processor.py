@@ -16,7 +16,8 @@ Functions:
 
 from imports.cloud_service_provider_checks import perform_csp_checks
 from imports.dns_based_checks import create_resolver, resolve_domain
-from imports.service_connectivity_checks import perform_service_connectivity_checks
+from imports.service_connectivity_checks import \
+    perform_service_connectivity_checks
 
 
 def process_domain(

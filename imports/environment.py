@@ -1,11 +1,12 @@
 import argparse
 import json
+import logging
 import os
 import sys
 from datetime import datetime
+
 import requests
 from requests import RequestException
-import logging
 
 
 def setup_logger():
@@ -23,7 +24,7 @@ def setup_logger():
 class EnvironmentManager:
     def __init__(self):
         self.config = {}
-        self.logger = self.setup_logger()
+        self.logger = setup_logger()
         self.domains_file = None
         self.output_dir = None
         self.verbose = None
@@ -34,20 +35,13 @@ class EnvironmentManager:
         self.timeout = None
         self.retries = None
         self.evidence = None
+        self.final_output_dir = None
+        self.output_files = None
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.environment_info = None
+        self.domains = None
 
-    def setup_logger(self):
-        logger = logging.getLogger("DNSResolver")
-        logger.setLevel(logging.DEBUG)
-        file_handler = logging.FileHandler("dns_resolver.log")
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-        return logger
-
-    def get_logger(self):
-        return self.logger
+        # Default Actions
 
     def parse_arguments(self):
         parser = argparse.ArgumentParser(
@@ -137,19 +131,32 @@ class EnvironmentManager:
 
     def log_effective_configuration(self, args):
         self.logger.info(f"Effective Configuration: {vars(args)}")
-        print(f"Effective Configuration: {vars(args)}")
+        banner = """
+░▒▓███████▓▒░░▒▓████████▓▒░░▒▓███████▓▒░░▒▓██████▓▒░░▒▓█▓▒░   ░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░  
+░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░   ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░ 
+░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░    ░▒▓█▓▒▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░ 
+░▒▓███████▓▒░░▒▓██████▓▒░  ░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░    ░▒▓█▓▒▒▓█▓▒░░▒▓██████▓▒░ ░▒▓███████▓▒░  
+░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░             ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▓█▓▒░ ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░ 
+░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░             ░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░     ░▒▓█▓▓█▓▒░ ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░ 
+░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░ ░▒▓██████▓▒░░▒▓████████▓▒░▒▓██▓▒░  ░▒▓████████▓▒░▒▓█▓▒░░▒▓█▓▒░
+        """
+        print(banner)
+        print("Effective Configuration:")
+        for key, value in vars(args).items():
+            print(f"{key:20}: {value}")
 
     def set_arguments(self, args):
         self.domains_file = args.domains_file
         self.output_dir = args.output_dir
         self.verbose = args.verbose
         self.extreme = args.extreme
-        self.resolvers = args.resolvers
         self.service_checks = args.service_checks
         self.max_threads = args.max_threads
         self.timeout = args.timeout
         self.retries = args.retries
         self.evidence = args.evidence
+        if args.resolvers:
+            self.resolvers = args.resolvers.split(",")
 
     def get_environment_info(self):
         command_executed = " ".join(sys.argv)
@@ -169,7 +176,7 @@ class EnvironmentManager:
             "run_in_docker": running_in_docker,
         }
 
-        return environment_info
+        self.environment_info = environment_info
 
     def create_empty_file_or_directory(self, filename):
         if not isinstance(filename, str):
@@ -188,76 +195,175 @@ class EnvironmentManager:
                 f"Unable to create file or directory {filename}. Error: {e}"
             )
 
-    def create_empty_files_or_directories(self, output_files, perform_service_checks):
-        for key, value in output_files.get("standard", {}).items():
+    def create_empty_files_or_directories(
+        self,
+    ):
+        for key, value in self.output_files.get("standard", {}).items():
             self.create_empty_file_or_directory(value)
 
-        if perform_service_checks:
-            for key, value in output_files.get("service_checks", {}).items():
+        if self.service_checks:
+            for key, value in self.output_files.get("service_checks", {}).items():
                 self.create_empty_file_or_directory(value)
 
-        if "evidence" in output_files:
-            for value in output_files["evidence"].values():
+        if "evidence" in self.output_files:
+            for value in self.output_files["evidence"].values():
                 self.create_empty_file_or_directory(value)
 
     def initialize_environment(self):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(self.output_dir, timestamp)
-        os.makedirs(output_dir, exist_ok=True)
+
+        self.final_output_dir = os.path.join(self.output_dir, self.timestamp)
+        os.makedirs(self.final_output_dir, exist_ok=True)
 
         output_files = {
             "standard": {
                 "resolved": os.path.join(
-                    output_dir, f"resolution_results_{timestamp}.txt"
+                    self.final_output_dir, f"resolution_results_{self.timestamp}.txt"
                 ),
                 "unresolved": os.path.join(
-                    output_dir, f"unresolved_results_{timestamp}.txt"
+                    self.final_output_dir, f"unresolved_results_{self.timestamp}.txt"
                 ),
-                "gcp": os.path.join(output_dir, f"gcp_results_{timestamp}.txt"),
-                "aws": os.path.join(output_dir, f"aws_results_{timestamp}.txt"),
-                "azure": os.path.join(output_dir, f"azure_results_{timestamp}.txt"),
+                "gcp": os.path.join(
+                    self.final_output_dir, f"gcp_results_{self.timestamp}.txt"
+                ),
+                "aws": os.path.join(
+                    self.final_output_dir, f"aws_results_{self.timestamp}.txt"
+                ),
+                "azure": os.path.join(
+                    self.final_output_dir, f"azure_results_{self.timestamp}.txt"
+                ),
                 "dangling": os.path.join(
-                    output_dir, f"dangling_cname_results_{timestamp}.txt"
+                    self.final_output_dir,
+                    f"dangling_cname_results_{self.timestamp}.txt",
                 ),
                 "ns_takeover": os.path.join(
-                    output_dir, f"ns_takeover_results_{timestamp}.txt"
+                    self.final_output_dir, f"ns_takeover_results_{self.timestamp}.txt"
                 ),
                 "environment": os.path.join(
-                    output_dir, f"environment_results_{timestamp}.json"
+                    self.final_output_dir, f"environment_results_{self.timestamp}.json"
                 ),
-                "timeout": os.path.join(output_dir, f"timeout_results_{timestamp}.txt"),
+                "timeout": os.path.join(
+                    self.final_output_dir, f"timeout_results_{self.timestamp}.txt"
+                ),
             },
             "service_checks": {
                 "ssl_tls_failure_file": os.path.join(
-                    output_dir, f"ssl_tls_failure_results_{timestamp}.txt"
+                    self.final_output_dir,
+                    f"ssl_tls_failure_results_{self.timestamp}.txt",
                 ),
                 "http_failure_file": os.path.join(
-                    output_dir, f"http_failure_results_{timestamp}.txt"
+                    self.final_output_dir, f"http_failure_results_{self.timestamp}.txt"
                 ),
                 "tcp_common_ports_unreachable_file": os.path.join(
-                    output_dir, f"tls_common_ports_unreachable_{timestamp}.txt"
+                    self.final_output_dir,
+                    f"tls_common_ports_unreachable_{self.timestamp}.txt",
                 ),
                 "screenshot_dir": os.path.join(
-                    output_dir, f"screenshot_results_{timestamp}"
+                    self.final_output_dir, f"screenshot_results_{self.timestamp}"
                 ),
                 "screenshot_failures": os.path.join(
-                    output_dir, f"failure_results_{timestamp}.txt"
+                    self.final_output_dir, f"failure_results_{self.timestamp}.txt"
                 ),
             },
         }
 
         if self.evidence:
             output_files["evidence"] = {
-                "dig": os.path.join(output_dir, "evidence", "dig"),
+                "dig": os.path.join(self.final_output_dir, "evidence", "dig"),
             }
 
-        self.create_empty_files_or_directories(output_files, self.service_checks)
-        return timestamp, output_dir, output_files
+        self.output_files = output_files
+        self.create_empty_files_or_directories()
 
-    def save_environment_info(self, environment_file, environment_info):
-        with open(environment_file, "w", encoding="utf-8") as json_file:
-            json_file.write(json.dumps(environment_info, indent=4))
+    def save_environment_info(self):
+        self.get_environment_info()
+        with open(
+            self.output_files["standard"]["environment"], "w", encoding="utf-8"
+        ) as json_file:
+            json_file.write(json.dumps(self.environment_info, indent=4))
 
-    def read_domains(self, domains_file):
-        with open(domains_file, "r", encoding="utf-8") as f:
-            return f.read().splitlines()
+    def set_domains(self):
+        with open(self.domains_file, "r", encoding="utf-8") as f:
+            self.domains = f.read().splitlines()
+
+    # Simple Getters and setters
+
+    def get_output_files(self):
+        return self.output_files
+
+    def get_logger(self):
+        return self.logger
+
+    def get_domains(self):
+        return self.domains
+
+    def get_domains_file(self):
+        return self.domains_file
+
+    def set_domains_file(self, domains_file):
+        self.domains_file = domains_file
+
+    def get_output_dir(self):
+        return self.output_dir
+
+    def set_output_dir(self, output_dir):
+        self.output_dir = output_dir
+
+    def get_verbose(self):
+        return self.verbose
+
+    def set_verbose(self, verbose):
+        self.verbose = verbose
+
+    def get_extreme(self):
+        return self.extreme
+
+    def set_extreme(self, extreme):
+        self.extreme = extreme
+
+    def get_resolvers(self):
+        return self.resolvers
+
+    def set_resolvers(self, resolvers):
+        self.resolvers = resolvers
+
+    def get_service_checks(self):
+        return self.service_checks
+
+    def set_service_checks(self, service_checks):
+        self.service_checks = service_checks
+
+    def get_max_threads(self):
+        return self.max_threads
+
+    def set_max_threads(self, max_threads):
+        self.max_threads = max_threads
+
+    def get_timeout(self):
+        return self.timeout
+
+    def set_timeout(self, timeout):
+        self.timeout = timeout
+
+    def get_retries(self):
+        return self.retries
+
+    def set_retries(self, retries):
+        self.retries = retries
+
+    def get_evidence(self):
+        return self.evidence
+
+    def set_evidence(self, evidence):
+        self.evidence = evidence
+
+    def get_timestamp(self):
+        return self.timestamp
+
+    def set_timestamp(self, timestamp):
+        self.timestamp = timestamp
+
+    def get_final_output_dir(self):
+        return self.final_output_dir
+
+    def set_final_output_dir(self, final_output_dir):
+        self.final_output_dir = final_output_dir
