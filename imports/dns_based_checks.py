@@ -19,9 +19,9 @@ The resolve_domain function completes the DNS resolution for a domain using seve
 The create_resolver function creates a DNS resolver object configured with a specified timeout and nameservers.
 """
 
+import json
 import os
 import re
-import json
 import subprocess
 
 import dns.resolver
@@ -68,7 +68,6 @@ def check_dangling_cname(
     output_files,
     patterns,
     evidence_enabled,
-    logger,
 ):
     resolver = dns.resolver.Resolver()
     if nameservers:
@@ -189,7 +188,6 @@ def resolve_domain(
                     output_files,
                     patterns,
                     evidence_enabled,
-                    logger,
                 ):
                     dangling_domains.add(current_domain)
                 break
