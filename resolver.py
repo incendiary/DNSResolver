@@ -16,12 +16,14 @@ import threading
 
 from tqdm import tqdm
 
-from imports.cloud_ip_ranges import (fetch_aws_ip_ranges,
-                                     fetch_azure_ip_ranges,
-                                     fetch_google_cloud_ip_ranges)
+from imports.cloud_ip_ranges import (
+    fetch_aws_ip_ranges,
+    fetch_azure_ip_ranges,
+    fetch_google_cloud_ip_ranges,
+)
 from imports.dns_based_checks import load_domain_categorisation_patterns
 from imports.domain_processor import process_domain
-from imports.environment import EnvironmentManager
+from classes.EnvironmentManager import EnvironmentManager
 
 
 def main():
