@@ -29,10 +29,7 @@ from classes.DomainProcessingContext import DomainProcessingContext
 
 def main():
     env_manager = EnvironmentManager()
-    env_manager.parse_arguments()
-
-    env_manager.initialize_environment()
-    env_manager.save_environment_info()
+    # env_manager.parse_arguments()
 
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(
         env_manager.get_output_dir(), env_manager.extreme
@@ -73,13 +70,11 @@ def main():
 
             for domain in current_failed_domains:
                 if env_manager.verbose:
-                    env_manager.get_logger().info(
-                        f"Starting thread for domain: {domain}"
-                    )
+                    env_manager.log_info(f"Starting thread for domain: {domain}")
                 if len(threads) >= max_threads:
                     threads.pop(0).join()
 
-                domain_context = DomainProcessingContext()
+                domain_context = DomainProcessingContext(env_manager)
                 domain_context.set_domain(domain)
                 domain_context.set_nameservers(env_manager.get_resolvers())
                 domain_context.set_output_files(env_manager.get_output_files())
@@ -113,17 +108,17 @@ def main():
                 thread.join()
 
     # Print final messages
-    env_manager.get_logger().info(
-        "All resolutions completed. Results saved to %s", env_manager.get_output_dir()
+    env_manager.log_info(
+        f"All resolutions completed. Results saved to %s", env_manager.get_output_dir()
     )
 
-    if env_manager.extreme:
-        env_manager.get_logger().info("AWS IPv4 Ranges: %s", aws_ipv4)
-        env_manager.get_logger().info("AWS IPv6 Ranges: %s", aws_ipv6)
-        env_manager.get_logger().info("Google Cloud IPv4 Ranges: %s", gcp_ipv4)
-        env_manager.get_logger().info("Google Cloud IPv6 Ranges: %s", gcp_ipv6)
-        env_manager.get_logger().info("Azure IPv4 Ranges: %s", azure_ipv4)
-        env_manager.get_logger().info("Azure IPv6 Ranges: %s", azure_ipv6)
+    if env_manager.get_extreme():
+        env_manager.log_info("AWS IPv4 Ranges: %s", aws_ipv4)
+        env_manager.log_info("AWS IPv6 Ranges: %s", aws_ipv6)
+        env_manager.log_info("Google Cloud IPv4 Ranges: %s", gcp_ipv4)
+        env_manager.log_info("Google Cloud IPv6 Ranges: %s", gcp_ipv6)
+        env_manager.log_info("Azure IPv4 Ranges: %s", azure_ipv4)
+        env_manager.log_info("Azure IPv6 Ranges: %s", azure_ipv6)
 
 
 if __name__ == "__main__":

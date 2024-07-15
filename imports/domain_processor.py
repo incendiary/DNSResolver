@@ -20,6 +20,14 @@ from imports.service_connectivity_checks import perform_service_connectivity_che
 
 
 def process_domain(domain_context, env_manager, pbar):
+    """
+    Process the given domain.
+
+    :param domain_context: The domain context object.
+    :param env_manager: The environment manager object.
+    :param pbar: The progress bar object.
+    :return: None.
+    """
     domain_context.create_resolver()
 
     domain = domain_context.get_domain()
@@ -34,4 +42,6 @@ def process_domain(domain_context, env_manager, pbar):
             perform_service_connectivity_checks(domain_context, env_manager)
 
     pbar.update(1)
-    env_manager.get_logger().info(f"Finished processing domain: {domain}")
+    domain_context.log_info(
+        f"Finished processing domain: {domain_context.get_domain()}"
+    )
