@@ -1,22 +1,6 @@
 """
-This module provides functions to categorize and resolve DNS domains for security research.
-
-The load_domain_categorisation_patterns function loads domain classification patterns from a given configuration file.
-
-The categorise_domain function categorizes a domain based on provided patterns. If a match is not found, the domain
- will be categorized as "unknown".
-
-The is_dangling_record function checks whether a DNS record of a particular type is dangling or not for a
-given domain.
-
-The check_dangling_cname function checks whether a given domain is a dangling CNAME and returns boolean.
-
-The dns_query_with_retry function attempts to resolve a DNS query and includes retry logic for cases when initial
-attempts fail, helpful in case of network issues or server failures.
-
-The resolve_domain function completes the DNS resolution for a domain using several parameters.
-
-The create_resolver function creates a DNS resolver object configured with a specified timeout and nameservers.
+A module with utility functions for dealing with DNS domain categorization,
+checking and identifying dangling DNS records, and carrying out DNS resolutions.
 """
 
 import json
@@ -44,9 +28,7 @@ def load_domain_categorisation_patterns(config_file="config.json"):
 def categorise_domain(domain, patterns):
     """
     Categorizes a domain based on a set of patterns.
-
     :param domain: The domain to categorize.
-    :type domain: str
     :param patterns: A dictionary containing patterns to match against the domain.
                      Should have the following structure:
                      {
@@ -62,10 +44,7 @@ def categorise_domain(domain, patterns):
                          },
                          ...
                      }
-    :type patterns: dict
-    :return: A tuple containing the category, recommendation, and evidence for the domain. If no matching
-             pattern is found, it returns the default values "unknown", "Unclassified", and "N/A".
-    :rtype: tuple
+
     """
     for category, pattern in patterns.items():
         if re.search(pattern["regex"], domain):
@@ -75,19 +54,7 @@ def categorise_domain(domain, patterns):
 
 def is_dangling_record(resolver, domain, record_type):
     """
-    This method `is_dangling_record` is used to determine if a specified record for a given domain is a dangling
-    record or not.
-
-    :param resolver: A DNS resolver object used to query DNS information.
-    :param domain: The domain for which the record is being checked.
-    :param record_type: The type of the record being checked.
-
-    :return: True if the record is a dangling record, False otherwise.
-
-    The method attempts to resolve the specified record for the given domain using the provided DNS resolver.
-    If no valid answer is obtained, indicating that the record does not exist or cannot be resolved,
-    it is considered as a dangling record and True is returned. If a valid answer is obtained, it means
-    the record exists and is not a dangling record, so False is returned.
+    Checks if a specified DNS record for a given domain is a dangling record or not.
     """
     try:
         resolver.resolve(domain, record_type)
@@ -106,11 +73,16 @@ def perform_dig(domain, nameserver, reason, evidence_dir):
     :param evidence_dir: The directory where the output file will be saved.
     :return: None
     """
-    result = subprocess.run(
-        ["dig", f"@{nameserver}", domain],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["dig", f"@{nameserver}", domain],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed with error: {e.returncode}, output: {e.output}, stderr: {e.stderr}")
+        raise e from None
     filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
     with open(filename, "w", encoding="utf-8") as f:
         f.write(result.stdout)
@@ -120,10 +92,7 @@ def perform_dig(domain, nameserver, reason, evidence_dir):
 
 def resolve_domain(domain_context, env_manager):
     """
-    :param domain_context: an instance of DomainContext class containing information about the domain
-    :param env_manager: an instance of EnvManager class containing environment settings
-    :return: a tuple with two elements - a boolean indicating if domain resolution was successful or not, and a
-    list of final IP addresses
+    Resolves domain and returns a success status and the final IP addresses.
     """
     resolved_records = []
     current_domain = domain_context.get_domain()
@@ -135,9 +104,7 @@ def resolve_domain(domain_context, env_manager):
     while True:
         cname_chain_resolved = False
         for record_type in ["CNAME"]:
-            answer = dns_query_with_retry(
-                domain_context, env_manager, current_domain, record_type
-            )
+            answer = dns_query_with_retry(domain_context, env_manager, current_domain, record_type)
             if answer:
                 resolved_records.append((record_type, answer))
                 current_domain = str(answer[0])
@@ -150,9 +117,7 @@ def resolve_domain(domain_context, env_manager):
 
     final_ips = []
     for record_type in ["A", "AAAA"]:
-        answer = dns_query_with_retry(
-            domain_context, env_manager, current_domain, record_type
-        )
+        answer = dns_query_with_retry(domain_context, env_manager, current_domain, record_type)
         if answer:
             final_ips.extend(answer)
             resolved_records.append((record_type, answer))
@@ -180,14 +145,7 @@ def resolve_domain(domain_context, env_manager):
 
 def dns_query_with_retry(domain_context, env_manager, current_domain, record_type):
     """
-    :param domain_context: The DomainContext object that contains the resolver and domain information.
-    :param env_manager: The EnvManager object that contains the retry, verbose, logger, output files, and evidence
-    settings.
-    :param current_domain: The domain to query for DNS records.
-    :param record_type: The type of DNS records to query for.
-
-    :return: A list of strings containing the resolved DNS records for the given domain and record type, or
-    None if resolution fails after all retries.
+    Tries to resolve DNS query and implements retry for failures.
 
     """
     resolver = domain_context.get_resolver()
@@ -211,7 +169,8 @@ def dns_query_with_retry(domain_context, env_manager, current_domain, record_typ
         ) as e:
             if verbose and retry < retries - 1:
                 logger.info(
-                    f"Failed to resolve DNS for {current_domain} - retry {retry + 1} of {retries}: {e}"
+                    f"Failed to resolve DNS for {current_domain} - "
+                    f"retry {retry + 1} of {retries}: {e}"
                 )
             elif retry == retries - 1:
                 if current_domain not in dangling_domains:
@@ -234,11 +193,7 @@ def dns_query_with_retry(domain_context, env_manager, current_domain, record_typ
 
 def check_dangling_cname(domain_context, env_manager, current_domain):
     """
-    :param domain_context: Object that contains information about the domain and its context.
-    :param env_manager: Object that manages the environment settings.
-    :param current_domain: The current domain being checked for dangling CNAME.
-
-    :return: True if the current domain has dangling CNAME records, False otherwise.
+    Checks if a domain is a dangling CNAME, returning a boolean result.
     """
     resolver = dns.resolver.Resolver()
     nameservers = domain_context.get_nameservers()
@@ -255,15 +210,11 @@ def check_dangling_cname(domain_context, env_manager, current_domain):
             return False
 
     if not is_dangling_record(resolver, current_domain, "NS"):
-        with open(
-            output_files["standard"]["ns_takeover"], "a", encoding="utf-8"
-        ) as file:
+        with open(output_files["standard"]["ns_takeover"], "a", encoding="utf-8") as file:
             file.write(f"{original_domain}|{current_domain}\n")
         return False
 
-    category, recommendation, evidence_link = categorise_domain(
-        current_domain, patterns
-    )
+    category, recommendation, evidence_link = categorise_domain(current_domain, patterns)
     with open(output_files["standard"]["dangling"], "a", encoding="utf-8") as file:
         file.write(
             f"{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}\n"
@@ -271,8 +222,6 @@ def check_dangling_cname(domain_context, env_manager, current_domain):
 
     if evidence_enabled:
         for nameserver in resolver.nameservers:
-            perform_dig(
-                current_domain, nameserver, "dangling", output_files["evidence"]["dig"]
-            )
+            perform_dig(current_domain, nameserver, "dangling", output_files["evidence"]["dig"])
 
     return True
