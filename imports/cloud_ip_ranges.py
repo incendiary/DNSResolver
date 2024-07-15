@@ -11,12 +11,12 @@ import requests
 
 def fetch_google_cloud_ip_ranges(output_dir, extreme=False):
     """
-    Fetches the IP ranges of Google Cloud and saves them to a JSON file.
+    Fetches the Google Cloud IP ranges and saves them to a JSON file.
 
-    :param output_dir: The directory where the JSON file will be saved.
-    :param extreme: A flag indicating whether to print the fetched IP ranges. Defaults to False.
-    :return: A tuple containing two lists: IPv4 ranges and IPv6 ranges.
-    :rtype: tuple
+    :param output_dir: The output directory where the JSON file will be saved.
+    :param extreme: (Optional) If set to True, it prints the fetched IP ranges to the console.
+    :return: A tuple with two lists: the IPv4 ranges and the IPv6 ranges.
+
     """
     url = "https://www.gstatic.com/ipranges/cloud.json"
     try:
@@ -55,12 +55,11 @@ def fetch_google_cloud_ip_ranges(output_dir, extreme=False):
 
 def fetch_aws_ip_ranges(output_dir, extreme=False):
     """
-    Fetches the AWS IP ranges from the official AWS IP ranges JSON file and saves it to a file.
+    Fetches the AWS IP ranges and saves them in a JSON file.
 
-    :param output_dir: The directory where the JSON file should be saved.
-    :param extreme: Whether to print the fetched IP ranges or not. Defaults to False.
-    :return: A tuple containing two lists: IPv4 ranges and IPv6 ranges.
-    :rtype: tuple
+    :param output_dir: The directory where the JSON file will be saved.
+    :param extreme: (Optional) If set to True, print the fetched IP ranges to the console.
+    :return: A tuple containing a list of IPv4 ranges and a list of IPv6 ranges.
     """
     url = "https://ip-ranges.amazonaws.com/ip-ranges.json"
     try:
@@ -97,11 +96,19 @@ def fetch_aws_ip_ranges(output_dir, extreme=False):
 
 def fetch_azure_ip_ranges(output_dir, extreme=False):
     """
-    Fetches Azure IP ranges and saves them to a JSON file.
+    :param output_dir: The directory where the fetched Azure IP ranges JSON file will be saved.
+    :param extreme: A boolean indicating whether to print the fetched IP ranges to the console.
+    :return: A tuple containing two lists - the first list contains the IPv4 ranges and the second list contains the
+    IPv6 ranges.
 
-    :param output_dir: The directory where the JSON file will be saved.
-    :param extreme: A flag indicating whether to print the IP ranges to the console.
-    :return: A tuple containing two lists: the IPv4 ranges and the IPv6 ranges.
+    The `fetch_azure_ip_ranges` method retrieves the Azure IP ranges information from Microsoft's official website and
+    saves it as a JSON file. It then extracts the IPv4 and IPv6 ranges from the retrieved data.
+
+    Example usage:
+
+        ipv4_ranges, ipv6_ranges = fetch_azure_ip_ranges("/path/to/output", extreme=True)
+        print("IPv4:", ipv4_ranges)
+        print("IPv6:", ipv6_ranges)
     """
     url = "https://www.microsoft.com/en-us/download/confirmation.aspx?id=56519"
     try:
