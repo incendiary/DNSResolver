@@ -1,5 +1,6 @@
 """
-This module provides functions related to DNS resolution, CSP checks, and service connectivity checks for domains.
+This module provides functions related to DNS resolution,
+CSP checks, and service connectivity checks for domains.
 
 It imports functions from three other modules:
 - cloud_csp_checks for performing CSP (Content Security Policy) checks
@@ -42,6 +43,4 @@ def process_domain(domain_context, env_manager, pbar):
             perform_service_connectivity_checks(domain_context, env_manager)
 
     pbar.update(1)
-    domain_context.log_info(
-        f"Finished processing domain: {domain_context.get_domain()}"
-    )
+    domain_context.log_info(f"Finished processing domain: {domain_context.get_domain()}")

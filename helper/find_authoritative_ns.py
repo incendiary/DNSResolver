@@ -1,3 +1,12 @@
+"""
+This script retrieves authoritative name servers for a given
+subdomain by following a series of DNS queries.
+It performs the following steps:
+1. Queries the root name server for the TLD name servers.
+2. Queries the TLD name servers for the domain name servers.
+3. Queries the domain name servers for the subdomain name servers.
+"""
+
 import argparse
 
 import dns.message
@@ -6,6 +15,13 @@ import dns.resolver
 
 
 def query_ns(server_ip, domain):
+    """
+    Query the specified DNS server for NS records of the given domain.
+
+    :param server_ip: IP address or hostname of the DNS server to query.
+    :param domain: Domain name to query for NS records.
+    :return: DNS response containing NS records of the domain, or None if there was an error.
+    """
     try:
         query = dns.message.make_query(domain, dns.rdatatype.NS)
         response = dns.query.udp(query, server_ip, timeout=3)
@@ -16,20 +32,35 @@ def query_ns(server_ip, domain):
 
 
 def get_tld_ns(tld):
+    """
+    Get the nameservers (NS records) for a given top-level domain (TLD).
+
+    :param tld: The top-level domain for which to retrieve the nameservers.
+    :return: A list of nameservers (NS records)
+    for the given TLD, or None if no nameservers are found.
+
+    """
     root_ns = "a.root-servers.net"
     root_ns_ip = dns.resolver.resolve(root_ns, "A")[0].to_text()
     response = query_ns(root_ns_ip, tld)
     if response:
         tld_ns = [
-            rr.target.to_text()
-            for rr in response.authority[0]
-            if rr.rdtype == dns.rdatatype.NS
+            rr.target.to_text() for rr in response.authority[0] if rr.rdtype == dns.rdatatype.NS
         ]
         return tld_ns
     return None
 
 
 def get_domain_ns(tld_ns, domain):
+    """
+    Get the authoritative name servers for a given
+     domain from a list of top-level domain name servers.
+
+    :param tld_ns: List of top-level domain name servers.
+    :param domain: The domain name to query.
+    :return: List of authoritative name servers for the domain,
+    or None if no authoritative name server is found.
+    """
     for ns in tld_ns:
         try:
             ns_ip = dns.resolver.resolve(ns, "A")[0].to_text()
@@ -55,6 +86,12 @@ def get_domain_ns(tld_ns, domain):
 
 
 def get_subdomain_ns(domain_ns, subdomain):
+    """
+    :param domain_ns: A list of domain name servers (NS records) for the domain.
+    :param subdomain: The subdomain for which to retrieve the name servers (NS records).
+    :return: A list of name servers (NS records) for the subdomain.
+
+    """
     if not domain_ns:
         return None
 
@@ -92,9 +129,7 @@ if __name__ == "__main__":
     subdomain = args.subdomain
     domain_parts = subdomain.split(".")
     if len(domain_parts) < 2:
-        print(
-            "Invalid subdomain format. Please provide a full subdomain (e.g., www.example.com)."
-        )
+        print("Invalid subdomain format. Please provide a full subdomain (e.g., www.example.com).")
         exit(1)
 
     domain = ".".join(domain_parts[-2:])
@@ -129,6 +164,7 @@ if __name__ == "__main__":
     else:
         print(f"No authoritative name servers found for {subdomain}")
 
-        # Since no NS records are found for the subdomain, assume the domain's name servers are authoritative
+        # Since no NS records are found for the subdomain,
+        # assume the domain's name servers are authoritative
         if domain_ns:
             print(f"\nThe name servers for {domain} are authoritative for {subdomain}.")

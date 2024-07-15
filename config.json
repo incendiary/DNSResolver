@@ -3,7 +3,7 @@
         "output_dir": "output",
         "max_threads": 2,
         "timeout": 1,
-	    "nameservers": "1.1.1.1,8.8.8.8,208.67.222.22",
+	    "nameservers": "1.1.1.1,8.8.8.8",
         "verbose": true,
         "retries": 2,
         "evidence": true,
