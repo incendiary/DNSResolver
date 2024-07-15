@@ -72,7 +72,7 @@ python resolver.py -d domains.txt -o output --evidence -v -n 8.8.8.8,1.1.1.1 -t 
 
 For a quick demonstration of DNSResolver in action, watch the video below:
 
-![DNSResolver Demo](media/simplerun.gif)
+![DNSResolver Demo](Media/simplerun.gif)
 
 ## Contributing
 
