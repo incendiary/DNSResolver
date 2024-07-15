@@ -448,3 +448,6 @@ class EnvironmentManager:
 
     def set_timestamp(self, timestamp):
         self.timestamp = timestamp
+
+    def get_config_file(self):
+        return self.args.config_file

@@ -48,7 +48,7 @@ def main():
             f"Domains to process: {env_manager.get_domains()}"
         )
 
-    patterns = load_domain_categorisation_patterns()
+    patterns = load_domain_categorisation_patterns(env_manager.get_config_file())
 
     max_threads = env_manager.max_threads or 10
 
