@@ -26,7 +26,11 @@ class EnvironmentManager:
         self.evidence = None
         self.output_files = None
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.environment_info = None
+        self.environment_info = {
+            "command_executed": None,
+            "external_ip": None,
+            "run_in_docker": None,
+        }
         self.domains = None
 
         # Default Actions
@@ -100,14 +104,43 @@ class EnvironmentManager:
 
         args = parser.parse_args()
 
-        if args.config_file:
-            with open(args.config_file, "r", encoding="utf-8") as f:
-                self.config = json.load(f)
+        # Validation - may not be necessary given argparse automatically checks if the input matches the type
 
-            config_args = self.config.get("config", {})
-            for key, value in config_args.items():
-                if getattr(args, key, None) is None:
-                    setattr(args, key, value)
+        if args.domains_file and not os.path.isfile(args.domains_file):
+            self.logger.error(
+                f"Provided domains file does not exist: {args.domains_file}"
+            )
+            sys.exit(1)
+        if args.max_threads and not isinstance(args.max_threads, int):
+            self.logger.error(
+                f"Provided max threads is not an integer: {args.max_threads}"
+            )
+            sys.exit(1)
+        if args.timeout and not isinstance(args.timeout, int):
+            self.logger.error(f"Provided timeout is not an integer: {args.timeout}")
+            sys.exit(1)
+        if args.retries and not isinstance(args.retries, int):
+            self.logger.error(f"Provided retries is not an integer: {args.retries}")
+            sys.exit(1)
+        if args.nameservers and not all(
+            isinstance(i, str) for i in args.nameservers.split(",")
+        ):
+            self.logger.error(
+                f"Provided nameservers are not all strings: {args.nameservers}"
+            )
+            sys.exit(1)
+
+        if args.config_file:
+            try:
+                with open(args.config_file, "r", encoding="utf-8") as f:
+                    try:
+                        self.config = json.load(f)
+                    except json.JSONDecodeError as err:
+                        self.logger.error(f"Error parsing JSON: {err}")
+                        self.config = {}
+            except IOError as e:
+                self.logger.error(f"Error opening file: {e}")
+                self.config = {}
 
         # If extreme is set, set verbose as well
         if args.extreme:
