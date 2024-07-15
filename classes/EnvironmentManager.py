@@ -18,13 +18,12 @@ class EnvironmentManager:
         self.output_dir = None
         self.verbose = None
         self.extreme = None
-        self.resolvers = None
+        self.nameservers = None
         self.service_checks = None
         self.max_threads = None
         self.timeout = None
         self.retries = None
         self.evidence = None
-        self.final_output_dir = None
         self.output_files = None
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.environment_info = None
@@ -66,10 +65,9 @@ class EnvironmentManager:
             help="Enable extreme mode to display extensive information (including IP ranges)",
         )
         parser.add_argument(
-            "--resolvers",
-            "-r",
+            "--nameservers",
             type=str,
-            help="Comma-separated list of custom resolvers. Overrides system resolvers.",
+            help="Comma-separated list of custom nameservers. Overrides system resolvers.",
         )
         parser.add_argument(
             "--service-checks",
@@ -144,8 +142,8 @@ class EnvironmentManager:
         self.timeout = args.timeout
         self.retries = args.retries
         self.evidence = args.evidence
-        if args.resolvers:
-            self.resolvers = args.resolvers.split(",")
+        if args.nameservers:
+            self.nameservers = args.nameservers.split(",")
 
     def get_environment_info(self):
         command_executed = " ".join(sys.argv)
@@ -200,64 +198,65 @@ class EnvironmentManager:
 
     def initialize_environment(self):
 
-        self.final_output_dir = os.path.join(self.output_dir, self.timestamp)
-        os.makedirs(self.final_output_dir, exist_ok=True)
+        self.output_dir = os.path.join(self.output_dir, self.timestamp)
+
+        os.makedirs(self.output_dir, exist_ok=True)
 
         output_files = {
             "standard": {
                 "resolved": os.path.join(
-                    self.final_output_dir, f"resolution_results_{self.timestamp}.txt"
+                    self.output_dir, f"resolution_results_{self.timestamp}.txt"
                 ),
                 "unresolved": os.path.join(
-                    self.final_output_dir, f"unresolved_results_{self.timestamp}.txt"
+                    self.output_dir, f"unresolved_results_{self.timestamp}.txt"
                 ),
                 "gcp": os.path.join(
-                    self.final_output_dir, f"gcp_results_{self.timestamp}.txt"
+                    self.output_dir, f"gcp_results_{self.timestamp}.txt"
                 ),
                 "aws": os.path.join(
-                    self.final_output_dir, f"aws_results_{self.timestamp}.txt"
+                    self.output_dir, f"aws_results_{self.timestamp}.txt"
                 ),
                 "azure": os.path.join(
-                    self.final_output_dir, f"azure_results_{self.timestamp}.txt"
+                    self.output_dir, f"azure_results_{self.timestamp}.txt"
                 ),
                 "dangling": os.path.join(
-                    self.final_output_dir,
+                    self.output_dir,
                     f"dangling_cname_results_{self.timestamp}.txt",
                 ),
                 "ns_takeover": os.path.join(
-                    self.final_output_dir, f"ns_takeover_results_{self.timestamp}.txt"
+                    self.output_dir, f"ns_takeover_results_{self.timestamp}.txt"
                 ),
                 "environment": os.path.join(
-                    self.final_output_dir, f"environment_results_{self.timestamp}.json"
+                    self.output_dir, f"environment_results_{self.timestamp}.json"
                 ),
                 "timeout": os.path.join(
-                    self.final_output_dir, f"timeout_results_{self.timestamp}.txt"
+                    self.output_dir, f"timeout_results_{self.timestamp}.txt"
                 ),
             },
             "service_checks": {
                 "ssl_tls_failure_file": os.path.join(
-                    self.final_output_dir,
+                    self.output_dir,
                     f"ssl_tls_failure_results_{self.timestamp}.txt",
                 ),
                 "http_failure_file": os.path.join(
-                    self.final_output_dir, f"http_failure_results_{self.timestamp}.txt"
+                    self.output_dir, f"http_failure_results_{self.timestamp}.txt"
                 ),
                 "tcp_common_ports_unreachable_file": os.path.join(
-                    self.final_output_dir,
+                    self.output_dir,
                     f"tls_common_ports_unreachable_{self.timestamp}.txt",
                 ),
                 "screenshot_dir": os.path.join(
-                    self.final_output_dir, f"screenshot_results_{self.timestamp}"
+                    self.output_dir, f"evidence/screenshot_results_{self.timestamp}"
                 ),
                 "screenshot_failures": os.path.join(
-                    self.final_output_dir, f"failure_results_{self.timestamp}.txt"
+                    self.output_dir, f"failure_results_{self.timestamp}.txt"
                 ),
             },
         }
 
         if self.evidence:
             output_files["evidence"] = {
-                "dig": os.path.join(self.final_output_dir, "evidence", "dig"),
+                "dig": os.path.join(self.output_dir, "evidence", "dig"),
             }
 
         self.output_files = output_files
@@ -310,10 +309,10 @@ class EnvironmentManager:
         self.extreme = extreme
 
     def get_resolvers(self):
-        return self.resolvers
+        return self.nameservers
 
     def set_resolvers(self, resolvers):
-        self.resolvers = resolvers
+        self.nameservers = resolvers
 
     def get_service_checks(self):
         return self.service_checks
@@ -350,9 +349,3 @@ class EnvironmentManager:
 
     def set_timestamp(self, timestamp):
         self.timestamp = timestamp
-
-    def get_final_output_dir(self):
-        return self.final_output_dir
-
-    def set_final_output_dir(self, final_output_dir):
-        self.final_output_dir = final_output_dir

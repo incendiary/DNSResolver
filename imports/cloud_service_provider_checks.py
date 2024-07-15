@@ -14,34 +14,25 @@ import logging
 logger = logging.getLogger("DNSResolver")
 
 
-def perform_csp_checks(
-    domain,
-    output_files,
-    final_ips,
-    gcp_ipv4,
-    gcp_ipv6,
-    aws_ipv4,
-    aws_ipv6,
-    azure_ipv4,
-    azure_ipv6,
-    verbose,
-    extreme,
-    logger,
-):
+def perform_csp_checks(domain_context, env_manager, final_ips):
     """
-    :param domain: The domain being checked.
-    :param output_files: Dictionary of output files to write results to.
+    :param domain_context: The DomainProcessingContext object containing domain details.
+    :param env_manager: The EnvironmentManager object.
     :param final_ips: List of resolved IP addresses for the domain.
-    :param gcp_ipv4: List of Google Cloud IPv4 ranges.
-    :param gcp_ipv6: List of Google Cloud IPv6 ranges.
-    :param aws_ipv4: List of AWS IPv4 ranges.
-    :param aws_ipv6: List of AWS IPv6 ranges.
-    :param azure_ipv4: List of Azure IPv4 ranges.
-    :param azure_ipv6: List of Azure IPv6 ranges.
-    :param verbose: Boolean flag indicating whether to print verbose output.
-    :param extreme: Boolean flag indicating whether to run extreme checks.
     :return: None
     """
+    domain = domain_context.get_domain()
+    output_files = env_manager.get_output_files()
+    gcp_ipv4 = domain_context.get_gcp_ipv4()
+    gcp_ipv6 = domain_context.get_gcp_ipv6()
+    aws_ipv4 = domain_context.get_aws_ipv4()
+    aws_ipv6 = domain_context.get_aws_ipv6()
+    azure_ipv4 = domain_context.get_azure_ipv4()
+    azure_ipv6 = domain_context.get_azure_ipv6()
+    verbose = env_manager.get_verbose()
+    extreme = env_manager.get_extreme()
+    logger = env_manager.get_logger()
+
     gcp_matches = []
     aws_matches = []
     azure_matches = []

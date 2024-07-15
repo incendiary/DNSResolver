@@ -24,6 +24,7 @@ from imports.cloud_ip_ranges import (
 from imports.dns_based_checks import load_domain_categorisation_patterns
 from imports.domain_processor import process_domain
 from classes.EnvironmentManager import EnvironmentManager
+from classes.DomainProcessingContext import DomainProcessingContext
 
 
 def main():
@@ -77,30 +78,33 @@ def main():
                     )
                 if len(threads) >= max_threads:
                     threads.pop(0).join()
+
+                domain_context = DomainProcessingContext()
+                domain_context.set_domain(domain)
+                domain_context.set_nameservers(env_manager.get_resolvers())
+                domain_context.set_output_files(env_manager.get_output_files())
+                domain_context.set_verbose(env_manager.get_verbose())
+                domain_context.set_extreme(env_manager.get_extreme())
+                domain_context.set_gcp_ipv4(gcp_ipv4)
+                domain_context.set_gcp_ipv6(gcp_ipv6)
+                domain_context.set_aws_ipv4(aws_ipv4)
+                domain_context.set_aws_ipv6(aws_ipv6)
+                domain_context.set_azure_ipv4(azure_ipv4)
+                domain_context.set_azure_ipv6(azure_ipv6)
+                domain_context.set_perform_service_checks(
+                    env_manager.get_service_checks()
+                )
+                domain_context.set_timeout(env_manager.get_timeout())
+                domain_context.set_retries(env_manager.get_retries())
+                domain_context.set_patterns(patterns)
+                domain_context.set_dangling_domains(dangling_domains)
+                domain_context.set_failed_domains(failed_domains)
+                domain_context.set_evidence_enabled(env_manager.get_evidence())
+                domain_context.set_logger(env_manager.get_logger())
+
                 thread = threading.Thread(
                     target=process_domain,
-                    args=(
-                        domain,
-                        env_manager.get_resolvers(),
-                        env_manager.get_output_files(),
-                        pbar,
-                        env_manager.get_verbose(),
-                        env_manager.get_extreme(),
-                        gcp_ipv4,
-                        gcp_ipv6,
-                        aws_ipv4,
-                        aws_ipv6,
-                        azure_ipv4,
-                        azure_ipv6,
-                        env_manager.get_service_checks(),
-                        env_manager.get_timeout(),
-                        env_manager.get_retries(),
-                        patterns,
-                        dangling_domains,
-                        failed_domains,
-                        env_manager.evidence,
-                        env_manager.get_logger(),  # Pass the logger to process_domain
-                    ),
+                    args=(domain_context, env_manager, pbar),
                 )
                 threads.append(thread)
                 thread.start()
