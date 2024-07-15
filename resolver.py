@@ -16,6 +16,8 @@ import threading
 
 from tqdm import tqdm
 
+from classes.domain_processing_context import DomainProcessingContext
+from classes.environment_manager import EnvironmentManager
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
@@ -23,20 +25,24 @@ from imports.cloud_ip_ranges import (
 )
 from imports.dns_based_checks import load_domain_categorisation_patterns
 from imports.domain_processor import process_domain
-from classes.EnvironmentManager import EnvironmentManager
-from classes.DomainProcessingContext import DomainProcessingContext
 
 
 def main():
+    """
+    Main function of the program.
+    Processes domain names and retrieves IP ranges from Google Cloud, AWS, and Azure.
+    Resolves domain names and performs various checks on them.
+    Prints final messages and results.
+
+    :return: None
+    """
     env_manager = EnvironmentManager()
     # env_manager.parse_arguments()
 
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(
         env_manager.get_output_dir(), env_manager.extreme
     )
-    aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(
-        env_manager.get_output_dir(), env_manager.extreme
-    )
+    aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(env_manager.get_output_dir(), env_manager.extreme)
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(
         env_manager.get_output_dir(), env_manager.extreme
     )
@@ -44,9 +50,7 @@ def main():
     env_manager.set_domains()
 
     if env_manager.verbose:
-        env_manager.get_logger().info(
-            f"Domains to process: {env_manager.get_domains()}"
-        )
+        env_manager.get_logger().info("Domains to process: %s", env_manager.get_domains())
 
     patterns = load_domain_categorisation_patterns(env_manager.get_config_file())
 
@@ -83,9 +87,7 @@ def main():
                 domain_context.set_gcp_ip(gcp_ipv4, gcp_ipv6)
                 domain_context.set_aws_ip(aws_ipv4, aws_ipv6)
                 domain_context.set_azure_ip(azure_ipv4, azure_ipv6)
-                domain_context.set_perform_service_checks(
-                    env_manager.get_service_checks()
-                )
+                domain_context.set_perform_service_checks(env_manager.get_service_checks())
                 domain_context.set_timeout(env_manager.get_timeout())
                 domain_context.set_retries(env_manager.get_retries())
                 domain_context.set_patterns(patterns)
@@ -106,7 +108,7 @@ def main():
 
     # Print final messages
     env_manager.log_info(
-        f"All resolutions completed. Results saved to %s", env_manager.get_output_dir()
+        "All resolutions completed. Results saved to %s", env_manager.get_output_dir()
     )
 
     if env_manager.get_extreme():

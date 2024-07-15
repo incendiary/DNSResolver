@@ -1,33 +1,94 @@
+"""
+This module offers an EnvironmentManager class, responsible for:
+
+- Parsing and validating command line arguments.
+- Handling and resolving application configurations.
+- Setting up logging.
+- Managing DNS checks and evidence collection.
+- Overseeing environment setup, including directory and file creation,
+  domain name resolution, and service checks.
+
+The module validates flags, checks file existence, and ensures necessary
+components are present. Command line arguments can override configuration
+file settings. The module is highly configurable, accommodating various
+user scenarios and needs.
+
+Features of the EnvironmentManager include:
+
+- Handling verbose and extreme flags for output detail control.
+- Custom nameserver support.
+- Service health check capabilities.
+- Adjustable threading for domain processing.
+- Customizable DNS resolution timeouts and retries.
+- Evidence collection for DNS queries.
+"""
+
 import argparse
 import json
+import logging
 import os
 import sys
 from datetime import datetime
 
 import requests
 from requests import RequestException
-import logging
 
-from classes.Exceptions import (
+from classes.custom_exceptions import (
     FileDoesNotExistError,
-    NotAnIntegerError,
     InvalidNameserversError,
+    NotAnIntegerError,
 )
 
 
 def setup_logger():
+    """
+    Set up a logger for DNSResolver.
+
+    :return: Logger object.
+    """
     logger = logging.getLogger("DNSResolver")
     logger.setLevel(logging.DEBUG)
     file_handler = logging.FileHandler("dns_resolver.log")
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     return logger
 
 
 class EnvironmentManager:
+    """
+
+    EnvironmentManager Class
+    ------------------------
+
+    Class for managing the environment configuration and setup.
+
+    Attributes:
+        config (dict): A dictionary containing the configuration parameters.
+        args (argparse.Namespace): An object containing the command line arguments.
+        logger (Logger): An instance of a logger for logging messages.
+        domains_file (str): The path to the file containing the domains.
+        output_dir (str): The directory to save output files.
+        verbose (bool): Flag indicating whether to enable verbose mode.
+        extreme (bool): Flag indicating whether to enable extreme mode.
+        nameservers (list): A list of custom nameservers.
+        service_checks (bool): Flag indicating whether to perform service checks.
+        max_threads (int): The maximum number of threads to use for domain processing.
+        timeout (int): The timeout for the DNS resolution process in seconds.
+        retries (int): The number of retry attempts for timeouts.
+        evidence (bool): Flag indicating whether to enable evidence collection for DNS queries.
+        output_files (list): A list of output file paths.
+        timestamp (str): The current timestamp.
+        environment_info (dict): A dictionary containing environment information.
+        domains (list): A list of domains to process.
+
+    Methods:
+        __init__(): Initialize the EnvironmentManager class.
+        argument_parsing(): Parse the command line arguments.
+        validate_arguments(): Validate the command line arguments.
+        resolve_effective_configuration(): Resolve the effective configuration.
+        log_effective_configuration(): Log the effective configuration.
+    """
 
     def __init__(self):
         self.config = {}
@@ -77,8 +138,14 @@ class EnvironmentManager:
         self.save_environment_info()
 
     def argument_parsing(self):
+        """
+        Parses command-line arguments. Available options include domains file, config file,
+        output directory, verbose and extreme mode, custom nameservers, service checks,
+        max threads, timeout, retries, and evidence collection.
+        """
         parser = argparse.ArgumentParser(
-            description="Resolve DNS records for domains and check against cloud provider IP ranges."
+            description="Resolve DNS records for domains and check against "
+            "cloud provider IP ranges."
         )
         parser.add_argument(
             "domains_file",
@@ -145,6 +212,9 @@ class EnvironmentManager:
         self.args = parser.parse_args()
 
     def validate_arguments(self):
+        """
+        Checks validity of runtime arguments. Raises respective exceptions for issues in input args.
+        """
         try:
             if self.args.domains_file and not os.path.isfile(self.args.domains_file):
                 raise FileDoesNotExistError(
@@ -155,20 +225,16 @@ class EnvironmentManager:
                     f"Provided max threads is not an integer: {self.args.max_threads}"
                 )
             if self.args.timeout and not isinstance(self.args.timeout, int):
-                raise NotAnIntegerError(
-                    f"Provided timeout is not an integer: {self.args.timeout}"
-                )
+                raise NotAnIntegerError(f"Provided timeout is not an integer: {self.args.timeout}")
             if self.args.retries and not isinstance(self.args.retries, int):
-                raise NotAnIntegerError(
-                    f"Provided retries is not an integer: {self.args.retries}"
-                )
+                raise NotAnIntegerError(f"Provided retries is not an integer: {self.args.retries}")
             if self.args.nameservers and not all(
                 isinstance(i, str) for i in self.args.nameservers.split(",")
             ):
                 raise InvalidNameserversError(
                     f"Provided nameservers are not all strings: {self.args.nameservers}"
                 )
-        except Exception as e:
+        except (FileDoesNotExistError, NotAnIntegerError, InvalidNameserversError) as e:
             self.logger.error(str(e))
             sys.exit(1)
 
@@ -187,12 +253,12 @@ class EnvironmentManager:
                     except json.JSONDecodeError as err:
                         # If an error occurs during JSON loading, log the error and assign
                         # an empty dictionary to self.config
-                        self.logger.error(f"Error parsing JSON: {err}")
+                        self.logger.error("Error parsing JSON: %s", err)
                         self.config = {}
 
             # Handle file opening errors
             except IOError as e:
-                self.logger.error(f"Error opening file: {e}")
+                self.logger.error("Error opening file: %s", e)
                 self.config = {}
 
             # Retrieve the configuration parameters from the loaded configuration file.
@@ -210,7 +276,10 @@ class EnvironmentManager:
             self.args.verbose = True
 
     def log_effective_configuration(self):
-        self.logger.info(f"Effective Configuration: {vars(self.args)}")
+        """
+        Logs the effective configuration and prints some additional banner information.
+        """
+        self.logger.info("Effective Configuration: %s", vars(self.args))
         banner = """
 ░▒▓███████▓▒░░▒▓████████▓▒░░▒▓███████▓▒░░▒▓██████▓▒░░▒▓█▓▒░   ░▒▓█▓▒░░▒▓█▓▒░▒▓████████▓▒░▒▓███████▓▒░  
 ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░   ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░ 
@@ -226,6 +295,9 @@ class EnvironmentManager:
             print(f"{key:20}: {value}")
 
     def set_arguments(self):
+        """
+        Sets instance variable values based on runtime arguments.
+        """
         self.domains_file = self.args.domains_file
         self.output_dir = self.args.output_dir
         self.verbose = self.args.verbose
@@ -239,6 +311,9 @@ class EnvironmentManager:
             self.nameservers = self.args.nameservers.split(",")
 
     def initialise_environment(self):
+        """
+        Prepares the environment by setting paths, creating directories, and initializing files.
+        """
 
         self.output_dir = os.path.join(self.output_dir, self.timestamp)
 
@@ -252,15 +327,9 @@ class EnvironmentManager:
                 "unresolved": os.path.join(
                     self.output_dir, f"unresolved_results_{self.timestamp}.txt"
                 ),
-                "gcp": os.path.join(
-                    self.output_dir, f"gcp_results_{self.timestamp}.txt"
-                ),
-                "aws": os.path.join(
-                    self.output_dir, f"aws_results_{self.timestamp}.txt"
-                ),
-                "azure": os.path.join(
-                    self.output_dir, f"azure_results_{self.timestamp}.txt"
-                ),
+                "gcp": os.path.join(self.output_dir, f"gcp_results_{self.timestamp}.txt"),
+                "aws": os.path.join(self.output_dir, f"aws_results_{self.timestamp}.txt"),
+                "azure": os.path.join(self.output_dir, f"azure_results_{self.timestamp}.txt"),
                 "dangling": os.path.join(
                     self.output_dir,
                     f"dangling_cname_results_{self.timestamp}.txt",
@@ -271,9 +340,7 @@ class EnvironmentManager:
                 "environment": os.path.join(
                     self.output_dir, f"environment_results_{self.timestamp}.json"
                 ),
-                "timeout": os.path.join(
-                    self.output_dir, f"timeout_results_{self.timestamp}.txt"
-                ),
+                "timeout": os.path.join(self.output_dir, f"timeout_results_{self.timestamp}.txt"),
             },
             "service_checks": {
                 "ssl_tls_failure_file": os.path.join(
@@ -305,6 +372,9 @@ class EnvironmentManager:
         self.create_empty_files_or_directories()
 
     def save_environment_info(self):
+        """
+        Stores environment details such as command invoked, external IP and running condition.
+        """
         self.get_environment_info()
         with open(
             self.output_files["standard"]["environment"], "w", encoding="utf-8"
@@ -312,6 +382,9 @@ class EnvironmentManager:
             json_file.write(json.dumps(self.environment_info, indent=4))
 
     def get_environment_info(self):
+        """
+        Retrieves environment details such as command executed, external IP, and docker status.
+        """
         command_executed = " ".join(sys.argv)
         running_in_docker = os.path.exists("/.dockerenv")
 
@@ -319,9 +392,7 @@ class EnvironmentManager:
             response = requests.get("https://ifconfig.io/ip", timeout=10)
             external_ip = response.text.strip()
         except RequestException as error:
-            external_ip = (
-                f"An error occurred while trying to retrieve the external ip: {error}"
-            )
+            external_ip = f"An error occurred while trying to retrieve the external ip: {error}"
 
         environment_info = {
             "command_executed": command_executed,
@@ -332,10 +403,13 @@ class EnvironmentManager:
         self.environment_info = environment_info
 
     def create_empty_file_or_directory(self, filename):
+        """
+        Creates an empty file or directory given a filename or directory path.
+        """
         if not isinstance(filename, str):
             raise ValueError("filename must be a string")
 
-        name, extension = os.path.splitext(filename)
+        _, extension = os.path.splitext(filename)
 
         try:
             if not extension:
@@ -344,18 +418,19 @@ class EnvironmentManager:
                 with open(filename, "w", encoding="utf-8"):
                     pass
         except (IOError, OSError) as e:
-            self.logger.error(
-                f"Unable to create file or directory {filename}. Error: {e}"
-            )
+            self.logger.error("Unable to create file or directory %s. Error: %s", filename, e)
 
     def create_empty_files_or_directories(
         self,
     ):
-        for key, value in self.output_files.get("standard", {}).items():
+        """
+        Generates all required output files and directories based on the given settings.
+        """
+        for _, value in self.output_files.get("standard", {}).items():
             self.create_empty_file_or_directory(value)
 
         if self.service_checks:
-            for key, value in self.output_files.get("service_checks", {}).items():
+            for _, value in self.output_files.get("service_checks", {}).items():
                 self.create_empty_file_or_directory(value)
 
         if "evidence" in self.output_files:
@@ -363,10 +438,16 @@ class EnvironmentManager:
                 self.create_empty_file_or_directory(value)
 
     def set_domains(self):
+        """
+        Reads and sets the domains from the file specified in runtime arguments.
+        """
         with open(self.domains_file, "r", encoding="utf-8") as f:
             self.domains = f.read().splitlines()
 
     def log_info(self, message, *args):
+        """
+        Logs an informational message. If logger is not set, simply prints the info.
+        """
         if self.logger:
             self.logger.info(message, *args)
         else:
