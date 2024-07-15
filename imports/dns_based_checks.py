@@ -28,12 +28,45 @@ import dns.resolver
 
 
 def load_domain_categorisation_patterns(config_file="config.json"):
+    """
+    Load domain categorization patterns from the given config file.
+
+    :param config_file: The path to the config file. Defaults to "config.json".
+    :type config_file: str
+    :return: A dictionary of domain categorization patterns.
+    :rtype: dict
+    """
     with open(config_file, "r", encoding="utf-8") as f:
         config = json.load(f)
     return config.get("domain_categorization", {})
 
 
 def categorise_domain(domain, patterns):
+    """
+    Categorizes a domain based on a set of patterns.
+
+    :param domain: The domain to categorize.
+    :type domain: str
+    :param patterns: A dictionary containing patterns to match against the domain.
+                     Should have the following structure:
+                     {
+                         category1: {
+                             "regex": pattern1,
+                             "recommendation": recommendation1,
+                             "evidence": evidence1
+                         },
+                         category2: {
+                             "regex": pattern2,
+                             "recommendation": recommendation2,
+                             "evidence": evidence2
+                         },
+                         ...
+                     }
+    :type patterns: dict
+    :return: A tuple containing the category, recommendation, and evidence for the domain. If no matching
+             pattern is found, it returns the default values "unknown", "Unclassified", and "N/A".
+    :rtype: tuple
+    """
     for category, pattern in patterns.items():
         if re.search(pattern["regex"], domain):
             return category, pattern["recommendation"], pattern["evidence"]
@@ -41,6 +74,21 @@ def categorise_domain(domain, patterns):
 
 
 def is_dangling_record(resolver, domain, record_type):
+    """
+    This method `is_dangling_record` is used to determine if a specified record for a given domain is a dangling
+    record or not.
+
+    :param resolver: A DNS resolver object used to query DNS information.
+    :param domain: The domain for which the record is being checked.
+    :param record_type: The type of the record being checked.
+
+    :return: True if the record is a dangling record, False otherwise.
+
+    The method attempts to resolve the specified record for the given domain using the provided DNS resolver.
+    If no valid answer is obtained, indicating that the record does not exist or cannot be resolved,
+    it is considered as a dangling record and True is returned. If a valid answer is obtained, it means
+    the record exists and is not a dangling record, so False is returned.
+    """
     try:
         resolver.resolve(domain, record_type)
         return False
@@ -49,6 +97,15 @@ def is_dangling_record(resolver, domain, record_type):
 
 
 def perform_dig(domain, nameserver, reason, evidence_dir):
+    """
+    Perform a DNS lookup using the dig command and save the output to a file.
+
+    :param domain: The domain name to perform the DNS lookup for.
+    :param nameserver: The nameserver to use for the DNS lookup.
+    :param reason: The reason for performing the DNS lookup.
+    :param evidence_dir: The directory where the output file will be saved.
+    :return: None
+    """
     result = subprocess.run(
         ["dig", f"@{nameserver}", domain],
         capture_output=True,
@@ -62,6 +119,12 @@ def perform_dig(domain, nameserver, reason, evidence_dir):
 
 
 def resolve_domain(domain_context, env_manager):
+    """
+    :param domain_context: an instance of DomainContext class containing information about the domain
+    :param env_manager: an instance of EnvManager class containing environment settings
+    :return: a tuple with two elements - a boolean indicating if domain resolution was successful or not, and a
+    list of final IP addresses
+    """
     resolved_records = []
     current_domain = domain_context.get_domain()
 
@@ -116,6 +179,17 @@ def resolve_domain(domain_context, env_manager):
 
 
 def dns_query_with_retry(domain_context, env_manager, current_domain, record_type):
+    """
+    :param domain_context: The DomainContext object that contains the resolver and domain information.
+    :param env_manager: The EnvManager object that contains the retry, verbose, logger, output files, and evidence
+    settings.
+    :param current_domain: The domain to query for DNS records.
+    :param record_type: The type of DNS records to query for.
+
+    :return: A list of strings containing the resolved DNS records for the given domain and record type, or
+    None if resolution fails after all retries.
+
+    """
     resolver = domain_context.get_resolver()
     retries = env_manager.get_retries()
     verbose = env_manager.get_verbose()
@@ -159,6 +233,13 @@ def dns_query_with_retry(domain_context, env_manager, current_domain, record_typ
 
 
 def check_dangling_cname(domain_context, env_manager, current_domain):
+    """
+    :param domain_context: Object that contains information about the domain and its context.
+    :param env_manager: Object that manages the environment settings.
+    :param current_domain: The current domain being checked for dangling CNAME.
+
+    :return: True if the current domain has dangling CNAME records, False otherwise.
+    """
     resolver = dns.resolver.Resolver()
     nameservers = domain_context.get_nameservers()
     original_domain = domain_context.get_domain()

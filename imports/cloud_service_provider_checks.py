@@ -16,9 +16,11 @@ logger = logging.getLogger("DNSResolver")
 
 def perform_csp_checks(domain_context, env_manager, final_ips):
     """
-    :param domain_context: The DomainProcessingContext object containing domain details.
-    :param env_manager: The EnvironmentManager object.
-    :param final_ips: List of resolved IP addresses for the domain.
+    Perform CSP (Content Security Policy) checks for a given domain.
+
+    :param domain_context: The domain context object.
+    :param env_manager: The environment manager object.
+    :param final_ips: The list of final IP addresses.
     :return: None
     """
     domain = domain_context.get_domain()
