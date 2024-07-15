@@ -19,15 +19,12 @@ The resolve_domain function completes the DNS resolution for a domain using seve
 The create_resolver function creates a DNS resolver object configured with a specified timeout and nameservers.
 """
 
+import json
 import os
 import re
-import json
 import subprocess
 
 import dns.resolver
-from imports.environment import setup_logger
-
-logger = setup_logger()
 
 
 def load_domain_categorisation_patterns(config_file="config.json"):
@@ -57,22 +54,118 @@ def perform_dig(domain, nameserver, reason, evidence_dir):
         capture_output=True,
         text=True,
     )
-    filename = os.path.join(evidence_dir, f"{domain}_{reason}.txt")
+    filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
     with open(filename, "w", encoding="utf-8") as f:
         f.write(result.stdout)
         f.write("\n")
         f.write(result.stderr)
 
 
-def check_dangling_cname(
-    current_domain,
-    nameservers,
-    original_domain,
-    output_files,
-    patterns,
-    evidence_enabled,
-):
+def resolve_domain(domain_context, env_manager):
+    resolved_records = []
+    current_domain = domain_context.get_domain()
+
+    verbose = env_manager.get_verbose()
+    logger = env_manager.get_logger()
+    output_files = env_manager.get_output_files()
+
+    while True:
+        cname_chain_resolved = False
+        for record_type in ["CNAME"]:
+            answer = dns_query_with_retry(
+                domain_context, env_manager, current_domain, record_type
+            )
+            if answer:
+                resolved_records.append((record_type, answer))
+                current_domain = str(answer[0])
+                cname_chain_resolved = True
+                if check_dangling_cname(domain_context, env_manager, current_domain):
+                    domain_context.add_dangling_domain_to_domains(current_domain)
+                break
+        if not cname_chain_resolved:
+            break
+
+    final_ips = []
+    for record_type in ["A", "AAAA"]:
+        answer = dns_query_with_retry(
+            domain_context, env_manager, current_domain, record_type
+        )
+        if answer:
+            final_ips.extend(answer)
+            resolved_records.append((record_type, answer))
+
+    if resolved_records:
+        if verbose:
+            logger.info(
+                f"Writing resolved records for domain: {domain_context.get_domain()} to "
+                f"{output_files['standard']['resolved']}"
+            )
+        with open(
+            output_files["standard"]["resolved"],
+            "a",
+            encoding="utf-8",
+        ) as f:
+            f.write(f"{domain_context.get_domain()}:\n")
+            for record_type, records in resolved_records:
+                f.write(f"  {record_type}:\n")
+                for record in records:
+                    f.write(f"    {record}\n")
+            f.write("--------\n")
+        return True, final_ips
+    return False, []
+
+
+def dns_query_with_retry(domain_context, env_manager, current_domain, record_type):
+    resolver = domain_context.get_resolver()
+    retries = env_manager.get_retries()
+    verbose = env_manager.get_verbose()
+    logger = env_manager.get_logger()
+    dangling_domains = domain_context.get_dangling_domains()
+    failed_domains = domain_context.get_failed_domains()
+    output_files = env_manager.get_output_files()
+    evidence_enabled = env_manager.get_evidence()
+
+    for retry in range(retries):
+        try:
+            answer = resolver.resolve(current_domain, record_type)
+            return [str(rdata) for rdata in answer]
+        except (
+            dns.resolver.Timeout,
+            dns.resolver.NoAnswer,
+            dns.resolver.NXDOMAIN,
+            dns.resolver.NoNameservers,
+        ) as e:
+            if verbose and retry < retries - 1:
+                logger.info(
+                    f"Failed to resolve DNS for {current_domain} - retry {retry + 1} of {retries}: {e}"
+                )
+            elif retry == retries - 1:
+                if current_domain not in dangling_domains:
+                    failed_domains.add(current_domain)  # Track domain for retry
+                    if verbose:
+                        logger.info(
+                            f"DNS resolution for {current_domain} timed out - Final Timeout: {e}"
+                        )
+                if evidence_enabled:
+                    for nameserver in resolver.nameservers:
+                        perform_dig(
+                            current_domain,
+                            nameserver,
+                            "timeout",
+                            output_files["evidence"]["dig"],
+                        )
+            continue
+    return None
+
+
+def check_dangling_cname(domain_context, env_manager, current_domain):
     resolver = dns.resolver.Resolver()
+    nameservers = domain_context.get_nameservers()
+    original_domain = domain_context.get_domain()
+    output_files = env_manager.get_output_files()
+    patterns = domain_context.get_patterns()
+    evidence_enabled = env_manager.get_evidence()
+
     if nameservers:
         resolver.nameservers = nameservers
 
@@ -96,141 +189,9 @@ def check_dangling_cname(
         )
 
     if evidence_enabled:
-        perform_dig(
-            current_domain,
-            resolver.nameservers[0],
-            "dangling",
-            output_files["evidence"]["dig"],
-        )
+        for nameserver in resolver.nameservers:
+            perform_dig(
+                current_domain, nameserver, "dangling", output_files["evidence"]["dig"]
+            )
 
     return True
-
-
-def dns_query_with_retry(
-    resolver,
-    domain,
-    record_type,
-    retries,
-    verbose,
-    dangling_domains,
-    failed_domains,
-    output_files,
-    evidence_enabled,
-):
-    for retry in range(retries):
-        try:
-            answer = resolver.resolve(domain, record_type)
-            return [str(rdata) for rdata in answer]
-        except (
-            dns.resolver.Timeout,
-            dns.resolver.NoAnswer,
-            dns.resolver.NXDOMAIN,
-            dns.resolver.NoNameservers,
-        ) as e:
-            if verbose and retry < retries - 1:
-                logger.info(
-                    f"Failed to resolve DNS for {domain} - retry {retry + 1} of {retries}: {e}"
-                )
-            elif retry == retries - 1:
-                if domain not in dangling_domains:
-                    failed_domains.add(domain)  # Track domain for retry
-                    if verbose:
-                        logger.info(
-                            f"DNS resolution for {domain} timed out - Final Timeout: {e}"
-                        )
-                if evidence_enabled:
-                    perform_dig(
-                        domain,
-                        resolver.nameservers[0],
-                        "timeout",
-                        output_files["evidence"]["dig"],
-                    )
-            continue
-    return None
-
-
-def resolve_domain(
-    resolver,
-    domain,
-    nameservers,
-    output_files,
-    verbose,
-    retries,
-    patterns,
-    dangling_domains,
-    failed_domains,
-    evidence_enabled,
-):
-    resolved_records = []
-    current_domain = domain
-    while True:
-        cname_chain_resolved = False
-        for record_type in ["CNAME"]:
-            answer = dns_query_with_retry(
-                resolver,
-                current_domain,
-                record_type,
-                retries,
-                verbose,
-                dangling_domains,
-                failed_domains,
-                output_files,
-                evidence_enabled,
-            )
-            if answer:
-                resolved_records.append((record_type, answer))
-                current_domain = str(answer[0])
-                cname_chain_resolved = True
-                if check_dangling_cname(
-                    current_domain,
-                    nameservers,
-                    domain,
-                    output_files,
-                    patterns,
-                    evidence_enabled,
-                ):
-                    dangling_domains.add(current_domain)
-                break
-        if not cname_chain_resolved:
-            break
-
-    final_ips = []
-    for record_type in ["A", "AAAA"]:
-        answer = dns_query_with_retry(
-            resolver,
-            current_domain,
-            record_type,
-            retries,
-            verbose,
-            dangling_domains,
-            failed_domains,
-            output_files,
-            evidence_enabled,
-        )
-        if answer:
-            final_ips.extend(answer)
-            resolved_records.append((record_type, answer))
-
-    if resolved_records:
-        if verbose:
-            logger.info(
-                f"Writing resolved records for domain: {domain} to {output_files['standard']['resolved']}"
-            )
-        with open(output_files["standard"]["resolved"], "a", encoding="utf-8") as f:
-            f.write(f"{domain}:\n")
-            for record_type, records in resolved_records:
-                f.write(f"  {record_type}:\n")
-                for record in records:
-                    f.write(f"    {record}\n")
-            f.write("--------\n")
-        return True, final_ips
-    return False, []
-
-
-def create_resolver(timeout, nameservers):
-    resolver = dns.resolver.Resolver()
-    resolver.lifetime = timeout
-    resolver.timeout = timeout
-    if nameservers:
-        resolver.nameservers = nameservers
-    return resolver
