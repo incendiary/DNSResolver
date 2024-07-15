@@ -36,10 +36,16 @@ import os
 import re
 import socket
 import ssl
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    CancelledError,
+    ThreadPoolExecutor,
+    TimeoutError as CfTimeoutError,
+    as_completed,
+)
 
 import requests
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 
 logger = logging.getLogger("DNSResolver")
 
@@ -57,7 +63,7 @@ def is_port_reachable(hostname, port, timeout=5):
         with socket.create_connection((hostname, port), timeout=timeout):
             return True
     except (socket.timeout, socket.error) as e:
-        logger.warning(f"Port {port} on {hostname} is not reachable: {e}")
+        logger.warning("Port %s on %s is not reachable: %s", port, hostname, e)
         return False
 
 
@@ -94,18 +100,16 @@ def take_screenshot(hostname, screenshot_dir, verbose=False):
                     driver.save_screenshot(screenshot_path)
 
                     if verbose:
-                        logger.info(f"Screenshot saved to {screenshot_path}")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to take screenshot of {hostname} at {url}: {e}"
-                    )
+                        logger.info("Screenshot saved to %s", screenshot_path)
+                except WebDriverException as e:
+                    logger.error("Failed to take screenshot of %s at %s: %s", hostname, url, e)
             else:
                 if verbose:
-                    logger.warning(f"Port {port} on {hostname} is not reachable.")
+                    logger.warning("Port %s on %s is not reachable.", port, hostname)
 
         driver.quit()
-    except Exception as e:
-        logger.error(f"Failed to take screenshot of {hostname}: {e}")
+    except WebDriverException as e:
+        logger.error("Failed to take screenshot of %s: %s", hostname, e)
 
 
 def check_port_ssl_certificate(hostname, port, verbose):
@@ -119,7 +123,7 @@ def check_port_ssl_certificate(hostname, port, verbose):
     """
     if not is_port_reachable(hostname, port):
         if verbose:
-            logger.warning(f"Port {port} on {hostname} is not reachable.")
+            logger.warning("Port %s on %s is not reachable.", port, hostname)
         return False
 
     try:
@@ -130,7 +134,7 @@ def check_port_ssl_certificate(hostname, port, verbose):
                 cert = ssock.getpeercert()
 
         if verbose:
-            logger.info(f"Certificate for {hostname} on port {port}: {cert}")
+            logger.info("Certificate for %s on port %s: %s", hostname, port, cert)
 
         # Extract SANs
         san = cert.get("subjectAltName", ())
@@ -146,7 +150,10 @@ def check_port_ssl_certificate(hostname, port, verbose):
 
         if verbose:
             logger.info(
-                f"DNS Names in certificate for {hostname} on port {port}: {dns_names}"
+                "DNS Names in certificate for %s on port %s: %s",
+                hostname,
+                port,
+                dns_names,
             )
 
         # Check if hostname matches any of the DNS names in the certificate
@@ -154,23 +161,31 @@ def check_port_ssl_certificate(hostname, port, verbose):
             if re.fullmatch(name.replace("*", "[^.]*"), hostname, re.IGNORECASE):
                 if verbose:
                     logger.info(
-                        f"Hostname {hostname} matches DNS name {name} in "
-                        f"certificate on port {port}."
+                        "Hostname %s matches DNS name %s in certificate on port %s.",
+                        hostname,
+                        name,
+                        port,
                     )
                 return True
 
         if verbose:
             logger.warning(
-                f"Hostname {hostname} does not match any DNS names in the "
-                f"certificate on port {port}."
+                "Hostname %s does not match any DNS names in the certificate on port %s.",
+                hostname,
+                port,
             )
         return False
 
-    except Exception as e:
+    except (socket.error, ssl.SSLError) as e:
+
         if verbose:
             logger.error(
-                f"Failed to verify SSL certificate for {hostname} on port {port}: {e}"
+                "Failed to verify SSL certificate for %s on port %s: %s",
+                hostname,
+                port,
+                e,
             )
+
         return False
 
 
@@ -186,19 +201,20 @@ def check_service_ports(hostname, ports, check_function, verbose):
     results = {}
     with ThreadPoolExecutor() as executor:
         futures = {
-            executor.submit(check_function, hostname, port, verbose): port
-            for port in ports
+            executor.submit(check_function, hostname, port, verbose): port for port in ports
         }
 
         for future in as_completed(futures):
             port = futures[future]
             try:
-                result = future.result()
-                results[port] = result
-            except Exception as e:
+                results[port] = future.result()
+            except (CfTimeoutError, CancelledError) as e:
                 if verbose:
                     logger.error(
-                        f"Failed to check service for {hostname} on port {port}: {e}"
+                        "Failed to check service for %s on port %s: %s",
+                        hostname,
+                        port,
+                        e,
                     )
                 results[port] = False
 
@@ -243,9 +259,7 @@ def check_ssl_tls_certificate(hostname, verbose):
         return False
 
     ssl_tls_ports = config["ssl_tls_ports"]
-    return check_service_ports(
-        hostname, ssl_tls_ports, check_port_ssl_certificate, verbose
-    )
+    return check_service_ports(hostname, ssl_tls_ports, check_port_ssl_certificate, verbose)
 
 
 def check_http_port(hostname, port, verbose=False):
@@ -265,26 +279,31 @@ def check_http_port(hostname, port, verbose=False):
             if hostname in response.text:
                 if verbose:
                     logger.info(
-                        f"HTTP service on {hostname}:{port} is available and matches the hostname."
+                        "HTTP service on %s:%s is available and matches the hostname.",
+                        hostname,
+                        port,
                     )
                 return True
-            else:
-                if verbose:
-                    logger.warning(
-                        f"HTTP service on {hostname}:{port} is available but does not match the hostname."
-                    )
-                return False
-        else:
+
             if verbose:
                 logger.warning(
-                    f"HTTP service on {hostname}:{port} returned status code {response.status_code}."
+                    "HTTP service on %s:%s is available but does not match the hostname.",
+                    hostname,
+                    port,
                 )
             return False
+
+        if verbose:
+            logger.warning(
+                "HTTP service on %s:%s returned status code %s.",
+                hostname,
+                port,
+                response.status_code,
+            )
+        return False
     except requests.RequestException as e:
         if verbose:
-            logger.error(
-                f"Failed to check HTTP service for {hostname} on port {port}: {e}"
-            )
+            logger.error("Failed to check HTTP service for %s on port %s: %s", hostname, port, e)
         return False
 
 
@@ -302,9 +321,7 @@ def perform_service_connectivity_checks(domain_context, env_manager):
     http_results = check_http_service(domain, verbose)
 
     if any(certificate_results.values()) or any(http_results.values()):
-        take_screenshot(
-            domain, output_files["service_checks"]["screenshot_dir"], verbose
-        )
+        take_screenshot(domain, output_files["service_checks"]["screenshot_dir"], verbose)
     else:
         with open(
             output_files["service_checks"]["screenshot_failures"], "a", encoding="utf-8"
