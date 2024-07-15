@@ -31,12 +31,12 @@ modules and execute the appropriate function with the required parameters.
 """
 
 import json
+import logging
 import os
 import re
 import socket
 import ssl
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
 
 import requests
 from selenium import webdriver
@@ -288,40 +288,26 @@ def check_http_port(hostname, port, verbose=False):
         return False
 
 
-def perform_service_connectivity_checks(hostname, output_files, verbose):
+def perform_service_connectivity_checks(domain_context, env_manager):
     """
-    :param hostname: A string representing the hostname to perform connectivity checks on.
-    :param output_files: A dictionary containing the output file paths.
-        - "screenshot_dir": A string representing the directory path to save the screenshot.
-        - "failures": A string representing the file path to save the failures.
-    :param verbose: A boolean indicating whether to print detailed information during the checks.
-
+    :param domain_context: The DomainProcessingContext object containing domain details.
+    :param env_manager: The EnvironmentManager object.
     :return: None
-
-    Performs service connectivity checks on the specified hostname. The method checks the SSL/TLS certificate
-    and HTTP service for the hostname. If any failures are found in the certificate or HTTP service,
-    a screenshot is taken and saved in the specified screenshot directory. If no failures are found,
-    the hostname is appended to the failures file.
-
-    Note: This method depends on the following helper methods:
-    - check_ssl_tls_certificate(hostname, verbose): Checks the SSL/TLS certificate for the hostname and returns a
-    dictionary of results.
-    - check_http_service(hostname, verbose): Checks the HTTP service for the hostname and returns a dictionary of
-     results.
-    - take_screenshot(hostname, screenshot_dir, verbose): Takes a screenshot of the hostname and saves it in the
-    specified directory.
-
     """
-    certificate_results = check_ssl_tls_certificate(hostname, verbose)
-    http_results = check_http_service(hostname, verbose)
+    domain = domain_context.get_domain()
+    output_files = env_manager.get_output_files()
+    verbose = env_manager.get_verbose()
+
+    certificate_results = check_ssl_tls_certificate(domain, verbose)
+    http_results = check_http_service(domain, verbose)
 
     if any(certificate_results.values()) or any(http_results.values()):
         take_screenshot(
-            hostname, output_files["service_checks"]["screenshot_dir"], verbose
+            domain, output_files["service_checks"]["screenshot_dir"], verbose
         )
     else:
         with open(
             output_files["service_checks"]["screenshot_failures"], "a", encoding="utf-8"
         ) as file:
-            file.write(f"{hostname}\n")
+            file.write(f"{domain}\n")
             file.write("--------\n")
