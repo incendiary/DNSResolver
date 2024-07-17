@@ -49,7 +49,9 @@ def setup_logger():
     logger = logging.getLogger("DNSResolver")
     logger.setLevel(logging.DEBUG)
     file_handler = logging.FileHandler("dns_resolver.log")
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     return logger
@@ -225,9 +227,13 @@ class EnvironmentManager:
                     f"Provided max threads is not an integer: {self.args.max_threads}"
                 )
             if self.args.timeout and not isinstance(self.args.timeout, int):
-                raise NotAnIntegerError(f"Provided timeout is not an integer: {self.args.timeout}")
+                raise NotAnIntegerError(
+                    f"Provided timeout is not an integer: {self.args.timeout}"
+                )
             if self.args.retries and not isinstance(self.args.retries, int):
-                raise NotAnIntegerError(f"Provided retries is not an integer: {self.args.retries}")
+                raise NotAnIntegerError(
+                    f"Provided retries is not an integer: {self.args.retries}"
+                )
             if self.args.nameservers and not all(
                 isinstance(i, str) for i in self.args.nameservers.split(",")
             ):
@@ -327,9 +333,15 @@ class EnvironmentManager:
                 "unresolved": os.path.join(
                     self.output_dir, f"unresolved_results_{self.timestamp}.txt"
                 ),
-                "gcp": os.path.join(self.output_dir, f"gcp_results_{self.timestamp}.txt"),
-                "aws": os.path.join(self.output_dir, f"aws_results_{self.timestamp}.txt"),
-                "azure": os.path.join(self.output_dir, f"azure_results_{self.timestamp}.txt"),
+                "gcp": os.path.join(
+                    self.output_dir, f"gcp_results_{self.timestamp}.txt"
+                ),
+                "aws": os.path.join(
+                    self.output_dir, f"aws_results_{self.timestamp}.txt"
+                ),
+                "azure": os.path.join(
+                    self.output_dir, f"azure_results_{self.timestamp}.txt"
+                ),
                 "dangling": os.path.join(
                     self.output_dir,
                     f"dangling_cname_results_{self.timestamp}.txt",
@@ -340,7 +352,9 @@ class EnvironmentManager:
                 "environment": os.path.join(
                     self.output_dir, f"environment_results_{self.timestamp}.json"
                 ),
-                "timeout": os.path.join(self.output_dir, f"timeout_results_{self.timestamp}.txt"),
+                "timeout": os.path.join(
+                    self.output_dir, f"timeout_results_{self.timestamp}.txt"
+                ),
             },
             "service_checks": {
                 "ssl_tls_failure_file": os.path.join(
@@ -365,7 +379,7 @@ class EnvironmentManager:
 
         if self.evidence:
             output_files["evidence"] = {
-                "dig": os.path.join(self.output_dir, "evidence", "dig"),
+                "dig": os.path.join(self.output_dir, "evidence", "dns"),
             }
 
         self.output_files = output_files
@@ -392,7 +406,9 @@ class EnvironmentManager:
             response = requests.get("https://ifconfig.io/ip", timeout=10)
             external_ip = response.text.strip()
         except RequestException as error:
-            external_ip = f"An error occurred while trying to retrieve the external ip: {error}"
+            external_ip = (
+                f"An error occurred while trying to retrieve the external ip: {error}"
+            )
 
         environment_info = {
             "command_executed": command_executed,
@@ -418,7 +434,9 @@ class EnvironmentManager:
                 with open(filename, "w", encoding="utf-8"):
                     pass
         except (IOError, OSError) as e:
-            self.logger.error("Unable to create file or directory %s. Error: %s", filename, e)
+            self.logger.error(
+                "Unable to create file or directory %s. Error: %s", filename, e
+            )
 
     def create_empty_files_or_directories(
         self,
