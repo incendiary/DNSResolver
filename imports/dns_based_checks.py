@@ -59,7 +59,12 @@ def is_dangling_record(resolver, domain, record_type):
     try:
         resolver.resolve(domain, record_type)
         return False
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+    except (
+        dns.resolver.NoAnswer,
+        dns.resolver.NXDOMAIN,
+        dns.resolver.NoNameservers,
+        dns.resolver.LifetimeTimeout,
+    ):
         return True
 
 
@@ -81,7 +86,9 @@ def perform_dig(domain, nameserver, reason, evidence_dir):
             check=False,
         )
     except subprocess.CalledProcessError as e:
-        print(f"Command failed with error: {e.returncode}, output: {e.output}, stderr: {e.stderr}")
+        print(
+            f"Command failed with error: {e.returncode}, output: {e.output}, stderr: {e.stderr}"
+        )
         raise e from None
     filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
     with open(filename, "w", encoding="utf-8") as f:
@@ -104,7 +111,9 @@ def resolve_domain(domain_context, env_manager):
     while True:
         cname_chain_resolved = False
         for record_type in ["CNAME"]:
-            answer = dns_query_with_retry(domain_context, env_manager, current_domain, record_type)
+            answer = dns_query_with_retry(
+                domain_context, env_manager, current_domain, record_type
+            )
             if answer:
                 resolved_records.append((record_type, answer))
                 current_domain = str(answer[0])
@@ -117,7 +126,9 @@ def resolve_domain(domain_context, env_manager):
 
     final_ips = []
     for record_type in ["A", "AAAA"]:
-        answer = dns_query_with_retry(domain_context, env_manager, current_domain, record_type)
+        answer = dns_query_with_retry(
+            domain_context, env_manager, current_domain, record_type
+        )
         if answer:
             final_ips.extend(answer)
             resolved_records.append((record_type, answer))
@@ -210,11 +221,15 @@ def check_dangling_cname(domain_context, env_manager, current_domain):
             return False
 
     if not is_dangling_record(resolver, current_domain, "NS"):
-        with open(output_files["standard"]["ns_takeover"], "a", encoding="utf-8") as file:
+        with open(
+            output_files["standard"]["ns_takeover"], "a", encoding="utf-8"
+        ) as file:
             file.write(f"{original_domain}|{current_domain}\n")
         return False
 
-    category, recommendation, evidence_link = categorise_domain(current_domain, patterns)
+    category, recommendation, evidence_link = categorise_domain(
+        current_domain, patterns
+    )
     with open(output_files["standard"]["dangling"], "a", encoding="utf-8") as file:
         file.write(
             f"{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}\n"
@@ -222,6 +237,8 @@ def check_dangling_cname(domain_context, env_manager, current_domain):
 
     if evidence_enabled:
         for nameserver in resolver.nameservers:
-            perform_dig(current_domain, nameserver, "dangling", output_files["evidence"]["dig"])
+            perform_dig(
+                current_domain, nameserver, "dangling", output_files["evidence"]["dig"]
+            )
 
     return True
