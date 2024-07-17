@@ -126,13 +126,29 @@ def check_tools_availability():
     Check the availability of nslookup and dig tools in the system path.
     :return: Tuple indicating the availability of nslookup and dig (nslookup_available, dig_available)
     """
-    nslookup_available = (
-        subprocess.run(["which", "nslookup"], capture_output=True, text=True).returncode
-        == 0
-    )
-    dig_available = (
-        subprocess.run(["which", "dig"], capture_output=True, text=True).returncode == 0
-    )
+    if platform.system() == "Windows":
+        nslookup_available = (
+            subprocess.run(
+                ["where", "nslookup"], capture_output=True, text=True
+            ).returncode
+            == 0
+        )
+        dig_available = (
+            subprocess.run(["where", "dig"], capture_output=True, text=True).returncode
+            == 0
+        )
+    else:
+        nslookup_available = (
+            subprocess.run(
+                ["which", "nslookup"], capture_output=True, text=True
+            ).returncode
+            == 0
+        )
+        dig_available = (
+            subprocess.run(["which", "dig"], capture_output=True, text=True).returncode
+            == 0
+        )
+
     return nslookup_available, dig_available
 
 
