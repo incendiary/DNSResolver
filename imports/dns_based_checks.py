@@ -1,13 +1,8 @@
-"""
-A module with utility functions for dealing with DNS domain categorization,
-checking and identifying dangling DNS records, and carrying out DNS resolutions.
-"""
-
 import json
 import os
 import re
 import subprocess
-
+import platform
 import dns.resolver
 
 
@@ -68,6 +63,35 @@ def is_dangling_record(resolver, domain, record_type):
         return True
 
 
+def perform_nslookup(domain, nameserver, reason, evidence_dir):
+    """
+    Perform a DNS lookup using the nslookup command and save the output to a file.
+
+    :param domain: The domain name to perform the DNS lookup for.
+    :param nameserver: The nameserver to use for the DNS lookup.
+    :param reason: The reason for performing the DNS lookup.
+    :param evidence_dir: The directory where the output file will be saved.
+    :return: None
+    """
+    try:
+        result = subprocess.run(
+            ["nslookup", domain, nameserver],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except subprocess.CalledProcessError as e:
+        print(
+            f"Command failed with error: {e.returncode}, output: {e.output}, stderr: {e.stderr}"
+        )
+        raise e from None
+    filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(result.stdout)
+        f.write("\n")
+        f.write(result.stderr)
+
+
 def perform_dig(domain, nameserver, reason, evidence_dir):
     """
     Perform a DNS lookup using the dig command and save the output to a file.
@@ -97,6 +121,60 @@ def perform_dig(domain, nameserver, reason, evidence_dir):
         f.write(result.stderr)
 
 
+def check_tools_availability():
+    """
+    Check the availability of nslookup and dig tools in the system path.
+    :return: Tuple indicating the availability of nslookup and dig (nslookup_available, dig_available)
+    """
+    nslookup_available = (
+        subprocess.run(["which", "nslookup"], capture_output=True, text=True).returncode
+        == 0
+    )
+    dig_available = (
+        subprocess.run(["which", "dig"], capture_output=True, text=True).returncode == 0
+    )
+    return nslookup_available, dig_available
+
+
+def perform_dns_lookup(domain, nameserver, reason, evidence_dir):
+    """
+    Perform a DNS lookup using either nslookup or dig, depending on the system.
+
+    :param domain: The domain name to perform the DNS lookup for.
+    :param nameserver: The nameserver to use for the DNS lookup.
+    :param reason: The reason for performing the DNS lookup.
+    :param evidence_dir: The directory where the output file will be saved.
+    :return: None
+    """
+    nslookup_available, dig_available = check_tools_availability()
+
+    if platform.system() == "Windows":
+        if nslookup_available:
+            perform_nslookup(domain, nameserver, reason, evidence_dir)
+        else:
+            log_error(f"nslookup not available on Windows system for domain {domain}")
+    else:
+        if dig_available:
+            perform_dig(domain, nameserver, reason, evidence_dir)
+        elif nslookup_available:
+            perform_nslookup(domain, nameserver, reason, evidence_dir)
+        else:
+            log_error(
+                f"Neither dig nor nslookup available on non-Windows system for domain {domain}"
+            )
+
+
+def log_error(message):
+    """
+    Log an error message to the log file.
+    :param message: The error message to log.
+    :return: None
+    """
+    with open("error.log", "a", encoding="utf-8") as f:
+        f.write(f"{message}\n")
+
+
+# Example usage of perform_dns_lookup function
 def resolve_domain(domain_context, env_manager):
     """
     Resolves domain and returns a success status and the final IP addresses.
@@ -191,13 +269,12 @@ def dns_query_with_retry(domain_context, env_manager, current_domain, record_typ
                             f"DNS resolution for {current_domain} timed out - Final Timeout: {e}"
                         )
                 if evidence_enabled:
-                    for nameserver in resolver.nameservers:
-                        perform_dig(
-                            current_domain,
-                            nameserver,
-                            "timeout",
-                            output_files["evidence"]["dig"],
-                        )
+                    perform_dns_lookup(
+                        current_domain,
+                        resolver.nameservers[0],
+                        "timeout",
+                        output_files["evidence"]["dns"],
+                    )
             continue
     return None
 
@@ -236,9 +313,11 @@ def check_dangling_cname(domain_context, env_manager, current_domain):
         )
 
     if evidence_enabled:
-        for nameserver in resolver.nameservers:
-            perform_dig(
-                current_domain, nameserver, "dangling", output_files["evidence"]["dig"]
-            )
+        perform_dns_lookup(
+            current_domain,
+            resolver.nameservers[0],
+            "dangling",
+            output_files["evidence"]["dns"],
+        )
 
     return True
