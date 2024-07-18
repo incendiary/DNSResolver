@@ -1,7 +1,3 @@
-Sure, here's a markdown-formatted `README.md` for your DNSResolver project. This file includes an overview, installation
-instructions, usage, and a link to a demonstration video.
-
-```markdown
 # DNSResolver
 
 DNSResolver is a Python-based tool designed to perform DNS resolution and check resolved IP addresses against known IP
