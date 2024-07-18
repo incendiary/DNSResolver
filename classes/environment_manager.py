@@ -379,7 +379,7 @@ class EnvironmentManager:
 
         if self.evidence:
             output_files["evidence"] = {
-                "dig": os.path.join(self.output_dir, "evidence", "dns"),
+                "dns": os.path.join(self.output_dir, "evidence", "dns"),
             }
 
         self.output_files = output_files
