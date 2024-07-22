@@ -1,12 +1,15 @@
+import asyncio
 import json
 import os
+import platform
 import re
 import subprocess
-import platform
-import dns.resolver
+
+import aiodns
+import aiofiles
 
 
-def load_domain_categorisation_patterns(config_file="config.json"):
+async def load_domain_categorisation_patterns(config_file="config.json"):
     """
     Load domain categorization patterns from the given config file.
 
@@ -39,7 +42,6 @@ def categorise_domain(domain, patterns):
                          },
                          ...
                      }
-
     """
     for category, pattern in patterns.items():
         if re.search(pattern["regex"], domain):
@@ -47,78 +49,15 @@ def categorise_domain(domain, patterns):
     return "unknown", "Unclassified", "N/A"
 
 
-def is_dangling_record(resolver, domain, record_type):
+async def is_dangling_record_async(resolver, domain, record_type):
     """
-    Checks if a specified DNS record for a given domain is a dangling record or not.
+    Asynchronously checks if a specified DNS record for a given domain is a dangling record or not.
     """
     try:
-        resolver.resolve(domain, record_type)
+        await resolver.query(domain, record_type)
         return False
-    except (
-        dns.resolver.NoAnswer,
-        dns.resolver.NXDOMAIN,
-        dns.resolver.NoNameservers,
-        dns.resolver.LifetimeTimeout,
-    ):
+    except aiodns.error.DNSError:
         return True
-
-
-def perform_nslookup(domain, nameserver, reason, evidence_dir):
-    """
-    Perform a DNS lookup using the nslookup command and save the output to a file.
-
-    :param domain: The domain name to perform the DNS lookup for.
-    :param nameserver: The nameserver to use for the DNS lookup.
-    :param reason: The reason for performing the DNS lookup.
-    :param evidence_dir: The directory where the output file will be saved.
-    :return: None
-    """
-    try:
-        result = subprocess.run(
-            ["nslookup", domain, nameserver],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except subprocess.CalledProcessError as e:
-        print(
-            f"Command failed with error: {e.returncode}, output: {e.output}, stderr: {e.stderr}"
-        )
-        raise e from None
-    filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(result.stdout)
-        f.write("\n")
-        f.write(result.stderr)
-
-
-def perform_dig(domain, nameserver, reason, evidence_dir):
-    """
-    Perform a DNS lookup using the dig command and save the output to a file.
-
-    :param domain: The domain name to perform the DNS lookup for.
-    :param nameserver: The nameserver to use for the DNS lookup.
-    :param reason: The reason for performing the DNS lookup.
-    :param evidence_dir: The directory where the output file will be saved.
-    :return: None
-    """
-    try:
-        result = subprocess.run(
-            ["dig", f"@{nameserver}", domain],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except subprocess.CalledProcessError as e:
-        print(
-            f"Command failed with error: {e.returncode}, output: {e.output}, stderr: {e.stderr}"
-        )
-        raise e from None
-    filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(result.stdout)
-        f.write("\n")
-        f.write(result.stderr)
 
 
 def check_tools_availability():
@@ -152,34 +91,6 @@ def check_tools_availability():
     return nslookup_available, dig_available
 
 
-def perform_dns_lookup(domain, nameserver, reason, evidence_dir):
-    """
-    Perform a DNS lookup using either nslookup or dig, depending on the system.
-
-    :param domain: The domain name to perform the DNS lookup for.
-    :param nameserver: The nameserver to use for the DNS lookup.
-    :param reason: The reason for performing the DNS lookup.
-    :param evidence_dir: The directory where the output file will be saved.
-    :return: None
-    """
-    nslookup_available, dig_available = check_tools_availability()
-
-    if platform.system() == "Windows":
-        if nslookup_available:
-            perform_nslookup(domain, nameserver, reason, evidence_dir)
-        else:
-            log_error(f"nslookup not available on Windows system for domain {domain}")
-    else:
-        if dig_available:
-            perform_dig(domain, nameserver, reason, evidence_dir)
-        elif nslookup_available:
-            perform_nslookup(domain, nameserver, reason, evidence_dir)
-        else:
-            log_error(
-                f"Neither dig nor nslookup available on non-Windows system for domain {domain}"
-            )
-
-
 def log_error(message):
     """
     Log an error message to the log file.
@@ -190,150 +101,219 @@ def log_error(message):
         f.write(f"{message}\n")
 
 
-# Example usage of perform_dns_lookup function
-def resolve_domain(domain_context, env_manager):
+async def resolve_domain_async(domain_context, env_manager):
     """
-    Resolves domain and returns a success status and the final IP addresses.
+    Asynchronously resolves a domain and returns a success status and the final IP addresses.
     """
     resolved_records = []
     current_domain = domain_context.get_domain()
+    resolver = aiodns.DNSResolver()
+    random_nameserver = env_manager.get_random_nameserver()
 
-    verbose = env_manager.get_verbose()
-    logger = env_manager.get_logger()
-    output_files = env_manager.get_output_files()
-
-    while True:
-        cname_chain_resolved = False
-        for record_type in ["CNAME"]:
-            answer = dns_query_with_retry(
-                domain_context, env_manager, current_domain, record_type
-            )
-            if answer:
-                resolved_records.append((record_type, answer))
-                current_domain = str(answer[0])
-                cname_chain_resolved = True
-                if check_dangling_cname(domain_context, env_manager, current_domain):
-                    domain_context.add_dangling_domain_to_domains(current_domain)
-                break
-        if not cname_chain_resolved:
-            break
-
-    final_ips = []
-    for record_type in ["A", "AAAA"]:
-        answer = dns_query_with_retry(
-            domain_context, env_manager, current_domain, record_type
+    if random_nameserver:
+        resolver.nameservers = [random_nameserver]
+        env_manager.log_info(
+            f"Using nameserver {random_nameserver} for resolving {current_domain}"
         )
-        if answer:
-            final_ips.extend(answer)
-            resolved_records.append((record_type, answer))
 
-    if resolved_records:
-        if verbose:
-            logger.info(
-                f"Writing resolved records for domain: {domain_context.get_domain()} to "
-                f"{output_files['standard']['resolved']}"
-            )
-        with open(
-            output_files["standard"]["resolved"],
-            "a",
-            encoding="utf-8",
-        ) as f:
-            f.write(f"{domain_context.get_domain()}:\n")
-            for record_type, records in resolved_records:
-                f.write(f"  {record_type}:\n")
-                for record in records:
-                    f.write(f"    {record}\n")
-            f.write("--------\n")
+    try:
+        answers = await resolver.query(current_domain, "A")
+        final_ips = [answer.host for answer in answers]
+        resolved_records.append(("A", final_ips))
+
+        is_dangling = await check_dangling_cname_async(
+            domain_context, env_manager, current_domain
+        )
+        if is_dangling:
+            domain_context.add_dangling_domain_to_domains(current_domain)
+
         return True, final_ips
-    return False, []
+    except aiodns.error.DNSError as e:
+        env_manager.log_error(f"DNS resolution error for {current_domain}: {e}")
+        return False, []
 
 
-def dns_query_with_retry(domain_context, env_manager, current_domain, record_type):
+async def save_and_log_dns_result(
+    result, domain, nameserver, reason, evidence_dir, env_manager, command_name
+):
+    stdout, stderr = await result.communicate()
+    content = stdout.decode() + "\n" + stderr.decode()
+    filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
+    await env_manager.write_to_file(filename, content)
+    env_manager.log_info(
+        f"{command_name} result saved for domain {domain} using nameserver {nameserver}"
+    )
+
+
+async def perform_nslookup(domain, nameserver, reason, evidence_dir, env_manager):
     """
-    Tries to resolve DNS query and implements retry for failures.
-
+    Perform a DNS lookup using the nslookup command and save the output to a file.
     """
-    resolver = domain_context.get_resolver()
-    retries = env_manager.get_retries()
-    verbose = env_manager.get_verbose()
-    logger = env_manager.get_logger()
-    dangling_domains = domain_context.get_dangling_domains()
-    failed_domains = domain_context.get_failed_domains()
+    try:
+        result = await asyncio.create_subprocess_exec(
+            "nslookup",
+            domain,
+            nameserver,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await save_and_log_dns_result(
+            result, domain, nameserver, reason, evidence_dir, env_manager, "nslookup"
+        )
+    except Exception as e:
+        env_manager.log_error(f"Command failed with error: {e}")
+        raise e from None
+
+
+async def perform_dig(domain, nameserver, reason, evidence_dir, env_manager):
+    """
+    Perform a DNS lookup using the dig command and save the output to a file.
+    """
+    try:
+        result = await asyncio.create_subprocess_exec(
+            "dig",
+            f"@{nameserver}",
+            domain,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await save_and_log_dns_result(
+            result, domain, nameserver, reason, evidence_dir, env_manager, "dig"
+        )
+    except Exception as e:
+        env_manager.log_error(f"Command failed with error: {e}")
+        raise e from None
+
+
+async def perform_dns_evidence(domain, nameserver, reason, evidence_dir, env_manager):
+    """
+    Perform a DNS lookup using either nslookup or dig, depending on the system.
+
+    :param domain: The domain name to perform the DNS lookup for.
+    :param nameserver: The nameserver to use for the DNS lookup.
+    :param reason: The reason for performing the DNS lookup.
+    :param evidence_dir: The directory where the output file will be saved.
+    :param env_manager: The environment manager instance for logging.
+    :return: None
+    """
+    nslookup_available, dig_available = check_tools_availability()
+
+    if platform.system() == "Windows":
+        if nslookup_available:
+            await perform_nslookup(
+                domain, nameserver, reason, evidence_dir, env_manager
+            )
+        else:
+            env_manager.log_error(
+                f"nslookup not available on Windows system for domain {domain}"
+            )
+    else:
+        if dig_available:
+            await perform_dig(domain, nameserver, reason, evidence_dir, env_manager)
+        elif nslookup_available:
+            await perform_nslookup(
+                domain, nameserver, reason, evidence_dir, env_manager
+            )
+        else:
+            env_manager.log_error(
+                f"Neither dig nor nslookup available on non-Windows system for domain {domain}"
+            )
+
+
+async def perform_dns_checks_async(domain_context, env_manager, final_ips):
+    """
+    Performs DNS checks and evidence collection if enabled.
+    """
+    resolver = aiodns.DNSResolver()
+    patterns = env_manager.get_patterns()
+    current_domain = domain_context.get_domain()
     output_files = env_manager.get_output_files()
     evidence_enabled = env_manager.get_evidence()
 
-    for retry in range(retries):
-        try:
-            answer = resolver.resolve(current_domain, record_type)
-            return [str(rdata) for rdata in answer]
-        except (
-            dns.resolver.Timeout,
-            dns.resolver.NoAnswer,
-            dns.resolver.NXDOMAIN,
-            dns.resolver.NoNameservers,
-        ) as e:
-            if verbose and retry < retries - 1:
-                logger.info(
-                    f"Failed to resolve DNS for {current_domain} - "
-                    f"retry {retry + 1} of {retries}: {e}"
-                )
-            elif retry == retries - 1:
-                if current_domain not in dangling_domains:
-                    failed_domains.add(current_domain)  # Track domain for retry
-                    if verbose:
-                        logger.info(
-                            f"DNS resolution for {current_domain} timed out - Final Timeout: {e}"
-                        )
-                if evidence_enabled:
-                    perform_dns_lookup(
-                        current_domain,
-                        resolver.nameservers[0],
-                        "timeout",
-                        output_files["evidence"]["dns"],
-                    )
-            continue
-    return None
+    random_nameserver = env_manager.get_random_nameserver()
+    if random_nameserver:
+        resolver.nameservers = [random_nameserver]
+        env_manager.log_info(
+            f"Using nameserver {random_nameserver} for DNS checks on {domain_context.get_domain()}"
+        )
 
+    if final_ips:
+        await env_manager.write_to_file(
+            output_files["standard"]["resolved"],
+            f"{current_domain}|{'|'.join(final_ips)}",
+        )
+        env_manager.log_info(f"Resolved IPs for domain {current_domain}: {final_ips}")
 
-def check_dangling_cname(domain_context, env_manager, current_domain):
-    """
-    Checks if a domain is a dangling CNAME, returning a boolean result.
-    """
-    resolver = dns.resolver.Resolver()
-    nameservers = domain_context.get_nameservers()
-    original_domain = domain_context.get_domain()
-    output_files = env_manager.get_output_files()
-    patterns = domain_context.get_patterns()
-    evidence_enabled = env_manager.get_evidence()
-
-    if nameservers:
-        resolver.nameservers = nameservers
-
-    for record_type in ["A", "AAAA", "MX"]:
-        if not is_dangling_record(resolver, current_domain, record_type):
-            return False
-
-    if not is_dangling_record(resolver, current_domain, "NS"):
-        with open(
-            output_files["standard"]["ns_takeover"], "a", encoding="utf-8"
-        ) as file:
-            file.write(f"{original_domain}|{current_domain}\n")
-        return False
+    if evidence_enabled:
+        for nameserver in env_manager.get_resolvers():
+            await perform_dns_evidence(
+                current_domain,
+                nameserver,
+                "dangling",
+                output_files["evidence"]["dns"],
+                env_manager,
+            )
 
     category, recommendation, evidence_link = categorise_domain(
         current_domain, patterns
     )
-    with open(output_files["standard"]["dangling"], "a", encoding="utf-8") as file:
-        file.write(
-            f"{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}\n"
+    await env_manager.write_to_file(
+        output_files["standard"]["dangling"],
+        f"{current_domain}|{category}|{recommendation}|{evidence_link}",
+    )
+    env_manager.log_info(
+        f"Categorised domain {current_domain} as {category} with recommendation: {recommendation}"
+    )
+
+
+async def check_dangling_cname_async(domain_context, env_manager, current_domain):
+    """
+    Asynchronously checks if a domain is a dangling CNAME, returning a boolean result.
+    """
+    resolver = aiodns.DNSResolver()
+    original_domain = domain_context.get_domain()
+    output_files = env_manager.get_output_files()
+    evidence_enabled = env_manager.get_evidence()
+
+    random_nameserver = env_manager.get_random_nameserver()
+    if random_nameserver:
+        resolver.nameservers = [random_nameserver]
+        env_manager.log_info(
+            f"Using nameserver {random_nameserver} for resolving {current_domain}"
         )
 
-    if evidence_enabled:
-        perform_dns_lookup(
-            current_domain,
-            resolver.nameservers[0],
-            "dangling",
-            output_files["evidence"]["dns"],
+    for record_type in ["A", "AAAA", "MX"]:
+        if not await is_dangling_record_async(resolver, current_domain, record_type):
+            return False
+
+    if not await is_dangling_record_async(resolver, current_domain, "NS"):
+        await env_manager.write_to_file(
+            output_files["standard"]["ns_takeover"],
+            f"{original_domain}|{current_domain}",
         )
+        env_manager.log_info(f"NS takeover possible for domain {current_domain}")
+        return False
+
+    patterns = env_manager.get_patterns()
+    category, recommendation, evidence_link = categorise_domain(
+        current_domain, patterns
+    )
+    await env_manager.write_to_file(
+        output_files["standard"]["dangling"],
+        f"{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}",
+    )
+    env_manager.log_info(
+        f"Domain {current_domain} is a dangling CNAME with category: {category}"
+    )
+
+    if evidence_enabled:
+        for nameserver in env_manager.get_resolvers():
+            await perform_dns_evidence(
+                current_domain,
+                nameserver,
+                "dangling",
+                output_files["evidence"]["dns"],
+                env_manager,
+            )
 
     return True
