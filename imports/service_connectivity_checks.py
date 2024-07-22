@@ -36,12 +36,9 @@ import os
 import re
 import socket
 import ssl
-from concurrent.futures import (
-    CancelledError,
-    ThreadPoolExecutor,
-    TimeoutError as CfTimeoutError,
-    as_completed,
-)
+from concurrent.futures import CancelledError, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as CfTimeoutError
+from concurrent.futures import as_completed
 
 import requests
 from selenium import webdriver
