@@ -1,35 +1,13 @@
-"""
-This module offers an EnvironmentManager class, responsible for:
-
-- Parsing and validating command line arguments.
-- Handling and resolving application configurations.
-- Setting up logging.
-- Managing DNS checks and evidence collection.
-- Overseeing environment setup, including directory and file creation,
-  domain name resolution, and service checks.
-
-The module validates flags, checks file existence, and ensures necessary
-components are present. Command line arguments can override configuration
-file settings. The module is highly configurable, accommodating various
-user scenarios and needs.
-
-Features of the EnvironmentManager include:
-
-- Handling verbose and extreme flags for output detail control.
-- Custom nameserver support.
-- Service health check capabilities.
-- Adjustable threading for domain processing.
-- Customizable DNS resolution timeouts and retries.
-- Evidence collection for DNS queries.
-"""
-
 import argparse
 import json
 import logging
 import os
+import random
+import re
 import sys
 from datetime import datetime
 
+import aiofiles
 import requests
 from requests import RequestException
 
@@ -40,26 +18,51 @@ from classes.custom_exceptions import (
 )
 
 
-def setup_logger():
+async def write_to_file(file_path, content):
+    logger = logging.getLogger("DNSResolver")
+    try:
+        async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
+            await f.write(content + "\n")
+        logger.info(f"Successfully wrote to {file_path}")
+    except Exception as e:
+        logger.error(f"Failed to write to {file_path}: {e}")
+
+
+def setup_logger(log_file="dnsresolver.log"):
     """
     Set up a logger for DNSResolver.
-
+    :param log_file: The log file path.
     :return: Logger object.
     """
     logger = logging.getLogger("DNSResolver")
-    logger.setLevel(logging.DEBUG)
-    file_handler = logging.FileHandler("dns_resolver.log")
+    logger.setLevel(logging.INFO)  # Set up INFO as the base level for logger
+
+    if logger.hasHandlers():  # Clear any pre-existing handlers
+        logger.handlers.clear()
+
+    # Create console handler with a log level of ERROR
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.ERROR)  # Defaulting to ERROR to console
+
+    # Create file handler which logs all messages from INFO to higher
+    fh = logging.FileHandler(log_file)
+    fh.setLevel(logging.INFO)  # Defaulting to INFO to file
+
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    ch.setFormatter(formatter)
+    fh.setFormatter(formatter)
+
+    # Add the handlers to the logger
+    logger.addHandler(ch)
+    logger.addHandler(fh)
+
     return logger
 
 
 class EnvironmentManager:
     """
-
     EnvironmentManager Class
     ------------------------
 
@@ -114,14 +117,17 @@ class EnvironmentManager:
             "run_in_docker": None,
         }
         self.domains = None
+        self.patterns = None
 
         # Default Actions
-        """# Get our arguments
+        # Get our arguments
         self.argument_parsing()
         # validate arguments
         self.validate_arguments()
         # Cross compare with config file arguments and resolve
         self.resolve_effective_configuration()
+        # Update logger with verbosity settings
+        self.update_logger()
         # log the effective arguments
         self.log_effective_configuration()
         # Transfer the arguments to class attributes
@@ -129,15 +135,9 @@ class EnvironmentManager:
         # Setup the environment
         self.initialise_environment()
         # save our environment json file for future reference
-        self.save_environment_info()"""
-
-        self.argument_parsing()
-        self.validate_arguments()
-        self.resolve_effective_configuration()
-        self.log_effective_configuration()
-        self.set_arguments()
-        self.initialise_environment()
         self.save_environment_info()
+        # Load patterns after environment initialization
+        self.load_patterns()
 
     def argument_parsing(self):
         """
@@ -281,6 +281,16 @@ class EnvironmentManager:
         if self.args.extreme:
             self.args.verbose = True
 
+    def update_logger(self):
+        """
+        Updates the logger based on the verbosity supplied
+        """
+
+        if self.verbose:  # If verbose flag is true
+            for handler in self.logger.handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setLevel(logging.INFO)  # Set console logging level to INFO
+
     def log_effective_configuration(self):
         """
         Logs the effective configuration and prints some additional banner information.
@@ -355,8 +365,11 @@ class EnvironmentManager:
                 "timeout": os.path.join(
                     self.output_dir, f"timeout_results_{self.timestamp}.txt"
                 ),
-            },
-            "service_checks": {
+            }
+        }
+
+        if self.service_checks:
+            output_files["service_checks"] = {
                 "ssl_tls_failure_file": os.path.join(
                     self.output_dir,
                     f"ssl_tls_failure_results_{self.timestamp}.txt",
@@ -374,8 +387,7 @@ class EnvironmentManager:
                 "screenshot_failures": os.path.join(
                     self.output_dir, f"failure_results_{self.timestamp}.txt"
                 ),
-            },
-        }
+            }
 
         if self.evidence:
             output_files["evidence"] = {
@@ -384,6 +396,14 @@ class EnvironmentManager:
 
         self.output_files = output_files
         self.create_empty_files_or_directories()
+
+        # Log the creation of each file
+        for category, files in output_files.items():
+            for description, path in files.items():
+                if os.path.exists(path):
+                    self.logger.info(f"Successfully created file: {path}")
+                elif self.service_checks or category != "service_checks":
+                    self.logger.error(f"Failed to create file: {path}")
 
     def save_environment_info(self):
         """
@@ -455,12 +475,55 @@ class EnvironmentManager:
             for value in self.output_files["evidence"].values():
                 self.create_empty_file_or_directory(value)
 
+        # Log the creation of each file
+        for category, files in self.output_files.items():
+            for description, path in files.items():
+                if os.path.exists(path):
+                    self.logger.info(f"Successfully created file: {path}")
+                else:
+                    self.logger.error(f"Failed to create file: {path}")
+
+    async def write_to_file(self, file_path, content):
+        try:
+            async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
+                await f.write(content + "\n")
+            self.logger.info(f"Successfully wrote to {file_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to write to {file_path}: {e}")
+
     def set_domains(self):
         """
         Reads and sets the domains from the file specified in runtime arguments.
         """
         with open(self.domains_file, "r", encoding="utf-8") as f:
-            self.domains = f.read().splitlines()
+            raw_domains = f.read().splitlines()
+            self.domains = self.clean_domains(raw_domains)
+
+    def clean_domains(self, domains):
+        """
+        Cleans the domain list by removing empty lines and invalid DNS labels.
+        :param domains: The list of domains to be cleaned.
+        :return: A cleaned list of domains.
+        """
+        valid_domains = []
+        for domain in domains:
+            if domain and self.is_valid_domain(domain):
+                valid_domains.append(domain)
+        return valid_domains
+
+    @staticmethod
+    def is_valid_domain(domain):
+        """
+        Checks if a given domain is a valid DNS label.
+        :param domain: The domain to validate.
+        :return: True if valid, False otherwise.
+        """
+        regex = re.compile(
+            r"^(?=.{1,253}$)"
+            r"(?:(?!\d+$)[a-zA-Z\d]([a-zA-Z\d-]{0,61}[a-zA-Z\d])?\.)+"
+            r"[a-zA-Z\d]([a-zA-Z\d-]{0,61}[a-zA-Z\d])?$"
+        )
+        return bool(regex.match(domain))
 
     def log_info(self, message, *args):
         """
@@ -471,7 +534,51 @@ class EnvironmentManager:
         else:
             print(f"INFO: {message % args}")
 
+    def log_error(self, message, *args):
+        """
+        Logs an informational message. If logger is not set, simply prints the info.
+        """
+        if self.logger:
+            self.logger.error(message, *args)
+        else:
+            print(f"ERROR: {message % args}")
+
+    def get_nameservers(self):
+        """
+        Retrieve the list of custom nameservers.
+        :return: A list of custom nameservers.
+        :rtype: list
+        """
+        return self.nameservers
+
+    def get_random_nameserver(self):
+        """
+        Returns a random nameserver from the list of custom nameservers.
+        :return: A random nameserver.
+        :rtype: str
+        """
+        if self.nameservers:
+            return random.choice(self.nameservers)
+        return None
+
+    def load_patterns(self):
+        """
+        Load domain categorisation patterns from the given config file and set to self.patterns.
+        """
+        config_file = self.get_config_file()
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        self.patterns = config.get("domain_categorisation", {})
+
     # Simple Getters and setters
+
+    def get_patterns(self):
+        """
+        Retrieve the loaded domain categorisation patterns.
+        :return: A dictionary of domain categorisation patterns.
+        :rtype: dict
+        """
+        return self.patterns
 
     def get_output_files(self):
         return self.output_files
