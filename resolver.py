@@ -2,7 +2,7 @@ import asyncio
 
 from tqdm import tqdm
 
-from classes.domain_processing_context import DomainProcessingContext
+from classes.csp_ip_addresses import CSPIPAddresses
 from classes.environment_manager import EnvironmentManager
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
@@ -10,7 +10,6 @@ from imports.cloud_ip_ranges import (
     fetch_google_cloud_ip_ranges,
 )
 from imports.domain_processor import process_domain_async
-from classes.csp_ip_addresses import CSPIPAddresses
 
 
 async def main_async():
@@ -36,22 +35,25 @@ async def main_async():
         if not env_manager.domains:
             break
 
-        current_failed_domains = list(env_manager.domains)
+        current_domains = list(env_manager.domains)
         env_manager.domains.clear()
+        failed_domains = set()
 
         with tqdm(
-            total=len(current_failed_domains),
+            total=len(current_domains),
             desc=f"Processing Domains (Attempt {attempt + 1})",
         ) as pbar:
             tasks = [
                 process_domain_async(domain, env_manager, pbar, csp_ip_addresses)
-                for domain in current_failed_domains
+                for domain in current_domains
             ]
             results = await asyncio.gather(*tasks)
 
-        for success, final_ips in results:
+        for domain, (success, final_ips) in zip(current_domains, results):
             if not success:
-                env_manager.domains.update(current_failed_domains)
+                failed_domains.add(domain)
+
+        env_manager.domains.update(failed_domains)
 
     env_manager.log_info(
         "All resolutions completed. Results saved to %s", env_manager.get_output_dir()
