@@ -56,8 +56,10 @@ async def is_dangling_record_async(resolver, domain, record_type):
     try:
         await resolver.query(domain, record_type)
         return False
-    except aiodns.error.DNSError:
-        return True
+    except aiodns.error.DNSError as e:
+        if e.args[0] in [3, 4]:  # NXDOMAIN (Domain name not found) or SERVFAIL
+            return True
+        return False
 
 
 def check_tools_availability():
@@ -129,8 +131,19 @@ async def resolve_domain_async(domain_context, env_manager):
 
         return True, final_ips
     except aiodns.error.DNSError as e:
-        env_manager.log_error(f"DNS resolution error for {current_domain}: {e}")
-        return False, []
+        if e.args[0] == 4:  # NXDOMAIN (Domain name not found)
+            env_manager.log_info(
+                f"{current_domain} not found, checking for dangling CNAME."
+            )
+            is_dangling = await check_dangling_cname_async(
+                domain_context, env_manager, current_domain
+            )
+            if is_dangling:
+                domain_context.add_dangling_domain_to_domains(current_domain)
+                return True, []
+        else:
+            env_manager.log_error(f"DNS resolution error for {current_domain}: {e}")
+            return False, []
 
 
 async def save_and_log_dns_result(
