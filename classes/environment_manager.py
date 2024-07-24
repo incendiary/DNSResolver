@@ -11,11 +11,9 @@ import aiofiles
 import requests
 from requests import RequestException
 
-from classes.custom_exceptions import (
-    FileDoesNotExistError,
-    InvalidNameserversError,
-    NotAnIntegerError,
-)
+from classes.custom_exceptions import (FileDoesNotExistError,
+                                       InvalidNameserversError,
+                                       NotAnIntegerError)
 
 
 async def write_to_file(file_path, content):
@@ -116,7 +114,7 @@ class EnvironmentManager:
             "external_ip": None,
             "run_in_docker": None,
         }
-        self.domains = None
+        self.domains = set()
         self.patterns = None
 
         # Default Actions
@@ -497,7 +495,7 @@ class EnvironmentManager:
         """
         with open(self.domains_file, "r", encoding="utf-8") as f:
             raw_domains = f.read().splitlines()
-            self.domains = self.clean_domains(raw_domains)
+            self.domains = set(self.clean_domains(raw_domains))  # Convert list to set
 
     def clean_domains(self, domains):
         """

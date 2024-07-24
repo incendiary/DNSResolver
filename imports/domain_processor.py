@@ -18,7 +18,8 @@ Functions:
 from imports.cloud_service_provider_checks import perform_csp_checks
 from imports.create_domain_context import create_domain_context
 from imports.dns_based_checks import resolve_domain_async
-from imports.service_connectivity_checks import perform_service_connectivity_checks
+from imports.service_connectivity_checks import \
+    perform_service_connectivity_checks
 
 
 async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses):
