@@ -11,9 +11,11 @@ import aiofiles
 import requests
 from requests import RequestException
 
-from classes.custom_exceptions import (FileDoesNotExistError,
-                                       InvalidNameserversError,
-                                       NotAnIntegerError)
+from classes.custom_exceptions import (
+    FileDoesNotExistError,
+    InvalidNameserversError,
+    NotAnIntegerError,
+)
 
 
 async def write_to_file(file_path, content):
@@ -38,7 +40,7 @@ def setup_logger(log_file="dnsresolver.log"):
     if logger.hasHandlers():  # Clear any pre-existing handlers
         logger.handlers.clear()
 
-    # Create console handler with a log level of ERROR
+    # Create console handler with a log level of ERROR (only for errors to console)
     ch = logging.StreamHandler()
     ch.setLevel(logging.ERROR)  # Defaulting to ERROR to console
 
@@ -55,6 +57,9 @@ def setup_logger(log_file="dnsresolver.log"):
     # Add the handlers to the logger
     logger.addHandler(ch)
     logger.addHandler(fh)
+
+    # Test logging to ensure it's working
+    logger.info("Logger initialized.")
 
     return logger
 
@@ -124,18 +129,18 @@ class EnvironmentManager:
         self.validate_arguments()
         # Cross compare with config file arguments and resolve
         self.resolve_effective_configuration()
-        # Update logger with verbosity settings
-        self.update_logger()
-        # log the effective arguments
-        self.log_effective_configuration()
         # Transfer the arguments to class attributes
         self.set_arguments()
+        # log the effective arguments
+        self.log_effective_configuration()
         # Setup the environment
         self.initialise_environment()
         # save our environment json file for future reference
         self.save_environment_info()
         # Load patterns after environment initialization
         self.load_patterns()
+
+        self.logger.info("EnvironmentManager initialized.")
 
     def argument_parsing(self):
         """
@@ -283,11 +288,19 @@ class EnvironmentManager:
         """
         Updates the logger based on the verbosity supplied
         """
-
-        if self.verbose:  # If verbose flag is true
+        if self.args.verbose:  # If verbose flag is true
             for handler in self.logger.handlers:
                 if isinstance(handler, logging.StreamHandler):
                     handler.setLevel(logging.INFO)  # Set console logging level to INFO
+        else:
+            for handler in self.logger.handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setLevel(
+                        logging.CRITICAL
+                    )  # Set console logging level to CRITICAL to suppress errors
+
+        # Test logging to verify the update
+        self.logger.info("Logger updated based on verbosity.")
 
     def log_effective_configuration(self):
         """
@@ -321,8 +334,29 @@ class EnvironmentManager:
         self.timeout = self.args.timeout
         self.retries = self.args.retries
         self.evidence = self.args.evidence
+
+        self.logger.info(
+            "Arguments set: domains_file=%s, output_dir=%s, verbose=%s, extreme=%s,"
+            " service_checks=%s, max_threads=%d, timeout=%d, retries=%d, evidence=%s",
+            self.domains_file,
+            self.output_dir,
+            self.verbose,
+            self.extreme,
+            self.service_checks,
+            self.max_threads,
+            self.timeout,
+            self.retries,
+            self.evidence,
+        )
+
         if self.args.nameservers:
             self.nameservers = self.args.nameservers.split(",")
+            self.logger.info("Nameservers set: %s", self.nameservers)
+
+        # Only update logger if verbose flag is true
+        if self.verbose:
+            self.logger.info("Verbose mode enabled, updating logger.")
+            self.update_logger()
 
     def initialise_environment(self):
         """
