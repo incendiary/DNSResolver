@@ -141,9 +141,19 @@ async def resolve_domain_async(domain_context, env_manager):
             if is_dangling:
                 domain_context.add_dangling_domain_to_domains(current_domain)
                 return True, []
+        elif e.args[0] == 11:  # Could not contact DNS servers
+            env_manager.log_error(f"DNS resolution error for {current_domain}: {e}")
+            await env_manager.write_to_file(
+                env_manager.get_output_files()["standard"]["unresolved"],
+                f"{current_domain}|Could not contact DNS servers",
+            )
         else:
             env_manager.log_error(f"DNS resolution error for {current_domain}: {e}")
-            return False, []
+            await env_manager.write_to_file(
+                env_manager.get_output_files()["standard"]["unresolved"],
+                f"{current_domain}|{e}",
+            )
+        return False, []
 
 
 async def save_and_log_dns_result(
