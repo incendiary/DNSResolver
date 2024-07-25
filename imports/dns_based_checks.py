@@ -15,13 +15,6 @@ async def perform_dns_checks_async(domain_context, env_manager, final_ips):
     current_domain = domain_context.get_domain()
     output_files = env_manager.get_output_files()
 
-    random_nameserver = env_manager.get_random_nameserver()
-    if random_nameserver:
-        handler.resolver.nameservers = [random_nameserver]
-        env_manager.log_info(
-            f"Using nameserver {random_nameserver} for DNS checks on {domain_context.get_domain()}"
-        )
-
     if final_ips:
         await env_manager.write_to_file(
             output_files["standard"]["resolved"],

@@ -1,11 +1,12 @@
 import asyncio
 import json
-import os
-import platform
 import re
-import subprocess
 
 import aiodns
+import dns.resolver
+import dns.exception
+
+from classes.evidence_collector import EvidenceCollector
 
 # Define constants for DNS error codes
 NXDOMAIN = 3
@@ -18,7 +19,14 @@ REFUSED = 5
 class DNSHandler:
     def __init__(self, env_manager):
         self.env_manager = env_manager
-        self.resolver = aiodns.DNSResolver()
+        self.aiodns_resolver = aiodns.DNSResolver()
+        self.dnspython_resolver = dns.resolver.Resolver()
+        self.evidence_collector = EvidenceCollector(env_manager)
+
+        random_nameserver = self.env_manager.get_random_nameserver()
+        if random_nameserver:
+            self.aiodns_resolver.nameservers = [random_nameserver]
+            self.dnspython_resolver.nameservers = [random_nameserver]
 
     @staticmethod
     def is_dns_error_present(error, error_types):
@@ -43,7 +51,7 @@ class DNSHandler:
         evidence_enabled = self.env_manager.get_evidence()
         if evidence_enabled:
             tasks = [
-                self.perform_dns_evidence(
+                self.evidence_collector.perform_dns_evidence(
                     domain,
                     nameserver,
                     reason,
@@ -66,12 +74,15 @@ class DNSHandler:
         original_domain = domain_context.get_domain()
         output_files = self.env_manager.get_output_files()
 
+        self.env_manager.log_info(f"Checking NS takeover for domain: {domain}")
+
         try:
-            ns_records = await self.resolver.query(domain, "NS")
+            ns_records = await self.aiodns_resolver.query(domain, "NS")
             for ns in ns_records:
                 ns_domain = str(ns.host).strip(".")
+                self.env_manager.log_info(f"NS record found: {ns_domain}")
                 try:
-                    await self.resolver.query(ns_domain, "A")
+                    await self.aiodns_resolver.query(ns_domain, "A")
                 except aiodns.error.DNSError as e:
                     if self.is_dns_error_present(e, [NXDOMAIN, SERVFAIL]):
                         await self.env_manager.write_to_file(
@@ -86,6 +97,7 @@ class DNSHandler:
 
                         return True
         except aiodns.error.DNSError as e:
+            self.env_manager.log_info(f"Error querying NS records for {domain}: {e}")
             if self.is_dns_error_present(e, [NXDOMAIN, SERVFAIL]):
                 pass
         return False
@@ -118,57 +130,23 @@ class DNSHandler:
                 return category, pattern["recommendation"], pattern["evidence"]
         return "unknown", "Unclassified", "N/A"
 
-    @staticmethod
-    async def is_dangling_record_async(resolver, domain, record_type):
+    async def is_dangling_record_async(self, domain, record_type):
         """
         Asynchronously checks if a specified DNS record for a given domain is a dangling record or not.
 
-        :param resolver: The aiodns resolver instance.
         :param domain: The domain to check.
         :param record_type: The type of DNS record to check (e.g., A, AAAA, MX, NS).
         :return: True if the record is dangling, False otherwise.
         """
         try:
-            await resolver.query(domain, record_type)
+            await self.aiodns_resolver.query(domain, record_type)
+            self.env_manager.log_info(
+                f"Domain {domain} has a valid {record_type} record."
+            )
             return False
         except aiodns.error.DNSError as e:
-            return DNSHandler.is_dns_error_present(e, [NXDOMAIN, SERVFAIL])
-
-    @staticmethod
-    def check_tools_availability():
-        """
-        Check the availability of nslookup and dig tools in the system path.
-
-        :return: Tuple indicating the availability of nslookup and dig (nslookup_available, dig_available).
-        """
-        if platform.system() == "Windows":
-            nslookup_available = (
-                subprocess.run(
-                    ["where", "nslookup"], capture_output=True, text=True
-                ).returncode
-                == 0
-            )
-            dig_available = (
-                subprocess.run(
-                    ["where", "dig"], capture_output=True, text=True
-                ).returncode
-                == 0
-            )
-        else:
-            nslookup_available = (
-                subprocess.run(
-                    ["which", "nslookup"], capture_output=True, text=True
-                ).returncode
-                == 0
-            )
-            dig_available = (
-                subprocess.run(
-                    ["which", "dig"], capture_output=True, text=True
-                ).returncode
-                == 0
-            )
-
-        return nslookup_available, dig_available
+            self.env_manager.log_info(f"Error querying {record_type} for {domain}: {e}")
+            return self.is_dns_error_present(e, [NXDOMAIN, SERVFAIL])
 
     async def handle_domain_resolution_errors(
         self, domain_context, current_domain, error, final_retry
@@ -205,13 +183,46 @@ class DNSHandler:
                 f"DNS resolution error for {current_domain}: {error} | final_retry={final_retry}"
             )
 
+        # Use dnspython_resolver for better error handling
+        try:
+            self.dnspython_resolver.resolve(current_domain, "A")
+            self.env_manager.log_info(
+                f"Domain {current_domain} resolved successfully with dnspython_resolver."
+            )
+            return True, []
+        except (
+            dns.resolver.NoAnswer,
+            dns.resolver.NXDOMAIN,
+            dns.exception.Timeout,
+        ) as e:
+            self.env_manager.log_info(
+                f"DNS error with dnspython_resolver for {current_domain}: {e}"
+            )
+            if isinstance(e, dns.resolver.NXDOMAIN):
+                self.env_manager.log_info(
+                    f"{current_domain} not found, checking for dangling CNAME."
+                )
+                if await self.handle_takeover_checks(domain_context, current_domain):
+                    return True, []
+
         return False, []
 
     async def handle_takeover_checks(self, domain_context, current_domain):
+        self.env_manager.log_info(
+            f"Running takeover checks for domain: {current_domain}"
+        )
+
         is_dangling = await self.check_dangling_cname_async(
             domain_context, current_domain
         )
+        self.env_manager.log_info(
+            f"Dangling CNAME check for {current_domain}: {is_dangling}"
+        )
+
         is_nstakeover = await self.check_ns_takeover(domain_context, current_domain)
+        self.env_manager.log_info(
+            f"NS takeover check for {current_domain}: {is_nstakeover}"
+        )
 
         if is_dangling or is_nstakeover:
             domain_context.add_dangling_domain_to_domains(current_domain)
@@ -238,19 +249,22 @@ class DNSHandler:
         current_domain = domain_context.get_domain()
         retries = self.env_manager.get_retries()
 
+        self.env_manager.log_info(
+            f"Starting DNS resolution for {current_domain} with {retries + 1} attempts."
+        )
+
         for attempt in range(retries + 1):
-            random_nameserver = self.env_manager.get_random_nameserver()
-            if random_nameserver:
-                self.resolver.nameservers = [random_nameserver]
-                if self.env_manager.get_verbose():
-                    self.env_manager.log_info(
-                        f"Using nameserver {random_nameserver} for resolving {current_domain}"
-                    )
+            self.env_manager.log_info(
+                f"Attempt {attempt + 1} for resolving {current_domain}"
+            )
 
             try:
-                answers = await self.resolver.query(current_domain, "A")
+                answers = await self.aiodns_resolver.query(current_domain, "A")
                 final_ips = [answer.host for answer in answers]
                 resolved_records.append(("A", final_ips))
+                self.env_manager.log_info(
+                    f"Successfully resolved {current_domain} to {final_ips}"
+                )
                 await self.handle_takeover_checks(domain_context, current_domain)
                 return True, final_ips
             except aiodns.error.DNSError as e:
@@ -262,110 +276,12 @@ class DNSHandler:
                     domain_context, current_domain, e, final_retry
                 )
                 if final_retry:
+                    self.env_manager.log_info(
+                        f"Failed to resolve {current_domain} after {retries + 1} attempts."
+                    )
                     return False, []
 
         return False, []
-
-    async def save_and_log_dns_result(
-        self, result, domain, nameserver, reason, evidence_dir, command_name
-    ):
-        """
-        Save and log the result of a DNS query command.
-
-        :param result: The subprocess result object.
-        :param domain: The domain name queried.
-        :param nameserver: The nameserver used for the query.
-        :param reason: The reason for performing the query.
-        :param evidence_dir: The directory to save the evidence file.
-        :param command_name: The name of the DNS query command (e.g., nslookup, dig).
-        :return: None
-        """
-        stdout, stderr = await result.communicate()
-        content = stdout.decode() + "\n" + stderr.decode()
-        filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
-        await self.env_manager.write_to_file(filename, content)
-        self.env_manager.log_info(
-            f"{command_name} result saved for domain {domain} using nameserver {nameserver}"
-        )
-
-    async def perform_nslookup(self, domain, nameserver, reason, evidence_dir):
-        """
-        Perform a DNS lookup using the nslookup command and save the output to a file.
-
-        :param domain: The domain name to query.
-        :param nameserver: The nameserver to use for the query.
-        :param reason: The reason for performing the query.
-        :param evidence_dir: The directory to save the evidence file.
-        :return: None
-        """
-        try:
-            result = await asyncio.create_subprocess_exec(
-                "nslookup",
-                domain,
-                nameserver,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await self.save_and_log_dns_result(
-                result, domain, nameserver, reason, evidence_dir, "nslookup"
-            )
-        except Exception as e:
-            self.env_manager.log_error(f"Command failed with error: {e}")
-            raise e from None
-
-    async def perform_dig(self, domain, nameserver, reason, evidence_dir):
-        """
-        Perform a DNS lookup using the dig command and save the output to a file.
-
-        :param domain: The domain name to query.
-        :param nameserver: The nameserver to use for the query.
-        :param reason: The reason for performing the query.
-        :param evidence_dir: The directory to save the evidence file.
-        :return: None
-        """
-        try:
-            result = await asyncio.create_subprocess_exec(
-                "dig",
-                f"@{nameserver}",
-                domain,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await self.save_and_log_dns_result(
-                result, domain, nameserver, reason, evidence_dir, "dig"
-            )
-        except Exception as e:
-            self.env_manager.log_error(f"Command failed with error: {e}")
-            raise e from None
-
-    async def perform_dns_evidence(self, domain, nameserver, reason, evidence_dir):
-        """
-        Perform a DNS lookup using either nslookup or dig, depending on the system.
-
-        :param domain: The domain name to perform the DNS lookup for.
-        :param nameserver: The nameserver to use for the DNS lookup.
-        :param reason: The reason for performing the DNS lookup.
-        :param evidence_dir: The directory where the output file will be saved.
-        :return: None
-        """
-        nslookup_available, dig_available = self.check_tools_availability()
-
-        if platform.system() == "Windows":
-            if nslookup_available:
-                await self.perform_nslookup(domain, nameserver, reason, evidence_dir)
-            else:
-                self.env_manager.log_error(
-                    f"nslookup not available on Windows system for domain {domain}"
-                )
-        else:
-            if dig_available:
-                await self.perform_dig(domain, nameserver, reason, evidence_dir)
-            elif nslookup_available:
-                await self.perform_nslookup(domain, nameserver, reason, evidence_dir)
-            else:
-                self.env_manager.log_error(
-                    f"Neither dig nor nslookup available on non-Windows system for domain {domain}"
-                )
 
     async def check_dangling_cname_async(self, domain_context, current_domain):
         """
@@ -378,39 +294,51 @@ class DNSHandler:
         original_domain = domain_context.get_domain()
         output_files = self.env_manager.get_output_files()
 
-        random_nameserver = self.env_manager.get_random_nameserver()
-        if random_nameserver:
-            self.resolver.nameservers = [random_nameserver]
-            if self.env_manager.get_verbose():
-                self.env_manager.log_info(
-                    f"Using nameserver {random_nameserver} for resolving {current_domain}"
-                )
+        self.env_manager.log_info(
+            f"Checking for dangling CNAME for domain: {current_domain}"
+        )
 
         # Check if the domain is a CNAME
         try:
-            cname_answers = await self.resolver.query(current_domain, "CNAME")
-            if cname_answers:
+            cname_answer = await self.aiodns_resolver.query(current_domain, "CNAME")
+            self.env_manager.log_info(
+                f"CNAME query response for {current_domain}: {cname_answer}"
+            )
+            if cname_answer:
                 self.env_manager.log_info(f"Domain {current_domain} is a CNAME record.")
-                for cname in cname_answers:
-                    target = cname.host
-                    self.env_manager.log_info(f"CNAME target: {target}")
-                    if await self.check_dangling_cname_async(domain_context, target):
-                        return True
+                target = cname_answer.cname
+                self.env_manager.log_info(f"CNAME target: {target}")
+                if await self.check_dangling_cname_async(domain_context, target):
+                    return True
         except aiodns.error.DNSError as e:
+            self.env_manager.log_info(f"Error querying CNAME for {current_domain}: {e}")
             if not self.is_dns_error_present(e, [NXDOMAIN]):
                 return False
 
         # Check for dangling A, AAAA, MX records
         for record_type in ["A", "AAAA", "MX"]:
-            if not await self.is_dangling_record_async(
-                self.resolver, current_domain, record_type
-            ):
+            try:
+                self.dnspython_resolver.resolve(current_domain, record_type)
+                self.env_manager.log_info(
+                    f"Domain {current_domain} has a valid {record_type} record."
+                )
                 return False
+            except (
+                dns.resolver.NoAnswer,
+                dns.resolver.NXDOMAIN,
+                dns.exception.Timeout,
+            ) as e:
+                self.env_manager.log_info(
+                    f"Error querying {record_type} for {current_domain}: {e}"
+                )
+                if isinstance(e, dns.resolver.NoAnswer):
+                    continue
+                if isinstance(e, dns.exception.Timeout):
+                    return False
 
         # Check NS records for original domain
-        if not await self.is_dangling_record_async(
-            self.resolver, original_domain, "NS"
-        ):
+        try:
+            self.dnspython_resolver.resolve(original_domain, "NS")
             await self.env_manager.write_to_file(
                 output_files["standard"]["ns_takeover"],
                 f"{original_domain}|{current_domain}",
@@ -419,6 +347,14 @@ class DNSHandler:
                 f"NS takeover possible for domain {current_domain}"
             )
             return False
+        except (
+            dns.resolver.NoAnswer,
+            dns.resolver.NXDOMAIN,
+            dns.exception.Timeout,
+        ) as e:
+            self.env_manager.log_info(f"Error querying NS for {original_domain}: {e}")
+            if isinstance(e, dns.resolver.NoAnswer):
+                pass
 
         patterns = self.env_manager.get_patterns()
         category, recommendation, evidence_link = self.categorise_domain(
