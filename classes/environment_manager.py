@@ -28,10 +28,11 @@ async def write_to_file(file_path, content):
         logger.error(f"Failed to write to {file_path}: {e}")
 
 
-def setup_logger(log_file="dnsresolver.log"):
+def setup_logger(log_file="dnsresolver.log", verbose=False):
     """
     Set up a logger for DNSResolver.
     :param log_file: The log file path.
+    :param verbose: Enable verbose mode for console logging.
     :return: Logger object.
     """
     logger = logging.getLogger("DNSResolver")
@@ -40,9 +41,9 @@ def setup_logger(log_file="dnsresolver.log"):
     if logger.hasHandlers():  # Clear any pre-existing handlers
         logger.handlers.clear()
 
-    # Create console handler with a log level of ERROR (only for errors to console)
+    # Create console handler with a log level of CRITICAL (suppresses output by default)
     ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)  # Defaulting to ERROR to console
+    ch.setLevel(logging.CRITICAL)  # Suppress console output by default
 
     # Create file handler which logs all messages from INFO to higher
     fh = logging.FileHandler(log_file)
@@ -57,6 +58,9 @@ def setup_logger(log_file="dnsresolver.log"):
     # Add the handlers to the logger
     logger.addHandler(ch)
     logger.addHandler(fh)
+
+    if verbose:
+        ch.setLevel(logging.INFO)  # Enable console logging if verbose mode is set
 
     # Test logging to ensure it's working
     logger.info("Logger initialized.")
@@ -286,18 +290,16 @@ class EnvironmentManager:
 
     def update_logger(self):
         """
-        Updates the logger based on the verbosity supplied
+        Updates the logger based on the verbosity supplied.
         """
-        if self.args.verbose:  # If verbose flag is true
+        if self.verbose:  # If verbose flag is true
             for handler in self.logger.handlers:
                 if isinstance(handler, logging.StreamHandler):
                     handler.setLevel(logging.INFO)  # Set console logging level to INFO
         else:
             for handler in self.logger.handlers:
                 if isinstance(handler, logging.StreamHandler):
-                    handler.setLevel(
-                        logging.CRITICAL
-                    )  # Set console logging level to CRITICAL to suppress errors
+                    handler.setLevel(logging.CRITICAL)  # Suppress console logging
 
         # Test logging to verify the update
         self.logger.info("Logger updated based on verbosity.")

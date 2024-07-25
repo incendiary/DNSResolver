@@ -171,20 +171,40 @@ class DNSHandler:
         return nslookup_available, dig_available
 
     async def handle_domain_resolution_errors(
-        self, domain_context, current_domain, error
+        self, domain_context, current_domain, error, final_retry
     ):
+        """
+        Handle domain resolution errors.
+
+        :param domain_context: The domain context instance.
+        :param current_domain: The current domain being processed.
+        :param error: The DNS error that occurred.
+        :param final_retry: Whether this is the final retry.
+        :return: Tuple containing a boolean success status and a list of resolved IP addresses.
+        """
+
+        self.env_manager.log_info(
+            f"Handling DNS error for {current_domain}: {error} | final_retry={final_retry}"
+        )
+
         if self.is_dns_error_present(error, [NXDOMAIN]):
             self.env_manager.log_info(
                 f"{current_domain} not found, checking for dangling CNAME."
             )
             if await self.handle_takeover_checks(domain_context, current_domain):
                 return True, []
-        elif self.is_dns_error_present(error, [SERVFAIL]):
-            await self.log_and_write_dns_error(
-                current_domain, error, "Could not contact DNS servers"
+
+        if final_retry:
+            if self.is_dns_error_present(error, [SERVFAIL]):
+                await self.log_and_write_dns_error(
+                    current_domain, error, "Could not contact DNS servers"
+                )
+            else:
+                await self.log_and_write_dns_error(current_domain, error)
+            self.env_manager.log_error(
+                f"DNS resolution error for {current_domain}: {error} | final_retry={final_retry}"
             )
-        else:
-            await self.log_and_write_dns_error(current_domain, error)
+
         return False, []
 
     async def handle_takeover_checks(self, domain_context, current_domain):
@@ -192,6 +212,7 @@ class DNSHandler:
             domain_context, current_domain
         )
         is_nstakeover = await self.check_ns_takeover(domain_context, current_domain)
+
         if is_dangling or is_nstakeover:
             domain_context.add_dangling_domain_to_domains(current_domain)
         return is_dangling or is_nstakeover
@@ -215,22 +236,35 @@ class DNSHandler:
         """
         resolved_records = []
         current_domain = domain_context.get_domain()
-        random_nameserver = self.env_manager.get_random_nameserver()
-        if random_nameserver:
-            self.resolver.nameservers = [random_nameserver]
-            self.env_manager.log_info(
-                f"Using nameserver {random_nameserver} for resolving {current_domain}"
-            )
-        try:
-            answers = await self.resolver.query(current_domain, "A")
-            final_ips = [answer.host for answer in answers]
-            resolved_records.append(("A", final_ips))
-            await self.handle_takeover_checks(domain_context, current_domain)
-            return True, final_ips
-        except aiodns.error.DNSError as e:
-            return await self.handle_domain_resolution_errors(
-                domain_context, current_domain, e
-            )
+        retries = self.env_manager.get_retries()
+
+        for attempt in range(retries + 1):
+            random_nameserver = self.env_manager.get_random_nameserver()
+            if random_nameserver:
+                self.resolver.nameservers = [random_nameserver]
+                if self.env_manager.get_verbose():
+                    self.env_manager.log_info(
+                        f"Using nameserver {random_nameserver} for resolving {current_domain}"
+                    )
+
+            try:
+                answers = await self.resolver.query(current_domain, "A")
+                final_ips = [answer.host for answer in answers]
+                resolved_records.append(("A", final_ips))
+                await self.handle_takeover_checks(domain_context, current_domain)
+                return True, final_ips
+            except aiodns.error.DNSError as e:
+                self.env_manager.log_info(
+                    f"DNS error on attempt {attempt + 1} of {retries + 1} for {current_domain}: {e}"
+                )
+                final_retry = attempt == retries
+                await self.handle_domain_resolution_errors(
+                    domain_context, current_domain, e, final_retry
+                )
+                if final_retry:
+                    return False, []
+
+        return False, []
 
     async def save_and_log_dns_result(
         self, result, domain, nameserver, reason, evidence_dir, command_name
@@ -347,17 +381,36 @@ class DNSHandler:
         random_nameserver = self.env_manager.get_random_nameserver()
         if random_nameserver:
             self.resolver.nameservers = [random_nameserver]
-            self.env_manager.log_info(
-                f"Using nameserver {random_nameserver} for resolving {current_domain}"
-            )
+            if self.env_manager.get_verbose():
+                self.env_manager.log_info(
+                    f"Using nameserver {random_nameserver} for resolving {current_domain}"
+                )
 
+        # Check if the domain is a CNAME
+        try:
+            cname_answers = await self.resolver.query(current_domain, "CNAME")
+            if cname_answers:
+                self.env_manager.log_info(f"Domain {current_domain} is a CNAME record.")
+                for cname in cname_answers:
+                    target = cname.host
+                    self.env_manager.log_info(f"CNAME target: {target}")
+                    if await self.check_dangling_cname_async(domain_context, target):
+                        return True
+        except aiodns.error.DNSError as e:
+            if not self.is_dns_error_present(e, [NXDOMAIN]):
+                return False
+
+        # Check for dangling A, AAAA, MX records
         for record_type in ["A", "AAAA", "MX"]:
             if not await self.is_dangling_record_async(
                 self.resolver, current_domain, record_type
             ):
                 return False
 
-        if not await self.is_dangling_record_async(self.resolver, current_domain, "NS"):
+        # Check NS records for original domain
+        if not await self.is_dangling_record_async(
+            self.resolver, original_domain, "NS"
+        ):
             await self.env_manager.write_to_file(
                 output_files["standard"]["ns_takeover"],
                 f"{original_domain}|{current_domain}",
