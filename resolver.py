@@ -30,30 +30,24 @@ async def main_async():
     )
 
     env_manager.set_domains()
+    current_domains = list(env_manager.domains)
+    failed_domains = set()
 
-    for attempt in range(env_manager.retries + 1):
-        if not env_manager.domains:
-            break
+    with tqdm(
+        total=len(current_domains),
+        desc=f"Processing Domains",
+    ) as pbar:
+        tasks = [
+            process_domain_async(domain, env_manager, pbar, csp_ip_addresses)
+            for domain in current_domains
+        ]
+        results = await asyncio.gather(*tasks)
 
-        current_domains = list(env_manager.domains)
-        env_manager.domains.clear()
-        failed_domains = set()
+    for domain, (success, final_ips) in zip(current_domains, results):
+        if not success:
+            failed_domains.add(domain)
 
-        with tqdm(
-            total=len(current_domains),
-            desc=f"Processing Domains (Attempt {attempt + 1})",
-        ) as pbar:
-            tasks = [
-                process_domain_async(domain, env_manager, pbar, csp_ip_addresses)
-                for domain in current_domains
-            ]
-            results = await asyncio.gather(*tasks)
-
-        for domain, (success, final_ips) in zip(current_domains, results):
-            if not success:
-                failed_domains.add(domain)
-
-        env_manager.domains.update(failed_domains)
+    env_manager.domains.update(failed_domains)
 
     env_manager.log_info(
         "All resolutions completed. Results saved to %s", env_manager.get_output_dir()
