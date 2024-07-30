@@ -1,4 +1,5 @@
 """
+Release 1.0
 This python module resolves DNS records for a given list of domains
 and checks them against the known IP ranges of major cloud providers
 (AWS, GCP, and Azure).
