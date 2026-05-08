@@ -101,6 +101,40 @@ Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`)
 
 `config.json` sets defaults for timeout, retries, output directory, and domain categorisation patterns used for classifying dangling CNAME targets (e.g. AWS S3, GitHub Pages, Heroku). CLI flags always override config file values.
 
+## Planned integrations
+
+DNSResolver is intentionally scoped to resolution and takeover detection. The following tools are natural upstream sources that feed into it — integration as first-class inputs is planned for a future release.
+
+### Subdomain enumeration
+
+| Tool | Purpose | Pipe into DNSResolver |
+|------|---------|----------------------|
+| [subfinder](https://github.com/projectdiscovery/subfinder) | Passive enumeration via 40+ sources (CT logs, VirusTotal, Shodan, etc.) | `subfinder -d example.com -silent \| sort -u > domains.txt` |
+| [amass](https://github.com/owasp-amass/amass) | Active + passive enumeration, broader source coverage | `amass enum -passive -d example.com -o domains.txt` |
+| [crt.sh](https://crt.sh) | Certificate transparency log query (no tooling required) | see example above |
+
+### TLD and permutation variants
+
+[dnstwist](https://github.com/elceef/dnstwist) generates typosquatting variants and TLD permutations for a root domain, then resolves them. Registered variants can be piped directly into DNSResolver for takeover and CSP analysis:
+
+```bash
+dnstwist --registered example.com | awk '{print $2}' | sort -u > variants.txt
+python resolver.py variants.txt -o results --evidence -v
+```
+
+### Related domain discovery (OSINT)
+
+Corporate subsidiaries and related domains (shared registrant, ASN, or SSL organisation) are out of scope for DNS resolution but are valid upstream inputs. Useful signals:
+
+| Signal | Tool |
+|--------|------|
+| Same registrant org / email in Whois | `whois`, [SpiderFoot](https://github.com/smicallef/spiderfoot) |
+| Same ASN / IP block | [BGPView](https://bgpview.io), `shodan search org:"Example Corp"` |
+| Same SSL organisation name | [crt.sh](https://crt.sh) search by org |
+| Reverse IP / shared hosting | Shodan, SecurityTrails |
+
+The intended workflow once these integrations land: OSINT tool produces related root domains → subfinder/amass enumerates subdomains per root → DNSResolver processes the combined list → downstream pipeline claims dangling resources.
+
 ## Contributing
 
 1. Fork the repository
