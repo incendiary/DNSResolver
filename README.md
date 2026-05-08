@@ -6,9 +6,10 @@ DNSResolver is a Python-based security tool for bulk DNS resolution and cloud in
 - Detects **dangling CNAME** records pointing to unclaimed cloud resources (potential subdomain takeover)
 - Detects **NS takeover** opportunities where nameservers are unresolvable
 - Collects forensic evidence (dig/nslookup output) for flagged domains
-- Performs optional **service connectivity checks** (HTTP, TLS, TCP port scanning)
 
 All domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
+
+> **v1.1.0 scope change:** Service connectivity checks (HTTP probing, TLS/SSL certificate validation, TCP port scanning, and Selenium screenshots) have been removed. These features introduced a heavy browser dependency, made active connections to every resolved domain, and were out of scope for a DNS-focused tool. The core mission is DNS resolution, cloud IP matching, and subdomain takeover detection.
 
 ## Demonstration
 
@@ -41,7 +42,6 @@ python resolver.py <domains_file> [options]
 | `--verbose` | `-v` | Enable verbose logging |
 | `--extreme` | `-e` | Enable extreme logging (includes full IP range dumps, implies `-v`) |
 | `--nameservers` | | Comma-separated custom resolvers, e.g. `8.8.8.8,1.1.1.1` |
-| `--service-checks` | `-sc` | Enable HTTP/TLS/TCP service connectivity checks |
 | `--max-threads` | `-mt` | Max concurrent domain tasks (default: 50) |
 | `--timeout` | `-t` | DNS query timeout in seconds |
 | `--retries` | | Retry attempts for failed domains (default from config) |
@@ -78,7 +78,7 @@ resolver.py          — asyncio entry point, retry loop, concurrency cap
 │   └── EvidenceCollector — async subprocess evidence capture (dig/nslookup)
 ├── DomainProcessingContext — per-domain state (domain name, resolver, CSP IPs)
 ├── CSPIPAddresses       — value object holding fetched AWS/GCP/Azure IP ranges
-└── domain_processor.py  — orchestrates DNS → CSP checks → service checks per domain
+└── domain_processor.py  — orchestrates DNS → CSP checks per domain
 ```
 
 Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`) to run many domains concurrently without exhausting file descriptors or triggering DNS rate limits. Failed domains are collected after each pass and retried up to `--retries` times.
