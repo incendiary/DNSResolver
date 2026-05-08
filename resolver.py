@@ -3,6 +3,7 @@ import asyncio
 from tqdm import tqdm
 
 from classes.csp_ip_addresses import CSPIPAddresses
+from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
@@ -32,6 +33,7 @@ async def main_async():
     env_manager.set_domains()
     domains_to_process = list(env_manager.domains)
     retries = env_manager.get_retries()
+    dns_handler = DNSHandler(env_manager)
 
     for attempt in range(retries + 1):
         if not domains_to_process:
@@ -42,7 +44,7 @@ async def main_async():
             desc=f"Processing Domains (Attempt {attempt + 1} of {retries + 1})",
         ) as pbar:
             tasks = [
-                process_domain_async(domain, env_manager, pbar, csp_ip_addresses)
+                process_domain_async(domain, env_manager, pbar, csp_ip_addresses, dns_handler)
                 for domain in domains_to_process
             ]
             results = await asyncio.gather(*tasks)
