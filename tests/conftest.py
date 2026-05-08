@@ -12,7 +12,6 @@ import pytest
 
 from classes.csp_ip_addresses import CSPIPAddresses
 
-
 # ---------------------------------------------------------------------------
 # IP range data
 # ---------------------------------------------------------------------------
@@ -28,12 +27,15 @@ AZURE_IPV6 = ["2603:1000::/24"]
 @pytest.fixture
 def csp_ips():
     """A real CSPIPAddresses instance populated with test ranges."""
-    return CSPIPAddresses(GCP_IPV4, GCP_IPV6, AWS_IPV4, AWS_IPV6, AZURE_IPV4, AZURE_IPV6)
+    return CSPIPAddresses(
+        GCP_IPV4, GCP_IPV6, AWS_IPV4, AWS_IPV6, AZURE_IPV4, AZURE_IPV6
+    )
 
 
 # ---------------------------------------------------------------------------
 # Fake environment manager
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_env_manager():

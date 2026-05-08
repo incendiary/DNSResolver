@@ -1,7 +1,7 @@
 import asyncio
+import os
 import platform
 import subprocess
-import os
 
 
 class EvidenceCollector:

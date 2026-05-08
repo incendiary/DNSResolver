@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from datetime import datetime
 
 from classes.environment_manager import EnvironmentManager

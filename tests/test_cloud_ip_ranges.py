@@ -8,7 +8,6 @@ logic without making real network requests.
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
 
 from imports.cloud_ip_ranges import (
@@ -40,7 +39,10 @@ GCP_PAYLOAD = {
 
 
 def test_fetch_ip_ranges_returns_ipv4_and_ipv6():
-    with patch("imports.cloud_ip_ranges.requests.get", return_value=_mock_response(body=GCP_PAYLOAD)):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        return_value=_mock_response(body=GCP_PAYLOAD),
+    ):
         v4, v6 = fetch_ip_ranges("http://fake-url")
 
     assert "34.0.0.0/8" in v4
@@ -48,7 +50,10 @@ def test_fetch_ip_ranges_returns_ipv4_and_ipv6():
 
 
 def test_fetch_ip_ranges_non_200_returns_empty():
-    with patch("imports.cloud_ip_ranges.requests.get", return_value=_mock_response(status_code=503)):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        return_value=_mock_response(status_code=503),
+    ):
         v4, v6 = fetch_ip_ranges("http://fake-url")
 
     assert v4 == []
@@ -56,7 +61,10 @@ def test_fetch_ip_ranges_non_200_returns_empty():
 
 
 def test_fetch_ip_ranges_missing_prefixes_key_returns_empty():
-    with patch("imports.cloud_ip_ranges.requests.get", return_value=_mock_response(body={"other": []})):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        return_value=_mock_response(body={"other": []}),
+    ):
         v4, v6 = fetch_ip_ranges("http://fake-url")
 
     assert v4 == []
@@ -64,7 +72,10 @@ def test_fetch_ip_ranges_missing_prefixes_key_returns_empty():
 
 
 def test_fetch_ip_ranges_request_exception_returns_empty():
-    with patch("imports.cloud_ip_ranges.requests.get", side_effect=requests.exceptions.RequestException("timeout")):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        side_effect=requests.exceptions.RequestException("timeout"),
+    ):
         v4, v6 = fetch_ip_ranges("http://fake-url")
 
     assert v4 == []
@@ -72,7 +83,10 @@ def test_fetch_ip_ranges_request_exception_returns_empty():
 
 
 def test_fetch_ip_ranges_extreme_flag_does_not_raise():
-    with patch("imports.cloud_ip_ranges.requests.get", return_value=_mock_response(body=GCP_PAYLOAD)):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        return_value=_mock_response(body=GCP_PAYLOAD),
+    ):
         v4, v6 = fetch_ip_ranges("http://fake-url", extreme=True)
 
     assert "34.0.0.0/8" in v4
@@ -83,18 +97,15 @@ def test_fetch_ip_ranges_extreme_flag_does_not_raise():
 # ---------------------------------------------------------------------------
 
 AZURE_PAYLOAD = {
-    "values": [
-        {
-            "properties": {
-                "addressPrefixes": ["13.64.0.0/11", "2603:1010::/48"]
-            }
-        }
-    ]
+    "values": [{"properties": {"addressPrefixes": ["13.64.0.0/11", "2603:1010::/48"]}}]
 }
 
 
 def test_fetch_ip_ranges_for_azure_splits_ipv4_and_ipv6():
-    with patch("imports.cloud_ip_ranges.requests.get", return_value=_mock_response(body=AZURE_PAYLOAD)):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        return_value=_mock_response(body=AZURE_PAYLOAD),
+    ):
         v4, v6 = fetch_ip_ranges_for_azure("http://fake-azure-url", extreme=False)
 
     assert "13.64.0.0/11" in v4
@@ -102,7 +113,10 @@ def test_fetch_ip_ranges_for_azure_splits_ipv4_and_ipv6():
 
 
 def test_fetch_ip_ranges_for_azure_non_200_returns_empty():
-    with patch("imports.cloud_ip_ranges.requests.get", return_value=_mock_response(status_code=404)):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        return_value=_mock_response(status_code=404),
+    ):
         v4, v6 = fetch_ip_ranges_for_azure("http://fake-azure-url", extreme=False)
 
     assert v4 == []
@@ -110,7 +124,10 @@ def test_fetch_ip_ranges_for_azure_non_200_returns_empty():
 
 
 def test_fetch_ip_ranges_for_azure_extreme_does_not_raise():
-    with patch("imports.cloud_ip_ranges.requests.get", return_value=_mock_response(body=AZURE_PAYLOAD)):
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        return_value=_mock_response(body=AZURE_PAYLOAD),
+    ):
         v4, v6 = fetch_ip_ranges_for_azure("http://fake-azure-url", extreme=True)
 
     assert "13.64.0.0/11" in v4
@@ -120,8 +137,12 @@ def test_fetch_ip_ranges_for_azure_extreme_does_not_raise():
 # Wrapper functions — confirm they call fetch_ip_ranges and write a JSON file
 # ---------------------------------------------------------------------------
 
+
 def test_fetch_google_cloud_ip_ranges_writes_json(tmp_path):
-    with patch("imports.cloud_ip_ranges.fetch_ip_ranges", return_value=(["34.0.0.0/8"], ["2600::/28"])):
+    with patch(
+        "imports.cloud_ip_ranges.fetch_ip_ranges",
+        return_value=(["34.0.0.0/8"], ["2600::/28"]),
+    ):
         result = fetch_google_cloud_ip_ranges(str(tmp_path))
 
     assert result == (["34.0.0.0/8"], ["2600::/28"])
@@ -129,7 +150,9 @@ def test_fetch_google_cloud_ip_ranges_writes_json(tmp_path):
 
 
 def test_fetch_aws_ip_ranges_writes_json(tmp_path):
-    with patch("imports.cloud_ip_ranges.fetch_ip_ranges", return_value=(["52.0.0.0/8"], [])):
+    with patch(
+        "imports.cloud_ip_ranges.fetch_ip_ranges", return_value=(["52.0.0.0/8"], [])
+    ):
         result = fetch_aws_ip_ranges(str(tmp_path))
 
     assert result == (["52.0.0.0/8"], [])
@@ -143,8 +166,13 @@ def test_fetch_azure_ip_ranges_writes_json(tmp_path):
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
 
-    with patch("imports.cloud_ip_ranges.urlopen", return_value=mock_resp), \
-         patch("imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=(["13.64.0.0/11"], [])):
+    with (
+        patch("imports.cloud_ip_ranges.urlopen", return_value=mock_resp),
+        patch(
+            "imports.cloud_ip_ranges.fetch_ip_ranges_for_azure",
+            return_value=(["13.64.0.0/11"], []),
+        ),
+    ):
         result = fetch_azure_ip_ranges(str(tmp_path))
 
     assert result == (["13.64.0.0/11"], [])

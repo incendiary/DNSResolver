@@ -3,16 +3,16 @@ import json
 import re
 
 import aiodns
-import dns.resolver
 import dns.exception
+import dns.resolver
 
 from classes.evidence_collector import EvidenceCollector
 
 # pycares errno values (not DNS RCODEs — see pycares.errno)
-NO_DATA = 1   # ARES_ENODATA
+NO_DATA = 1  # ARES_ENODATA
 SERVFAIL = 3  # ARES_ESERVFAIL
 NXDOMAIN = 4  # ARES_ENOTFOUND
-REFUSED = 6   # ARES_EREFUSED
+REFUSED = 6  # ARES_EREFUSED
 TIMEOUT = 12  # ARES_ETIMEOUT
 
 

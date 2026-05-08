@@ -222,5 +222,3 @@ def log_and_write(vendor, matched_ips, domain, output_files, domain_context):
 
         return True
     return False
-
-

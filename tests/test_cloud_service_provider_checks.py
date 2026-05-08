@@ -6,6 +6,8 @@ This module is pure Python (ipaddress + file I/O) so it's very testable.
 directory for each test — perfect for functions that write output files.
 """
 
+import ipaddress
+
 import pytest
 
 from classes.domain_processing_context import DomainProcessingContext
@@ -18,12 +20,11 @@ from imports.cloud_service_provider_checks import (
     merge_matches,
     perform_csp_checks,
 )
-import ipaddress
-
 
 # ---------------------------------------------------------------------------
 # Fixture: a domain context pre-loaded with test IP ranges
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def ctx(mock_env_manager, csp_ips):
@@ -35,6 +36,7 @@ def ctx(mock_env_manager, csp_ips):
 # ---------------------------------------------------------------------------
 # is_ip_version
 # ---------------------------------------------------------------------------
+
 
 def test_is_ip_version_ipv4_correct():
     assert is_ip_version("34.1.2.3", 4) is True
@@ -55,6 +57,7 @@ def test_is_ip_version_ipv6_rejected_for_v4():
 # ---------------------------------------------------------------------------
 # get_vendor_ips
 # ---------------------------------------------------------------------------
+
 
 def test_get_vendor_ips_ipv4_returns_correct_ranges(ctx, csp_ips):
     result = get_vendor_ips(ctx, ip_version=4)
@@ -77,6 +80,7 @@ def test_get_vendor_ips_unknown_version_returns_empty(ctx):
 # ---------------------------------------------------------------------------
 # match_ip_with_vendors
 # ---------------------------------------------------------------------------
+
 
 def test_match_ip_with_vendors_records_match(ctx):
     ip_obj = ipaddress.IPv4Address("34.1.2.3")
@@ -114,6 +118,7 @@ def test_match_ip_with_vendors_ignores_invalid_range(ctx):
 # merge_matches
 # ---------------------------------------------------------------------------
 
+
 def test_merge_matches_combines_ipv4_and_ipv6():
     v4 = {"gcp": {"1.2.3.4"}, "aws": set()}
     v6 = {"gcp": {"::1"}, "aws": set()}
@@ -136,6 +141,7 @@ def test_merge_matches_empty_sets():
 # get_ip_matches
 # ---------------------------------------------------------------------------
 
+
 def test_get_ip_matches_finds_gcp_ipv4(ctx, csp_ips):
     # 34.1.2.3 falls in GCP's 34.0.0.0/8 range (from conftest)
     result = get_ip_matches(["34.1.2.3"], get_vendor_ips(ctx, 4), ctx, ip_version=4)
@@ -151,6 +157,7 @@ def test_get_ip_matches_skips_wrong_ip_version(ctx):
 # ---------------------------------------------------------------------------
 # log_and_write  (uses tmp_path for real file I/O)
 # ---------------------------------------------------------------------------
+
 
 def test_log_and_write_creates_entry(tmp_path, ctx):
     out_file = tmp_path / "gcp.txt"
@@ -172,7 +179,7 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
     log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
     log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
 
-    lines = [l for l in out_file.read_text().splitlines() if l]
+    lines = [ln for ln in out_file.read_text().splitlines() if ln]
     assert len(lines) == 1
 
 
@@ -189,6 +196,7 @@ def test_log_and_write_empty_ips_returns_false(tmp_path, ctx):
 # ---------------------------------------------------------------------------
 # perform_csp_checks  (end-to-end through the module)
 # ---------------------------------------------------------------------------
+
 
 def test_perform_csp_checks_matches_gcp_ip(tmp_path, mock_env_manager, ctx):
     gcp_file = tmp_path / "gcp.txt"
@@ -222,6 +230,8 @@ def test_perform_csp_checks_no_match_returns_false(tmp_path, mock_env_manager, c
         }
     }
 
-    result = perform_csp_checks(ctx, mock_env_manager, ["192.0.2.1"])  # TEST-NET, no match
+    result = perform_csp_checks(
+        ctx, mock_env_manager, ["192.0.2.1"]
+    )  # TEST-NET, no match
 
     assert result is False

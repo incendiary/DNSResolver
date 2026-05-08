@@ -3,9 +3,6 @@
 import json
 import logging
 import os
-from unittest.mock import patch, mock_open
-
-import pytest
 
 from classes.lambda_environment_manager import LambdaEnvironmentManager
 
@@ -18,7 +15,12 @@ def _make_manager(tmp_path, domains_file=None, **kwargs):
         domains_file = str(d)
 
     config = {
-        "config": {"timeout": 5, "retries": 2, "max_threads": 10, "output_dir": str(tmp_path)},
+        "config": {
+            "timeout": 5,
+            "retries": 2,
+            "max_threads": 10,
+            "output_dir": str(tmp_path),
+        },
         "domain_categorisation": {},
     }
     config_path = tmp_path / "config.json"

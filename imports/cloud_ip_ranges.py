@@ -38,7 +38,9 @@ def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List]:
     try:
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
-            print(f"Failed to fetch IP ranges for Azure. Status code: {response.status_code}")
+            print(
+                f"Failed to fetch IP ranges for Azure. Status code: {response.status_code}"
+            )
             return [], []
 
         data = json.loads(response.text)
@@ -112,7 +114,9 @@ def fetch_ip_ranges(url: str, extreme: bool = False) -> Tuple[List, List]:
     return [], []
 
 
-def fetch_google_cloud_ip_ranges(output_dir: str, extreme: bool = False) -> Tuple[List, List]:
+def fetch_google_cloud_ip_ranges(
+    output_dir: str, extreme: bool = False
+) -> Tuple[List, List]:
     """
     Fetch Google Cloud IP ranges and save as JSON.
 
@@ -122,7 +126,9 @@ def fetch_google_cloud_ip_ranges(output_dir: str, extreme: bool = False) -> Tupl
     """
     url = "https://www.gstatic.com/ipranges/cloud.json"
     ranges = fetch_ip_ranges(url, extreme)
-    with open(os.path.join(output_dir, "gcp_ip_ranges.json"), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(output_dir, "gcp_ip_ranges.json"), "w", encoding="utf-8"
+    ) as f:
         json.dump(ranges, f, indent=4)
     return ranges
 
@@ -137,7 +143,9 @@ def fetch_aws_ip_ranges(output_dir: str, extreme: bool = False) -> Tuple[List, L
     """
     url = "https://ip-ranges.amazonaws.com/ip-ranges.json"
     ranges = fetch_ip_ranges(url, extreme)
-    with open(os.path.join(output_dir, "aws_ip_ranges.json"), "w", encoding="utf-8") as f:
+    with open(
+        os.path.join(output_dir, "aws_ip_ranges.json"), "w", encoding="utf-8"
+    ) as f:
         json.dump(ranges, f, indent=4)
     return ranges
 
@@ -154,7 +162,9 @@ def fetch_azure_ip_ranges(output_dir: str, extreme: bool = False) -> Tuple[List,
     try:
         with urlopen(url) as response:
             html = response.read().decode("utf-8")
-            download_link = re.search(r'https://download\.microsoft\.com/download/[^"]+', html)
+            download_link = re.search(
+                r'https://download\.microsoft\.com/download/[^"]+', html
+            )
             if download_link:
                 json_url = download_link.group(0)
                 ranges = fetch_ip_ranges_for_azure(json_url, extreme)
