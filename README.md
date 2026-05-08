@@ -53,6 +53,20 @@ python resolver.py <domains_file> [options]
 python resolver.py domains.txt -o results --evidence -v --nameservers 8.8.8.8,1.1.1.1 --timeout 5 --retries 2
 ```
 
+### Building a domain list from certificate transparency
+
+DNSResolver takes a flat list of domains as input — it does not enumerate subdomains itself. A quick way to build one passively is to query certificate transparency logs via [crt.sh](https://crt.sh):
+
+```bash
+curl -s "https://crt.sh/?q=%25.example.com&output=json" \
+  | python3 -c "import json,sys; names=set(); [names.update(e['name_value'].split('\n')) for e in json.load(sys.stdin)]; [print(n.lstrip('*.')) for n in sorted(names)]" \
+  | sort -u > domains.txt
+
+python resolver.py domains.txt -o results --evidence -v --nameservers 8.8.8.8,1.1.1.1 --timeout 5 --retries 2
+```
+
+Replace `example.com` with the root domain you are assessing. For more comprehensive subdomain discovery, tools such as `subfinder` or `amass` can be used to generate the input list.
+
 ## Output
 
 Each run creates a timestamped subdirectory under the output directory containing:
