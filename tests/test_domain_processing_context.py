@@ -76,3 +76,29 @@ def test_resolver_is_none_before_create(ctx):
 def test_create_resolver_produces_resolver(ctx):
     ctx.create_resolver()
     assert ctx.get_resolver() is not None
+
+
+# ---------------------------------------------------------------------------
+# Setters and secondary getters
+# ---------------------------------------------------------------------------
+
+def test_set_current_domain(ctx):
+    ctx.set_current_domain("sub.example.com")
+    assert ctx.get_current_domain() == "sub.example.com"
+
+
+def test_set_dangling_domains_replaces_set(ctx):
+    new_set = {"already-dangling.com"}
+    ctx.set_dangling_domains(new_set)
+    assert ctx.get_dangling_domains() is new_set
+
+
+def test_set_failed_domains_replaces_set(ctx):
+    new_set = {"broken.example.com"}
+    ctx.set_failed_domains(new_set)
+    assert ctx.get_failed_domains() is new_set
+
+
+def test_get_domain_returns_set_value(ctx):
+    ctx.set_domain("other.example.com")
+    assert ctx.get_domain() == "other.example.com"

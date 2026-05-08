@@ -84,7 +84,6 @@ class EnvironmentManager:
         verbose (bool): Flag indicating whether to enable verbose mode.
         extreme (bool): Flag indicating whether to enable extreme mode.
         nameservers (list): A list of custom nameservers.
-        service_checks (bool): Flag indicating whether to perform service checks.
         max_threads (int): The maximum number of threads to use for domain processing.
         timeout (int): The timeout for the DNS resolution process in seconds.
         retries (int): The number of retry attempts for timeouts.
@@ -111,7 +110,6 @@ class EnvironmentManager:
         self.verbose = None
         self.extreme = None
         self.nameservers = None
-        self.service_checks = None
         self.max_threads = None
         self.timeout = None
         self.retries = None
@@ -164,8 +162,8 @@ class EnvironmentManager:
         parser.add_argument(
             "--config-file",
             type=str,
-            default="output",
-            help="Path to the configuration file (default: None)",
+            default="config.json",
+            help="Path to the configuration file (default: config.json)",
         )
         parser.add_argument(
             "--output-dir",
@@ -189,12 +187,6 @@ class EnvironmentManager:
             "--nameservers",
             type=str,
             help="Comma-separated list of custom nameservers. Overrides system resolvers.",
-        )
-        parser.add_argument(
-            "--service-checks",
-            "-sc",
-            action="store_true",
-            help="Perform Service Checks (overrides config file)",
         )
         parser.add_argument(
             "--max-threads",
@@ -331,7 +323,6 @@ class EnvironmentManager:
         self.output_dir = self.args.output_dir
         self.verbose = self.args.verbose
         self.extreme = self.args.extreme
-        self.service_checks = self.args.service_checks
         self.max_threads = self.args.max_threads
         self.timeout = self.args.timeout
         self.retries = self.args.retries
@@ -339,12 +330,11 @@ class EnvironmentManager:
 
         self.logger.info(
             "Arguments set: domains_file=%s, output_dir=%s, verbose=%s, extreme=%s,"
-            " service_checks=%s, max_threads=%d, timeout=%d, retries=%d, evidence=%s",
+            " max_threads=%s, timeout=%s, retries=%s, evidence=%s",
             self.domains_file,
             self.output_dir,
             self.verbose,
             self.extreme,
-            self.service_checks,
             self.max_threads,
             self.timeout,
             self.retries,
@@ -402,27 +392,6 @@ class EnvironmentManager:
             }
         }
 
-        if self.service_checks:
-            output_files["service_checks"] = {
-                "ssl_tls_failure_file": os.path.join(
-                    self.output_dir,
-                    f"ssl_tls_failure_results_{self.timestamp}.txt",
-                ),
-                "http_failure_file": os.path.join(
-                    self.output_dir, f"http_failure_results_{self.timestamp}.txt"
-                ),
-                "tcp_common_ports_unreachable_file": os.path.join(
-                    self.output_dir,
-                    f"tls_common_ports_unreachable_{self.timestamp}.txt",
-                ),
-                "screenshot_dir": os.path.join(
-                    self.output_dir, f"evidence/screenshot_results_{self.timestamp}"
-                ),
-                "screenshot_failures": os.path.join(
-                    self.output_dir, f"failure_results_{self.timestamp}.txt"
-                ),
-            }
-
         if self.evidence:
             output_files["evidence"] = {
                 "dns": os.path.join(self.output_dir, "evidence", "dns"),
@@ -436,7 +405,7 @@ class EnvironmentManager:
             for description, path in files.items():
                 if os.path.exists(path):
                     self.logger.info(f"Successfully created file: {path}")
-                elif self.service_checks or category != "service_checks":
+                else:
                     self.logger.error(f"Failed to create file: {path}")
 
     def save_environment_info(self):
@@ -500,10 +469,6 @@ class EnvironmentManager:
         """
         for _, value in self.output_files.get("standard", {}).items():
             self.create_empty_file_or_directory(value)
-
-        if self.service_checks:
-            for _, value in self.output_files.get("service_checks", {}).items():
-                self.create_empty_file_or_directory(value)
 
         if "evidence" in self.output_files:
             for value in self.output_files["evidence"].values():
@@ -652,12 +617,6 @@ class EnvironmentManager:
 
     def set_resolvers(self, resolvers):
         self.nameservers = resolvers
-
-    def get_service_checks(self):
-        return self.service_checks
-
-    def set_service_checks(self, service_checks):
-        self.service_checks = service_checks
 
     def get_max_threads(self):
         return self.max_threads

@@ -24,10 +24,6 @@ Functions:
     log_and_write: Logs and writes matched IP addresses to the specified
     output files.
 
-    log_cloud_ips: Logs the resolved cloud IPs for a given domain.
-
-    process_domains: Processes a list of domains with retries, checking them
-    against CSP IP ranges.
 
 Usage:
     This module is typically used as part of a larger DNS resolution and
@@ -228,34 +224,3 @@ def log_and_write(vendor, matched_ips, domain, output_files, domain_context):
     return False
 
 
-def log_cloud_ips(matches, domain, domain_context):
-    """
-    Logs cloud IPs for a resolved domain.
-
-    :param matches: Dictionary with provider to IP list mapping
-    :param domain: Resolved domain
-    :param domain_context: The domain context instance.
-    :return: None
-    """
-    domain_context.log_info(f"{domain} resolved to cloud IPs:")
-    for vendor, matched_ips in matches.items():
-        if matched_ips:
-            domain_context.log_info(f"  {vendor}: {matched_ips}")
-
-
-def process_domains(domains, domain_context, env_manager):
-    """
-    Processes a list of domains with retries, checking them against CSP IP ranges.
-
-    :param domains: List of domains to process
-    :type domains: list[str]
-    :param domain_context: An instance of DomainProcessingContext
-    :type domain_context: DomainProcessingContext
-    :param env_manager: An instance of EnvironmentManager
-    :type env_manager: EnvironmentManager
-    :return: None
-    """
-    for _ in range(env_manager.get_retries() + 1):
-        success = perform_csp_checks(domain_context, env_manager, domains)
-        if success:
-            break

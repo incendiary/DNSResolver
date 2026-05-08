@@ -8,12 +8,12 @@ import dns.exception
 
 from classes.evidence_collector import EvidenceCollector
 
-# Define constants for DNS error codes
-NXDOMAIN = 3
-SERVFAIL = 2
-NO_DATA = 1
-TIMEOUT = 4
-REFUSED = 5
+# pycares errno values (not DNS RCODEs — see pycares.errno)
+NO_DATA = 1   # ARES_ENODATA
+SERVFAIL = 3  # ARES_ESERVFAIL
+NXDOMAIN = 4  # ARES_ENOTFOUND
+REFUSED = 6   # ARES_EREFUSED
+TIMEOUT = 12  # ARES_ETIMEOUT
 
 
 class DNSHandler:
@@ -196,6 +196,7 @@ class DNSHandler:
         except (
             dns.resolver.NoAnswer,
             dns.resolver.NXDOMAIN,
+            dns.resolver.NoNameservers,
             dns.exception.Timeout,
         ) as e:
             self.env_manager.log_info(
@@ -275,9 +276,11 @@ class DNSHandler:
                     f"DNS error on attempt {attempt + 1} of {retries + 1} for {current_domain}: {e}"
                 )
                 final_retry = attempt == retries
-                await self.handle_domain_resolution_errors(
+                success, ips = await self.handle_domain_resolution_errors(
                     domain_context, current_domain, e, final_retry
                 )
+                if success:
+                    return success, ips
                 if final_retry:
                     self.env_manager.log_info(
                         f"Failed to resolve {current_domain} after {retries + 1} attempts."
@@ -331,9 +334,10 @@ class DNSHandler:
                     f"Error querying {record_type} for {current_domain}: {e}"
                 )
                 if self.is_dns_error_present(e, [NO_DATA]):
-                    continue
-                if self.is_dns_error_present(e, [TIMEOUT]):
-                    return False
+                    continue  # no record of this type, try next
+                if self.is_dns_error_present(e, [NXDOMAIN]):
+                    break  # domain confirmed non-existent, fall through to dangling write
+                return False  # SERVFAIL, TIMEOUT, REFUSED — not conclusive
 
         # Check NS records for current_domain to detect potential NS takeover
         try:
