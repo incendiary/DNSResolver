@@ -162,8 +162,8 @@ class EnvironmentManager:
         parser.add_argument(
             "--config-file",
             type=str,
-            default="output",
-            help="Path to the configuration file (default: None)",
+            default="config.json",
+            help="Path to the configuration file (default: config.json)",
         )
         parser.add_argument(
             "--output-dir",
@@ -330,7 +330,7 @@ class EnvironmentManager:
 
         self.logger.info(
             "Arguments set: domains_file=%s, output_dir=%s, verbose=%s, extreme=%s,"
-            " max_threads=%d, timeout=%d, retries=%d, evidence=%s",
+            " max_threads=%s, timeout=%s, retries=%s, evidence=%s",
             self.domains_file,
             self.output_dir,
             self.verbose,
