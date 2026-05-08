@@ -339,6 +339,7 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#37](https://github.com/incendiary/DNSResolver/issues/37) | ✅ v1.2.0 | AWS Lambda / S3 support — `lambda_handler.py` entrypoint with S3 I/O |
 | [#41](https://github.com/incendiary/DNSResolver/issues/41) | 🔲 planned | Refactor `EnvironmentManager` into focused single-responsibility classes; replace Java-style getters with direct attribute access |
 | [#42](https://github.com/incendiary/DNSResolver/issues/42) | 🔲 planned | Enforce code style with Black, isort, flake8, and pre-commit hooks |
+| [#43](https://github.com/incendiary/DNSResolver/issues/43) | 🔲 planned | Refactor `DNSHandler` — split resolution, takeover detection, and categorisation into focused classes |
 
 ## Contributing
 
