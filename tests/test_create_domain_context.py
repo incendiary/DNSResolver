@@ -27,7 +27,9 @@ def test_dangling_domains_is_the_passed_set(mock_env_manager, csp_ips):
     reading domain_context.dangling_domains after the coroutine finishes.
     """
     dangling = set()
-    ctx = create_domain_context("example.com", mock_env_manager, dangling, set(), csp_ips)
+    ctx = create_domain_context(
+        "example.com", mock_env_manager, dangling, set(), csp_ips
+    )
     ctx.add_dangling_domain_to_domains("leaked.example.com")
     assert "leaked.example.com" in dangling
 

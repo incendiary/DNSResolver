@@ -3,5 +3,13 @@ repos:
     rev: 24.4.2
     hooks:
       - id: black
-        args: [ --line-length=99 ]
 
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8

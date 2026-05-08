@@ -1,11 +1,9 @@
 """Tests for lambda_handler."""
 
-import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 S3_EVENT = {
     "Records": [
@@ -46,13 +44,16 @@ def mock_env_manager(tmp_path):
 
 
 async def test_handler_downloads_domains_from_s3(tmp_path, mock_s3, mock_env_manager):
-    with patch("lambda_handler.boto3.client", return_value=mock_s3), \
-         patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager), \
-         patch("lambda_handler.run", new_callable=AsyncMock), \
-         patch("lambda_handler._upload_results"), \
-         patch("lambda_handler.TEMP_DIR", str(tmp_path)):
+    with (
+        patch("lambda_handler.boto3.client", return_value=mock_s3),
+        patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager),
+        patch("lambda_handler.run", new_callable=AsyncMock),
+        patch("lambda_handler._upload_results"),
+        patch("lambda_handler.TEMP_DIR", str(tmp_path)),
+    ):
 
         from lambda_handler import _main
+
         await _main(S3_EVENT)
 
     mock_s3.download_file.assert_called_once_with(
@@ -63,13 +64,16 @@ async def test_handler_downloads_domains_from_s3(tmp_path, mock_s3, mock_env_man
 
 
 async def test_handler_uploads_results_after_run(tmp_path, mock_s3, mock_env_manager):
-    with patch("lambda_handler.boto3.client", return_value=mock_s3), \
-         patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager), \
-         patch("lambda_handler.run", new_callable=AsyncMock) as mock_run, \
-         patch("lambda_handler._upload_results") as mock_upload, \
-         patch("lambda_handler.TEMP_DIR", str(tmp_path)):
+    with (
+        patch("lambda_handler.boto3.client", return_value=mock_s3),
+        patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager),
+        patch("lambda_handler.run", new_callable=AsyncMock) as mock_run,
+        patch("lambda_handler._upload_results") as mock_upload,
+        patch("lambda_handler.TEMP_DIR", str(tmp_path)),
+    ):
 
         from lambda_handler import _main
+
         await _main(S3_EVENT)
 
     mock_run.assert_awaited_once()
@@ -77,29 +81,37 @@ async def test_handler_uploads_results_after_run(tmp_path, mock_s3, mock_env_man
 
 
 async def test_handler_uses_output_bucket_env_var(tmp_path, mock_s3, mock_env_manager):
-    with patch.dict(os.environ, {"OUTPUT_BUCKET": "my-output-bucket"}), \
-         patch("lambda_handler.boto3.client", return_value=mock_s3), \
-         patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager), \
-         patch("lambda_handler.run", new_callable=AsyncMock), \
-         patch("lambda_handler._upload_results") as mock_upload, \
-         patch("lambda_handler.TEMP_DIR", str(tmp_path)):
+    with (
+        patch.dict(os.environ, {"OUTPUT_BUCKET": "my-output-bucket"}),
+        patch("lambda_handler.boto3.client", return_value=mock_s3),
+        patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager),
+        patch("lambda_handler.run", new_callable=AsyncMock),
+        patch("lambda_handler._upload_results") as mock_upload,
+        patch("lambda_handler.TEMP_DIR", str(tmp_path)),
+    ):
 
         from lambda_handler import _main
+
         await _main(S3_EVENT)
 
     call_args = mock_upload.call_args[0]
     assert call_args[2] == "my-output-bucket"
 
 
-async def test_handler_defaults_output_to_input_bucket(tmp_path, mock_s3, mock_env_manager):
-    with patch.dict(os.environ, {}, clear=True), \
-         patch("lambda_handler.boto3.client", return_value=mock_s3), \
-         patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager), \
-         patch("lambda_handler.run", new_callable=AsyncMock), \
-         patch("lambda_handler._upload_results") as mock_upload, \
-         patch("lambda_handler.TEMP_DIR", str(tmp_path)):
+async def test_handler_defaults_output_to_input_bucket(
+    tmp_path, mock_s3, mock_env_manager
+):
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("lambda_handler.boto3.client", return_value=mock_s3),
+        patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager),
+        patch("lambda_handler.run", new_callable=AsyncMock),
+        patch("lambda_handler._upload_results") as mock_upload,
+        patch("lambda_handler.TEMP_DIR", str(tmp_path)),
+    ):
 
         from lambda_handler import _main
+
         await _main(S3_EVENT)
 
     call_args = mock_upload.call_args[0]
@@ -107,14 +119,19 @@ async def test_handler_defaults_output_to_input_bucket(tmp_path, mock_s3, mock_e
 
 
 async def test_handler_parses_nameservers_env_var(tmp_path, mock_s3, mock_env_manager):
-    with patch.dict(os.environ, {"NAMESERVERS": "8.8.8.8,1.1.1.1"}), \
-         patch("lambda_handler.boto3.client", return_value=mock_s3), \
-         patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager) as MockEM, \
-         patch("lambda_handler.run", new_callable=AsyncMock), \
-         patch("lambda_handler._upload_results"), \
-         patch("lambda_handler.TEMP_DIR", str(tmp_path)):
+    with (
+        patch.dict(os.environ, {"NAMESERVERS": "8.8.8.8,1.1.1.1"}),
+        patch("lambda_handler.boto3.client", return_value=mock_s3),
+        patch(
+            "lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager
+        ) as MockEM,
+        patch("lambda_handler.run", new_callable=AsyncMock),
+        patch("lambda_handler._upload_results"),
+        patch("lambda_handler.TEMP_DIR", str(tmp_path)),
+    ):
 
         from lambda_handler import _main
+
         await _main(S3_EVENT)
 
     _, kwargs = MockEM.call_args
@@ -122,14 +139,19 @@ async def test_handler_parses_nameservers_env_var(tmp_path, mock_s3, mock_env_ma
 
 
 async def test_handler_passes_max_threads_env_var(tmp_path, mock_s3, mock_env_manager):
-    with patch.dict(os.environ, {"MAX_THREADS": "25"}), \
-         patch("lambda_handler.boto3.client", return_value=mock_s3), \
-         patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager) as MockEM, \
-         patch("lambda_handler.run", new_callable=AsyncMock), \
-         patch("lambda_handler._upload_results"), \
-         patch("lambda_handler.TEMP_DIR", str(tmp_path)):
+    with (
+        patch.dict(os.environ, {"MAX_THREADS": "25"}),
+        patch("lambda_handler.boto3.client", return_value=mock_s3),
+        patch(
+            "lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager
+        ) as MockEM,
+        patch("lambda_handler.run", new_callable=AsyncMock),
+        patch("lambda_handler._upload_results"),
+        patch("lambda_handler.TEMP_DIR", str(tmp_path)),
+    ):
 
         from lambda_handler import _main
+
         await _main(S3_EVENT)
 
     _, kwargs = MockEM.call_args
@@ -145,6 +167,7 @@ def test_upload_results_walks_and_uploads(tmp_path):
     mock_s3 = MagicMock()
 
     from lambda_handler import _upload_results
+
     _upload_results(mock_s3, str(result_dir), "my-bucket", "results")
 
     assert mock_s3.upload_file.call_count == 2

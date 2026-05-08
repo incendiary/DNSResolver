@@ -14,7 +14,7 @@ import dns.exception
 import dns.resolver
 import pytest
 
-from classes.dns_handler import DNSHandler, NXDOMAIN, SERVFAIL, NO_DATA, TIMEOUT
+from classes.dns_handler import NO_DATA, NXDOMAIN, SERVFAIL, TIMEOUT, DNSHandler
 
 
 def make_error(code):
@@ -23,8 +23,10 @@ def make_error(code):
 
 @pytest.fixture
 async def handler(mock_env_manager):
-    with patch("classes.dns_handler.EvidenceCollector"), \
-         patch("classes.dns_handler.aiodns.DNSResolver"):
+    with (
+        patch("classes.dns_handler.EvidenceCollector"),
+        patch("classes.dns_handler.aiodns.DNSResolver"),
+    ):
         h = DNSHandler(mock_env_manager)
     h.aiodns_resolver = AsyncMock()
     h.dnspython_resolver = MagicMock()
@@ -34,6 +36,7 @@ async def handler(mock_env_manager):
 @pytest.fixture
 def domain_context(mock_env_manager, csp_ips):
     from classes.domain_processing_context import DomainProcessingContext
+
     ctx = DomainProcessingContext(mock_env_manager, csp_ips)
     ctx.set_domain("example.com")
     return ctx
@@ -42,6 +45,7 @@ def domain_context(mock_env_manager, csp_ips):
 # ---------------------------------------------------------------------------
 # handle_domain_resolution_errors
 # ---------------------------------------------------------------------------
+
 
 async def test_nxdomain_with_takeover_returns_true(handler, domain_context):
     handler.handle_takeover_checks = AsyncMock(return_value=True)
@@ -93,7 +97,9 @@ async def test_dnspython_nxdomain_runs_takeover_check(handler, domain_context):
     assert handler.handle_takeover_checks.call_count == 2
 
 
-async def test_servfail_final_retry_logs_contact_message(handler, domain_context, mock_env_manager):
+async def test_servfail_final_retry_logs_contact_message(
+    handler, domain_context, mock_env_manager
+):
     handler.handle_takeover_checks = AsyncMock(return_value=False)
     handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.resolver.NoAnswer)
     error = make_error(SERVFAIL)
@@ -106,7 +112,9 @@ async def test_servfail_final_retry_logs_contact_message(handler, domain_context
     assert any("Could not contact DNS servers" in c for c in calls)
 
 
-async def test_non_servfail_final_retry_logs_without_extra_message(handler, domain_context, mock_env_manager):
+async def test_non_servfail_final_retry_logs_without_extra_message(
+    handler, domain_context, mock_env_manager
+):
     handler.handle_takeover_checks = AsyncMock(return_value=False)
     handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.resolver.NoAnswer)
     error = make_error(NXDOMAIN)
@@ -123,6 +131,7 @@ async def test_non_servfail_final_retry_logs_without_extra_message(handler, doma
 # ---------------------------------------------------------------------------
 # check_dangling_cname_async
 # ---------------------------------------------------------------------------
+
 
 async def test_cname_chain_dangling_returns_true(handler, domain_context):
     """CNAME → target → all records NXDOMAIN → dangling."""
@@ -143,6 +152,7 @@ async def test_cname_chain_dangling_returns_true(handler, domain_context):
 
 async def test_a_record_exists_not_dangling(handler, domain_context):
     """If the A record resolves, the domain is not dangling."""
+
     async def query_side_effect(domain, record_type):
         if record_type == "CNAME":
             raise make_error(NXDOMAIN)
@@ -181,6 +191,7 @@ async def test_no_data_on_a_continues_to_next_record(handler, domain_context):
 
 async def test_timeout_on_record_returns_false(handler, domain_context):
     """A TIMEOUT should be treated as 'not dangling' (inconclusive)."""
+
     async def query_side_effect(domain, record_type):
         if record_type == "CNAME":
             raise make_error(NXDOMAIN)
@@ -195,6 +206,7 @@ async def test_timeout_on_record_returns_false(handler, domain_context):
 
 async def test_cname_non_nxdomain_error_returns_false(handler, domain_context):
     """A non-NXDOMAIN error on the CNAME query means we can't conclude dangling."""
+
     async def query_side_effect(domain, record_type):
         raise make_error(SERVFAIL)
 
@@ -208,6 +220,7 @@ async def test_cname_non_nxdomain_error_returns_false(handler, domain_context):
 # ---------------------------------------------------------------------------
 # categorise_domain
 # ---------------------------------------------------------------------------
+
 
 def test_categorise_domain_matches_known_pattern(handler):
     patterns = {
@@ -226,7 +239,14 @@ def test_categorise_domain_matches_known_pattern(handler):
 
 def test_categorise_domain_returns_unknown_when_no_match(handler):
     category, recommendation, evidence = handler.categorise_domain(
-        "example.com", {"heroku": {"regex": r"\.herokuapp\.com\.", "recommendation": "", "evidence": ""}}
+        "example.com",
+        {
+            "heroku": {
+                "regex": r"\.herokuapp\.com\.",
+                "recommendation": "",
+                "evidence": "",
+            }
+        },
     )
     assert category == "unknown"
     assert recommendation == "Unclassified"
@@ -236,6 +256,7 @@ def test_categorise_domain_returns_unknown_when_no_match(handler):
 # ---------------------------------------------------------------------------
 # is_dangling_record_async
 # ---------------------------------------------------------------------------
+
 
 async def test_is_dangling_record_false_when_record_exists(handler):
     handler.aiodns_resolver.query = AsyncMock(return_value=[MagicMock()])
