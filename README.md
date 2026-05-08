@@ -83,15 +83,79 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
 
+## AWS Lambda deployment
+
+DNSResolver can run as a Lambda function triggered by an S3 PutObject event. Upload a domains file to the input bucket to start a run; results are written back to S3 when it completes.
+
+### Design decisions
+
+| Decision | Choice | Reason |
+|----------|--------|--------|
+| Packaging | Container image | `pycares` bundles a native C extension — container images avoid the manylinux wheel compatibility issues that affect Lambda layers |
+| Architecture | arm64 (Graviton) | ~20% cheaper than x86_64 for equivalent workloads; change `FROM` line in Dockerfile for x86_64 |
+| Runtime | Python 3.12 | Latest Lambda-supported version |
+| Logging | stdout only | Lambda captures stdout to CloudWatch automatically; no log file is written |
+| Evidence collection | Disabled | `dig` and `nslookup` are not available in the Lambda runtime |
+| Intermediate storage | `/tmp` | Lambda provides up to 10 GB of ephemeral storage; results are uploaded to S3 at the end of the run |
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OUTPUT_BUCKET` | input bucket | S3 bucket for results |
+| `OUTPUT_PREFIX` | `results/` | S3 key prefix for results |
+| `NAMESERVERS` | system resolvers | Comma-separated custom resolvers, e.g. `8.8.8.8,1.1.1.1` |
+| `MAX_THREADS` | `50` | Concurrent domain tasks |
+| `TIMEOUT` | from `config.json` | DNS query timeout in seconds |
+| `RETRIES` | from `config.json` | Retry attempts for failed domains |
+| `VERBOSE` | `false` | Set to `true` for verbose CloudWatch logging |
+
+### IAM permissions
+
+The Lambda execution role needs:
+- `s3:GetObject` on the input bucket
+- `s3:PutObject` on the output bucket
+
+### Build and deploy
+
+```bash
+# Build (cross-compile for arm64 from an x86 machine if needed)
+docker build --platform linux/arm64 -t dnsresolver-lambda .
+
+# Push to ECR
+aws ecr get-login-password --region <region> \
+  | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
+docker tag dnsresolver-lambda <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
+docker push <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
+```
+
+### Trigger configuration
+
+Configure an S3 event notification on the input bucket for `s3:ObjectCreated:*` events, filtered to the prefix where you drop domain files (e.g. `domains/`). The Lambda handler reads the bucket and key from the event record automatically.
+
+### Pipeline integration
+
+```
+EventBridge (daily cron)
+    → ECS Fargate task (subfinder/amass enumeration)
+        → S3: domains/domains.txt          ← triggers Lambda
+            → Lambda (DNSResolver)
+                → S3: results/<timestamp>/
+                    → downstream Lambda (claim dangling resources)
+```
+
 ## Architecture
 
 ```
-resolver.py          — asyncio entry point, retry loop, concurrency cap
-├── EnvironmentManager   — argument parsing, config, logging, output setup
-├── DNSHandler           — async DNS resolution (aiodns primary, dnspython fallback)
-│   └── EvidenceCollector — async subprocess evidence capture (dig/nslookup)
-├── DomainProcessingContext — per-domain state (domain name, resolver, CSP IPs)
-├── CSPIPAddresses       — value object holding fetched AWS/GCP/Azure IP ranges
+resolver.py              — CLI entry point → run(env_manager)
+lambda_handler.py        — Lambda entry point → run(env_manager)
+    └── run()            — shared async pipeline (retry loop, concurrency cap)
+├── EnvironmentManager       — CLI: argparse, config, logging, local file I/O
+├── LambdaEnvironmentManager — Lambda: env vars, stdout logging, /tmp file I/O
+├── DNSHandler               — async DNS resolution (aiodns primary, dnspython fallback)
+│   └── EvidenceCollector     — async subprocess evidence capture (dig/nslookup)
+├── DomainProcessingContext   — per-domain state (domain name, resolver, CSP IPs)
+├── CSPIPAddresses            — value object holding fetched AWS/GCP/Azure IP ranges
 └── domain_processor.py  — orchestrates DNS → CSP checks per domain
 ```
 
