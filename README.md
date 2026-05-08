@@ -337,6 +337,8 @@ Once related root domains are identified, enumerate subdomains for each and comb
 |-------|--------|-------------|
 | [#36](https://github.com/incendiary/DNSResolver/issues/36) | ✅ v1.1.1 | Progress bar stability — log output routed through `tqdm.write()` |
 | [#37](https://github.com/incendiary/DNSResolver/issues/37) | ✅ v1.2.0 | AWS Lambda / S3 support — `lambda_handler.py` entrypoint with S3 I/O |
+| [#41](https://github.com/incendiary/DNSResolver/issues/41) | 🔲 planned | Refactor `EnvironmentManager` into focused single-responsibility classes; replace Java-style getters with direct attribute access |
+| [#42](https://github.com/incendiary/DNSResolver/issues/42) | 🔲 planned | Enforce code style with Black, isort, flake8, and pre-commit hooks |
 
 ## Contributing
 
