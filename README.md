@@ -1,87 +1,95 @@
-Sure, here's a markdown-formatted `README.md` for your DNSResolver project. This file includes an overview, installation
-instructions, usage, and a link to a demonstration video.
-
-```markdown
 # DNSResolver
 
-DNSResolver is a Python-based tool designed to perform DNS resolution and check resolved IP addresses against known IP
-ranges of major Cloud Service Providers (CSP) such as AWS, GCP, and Azure. It includes functionalities for domain
-processing, logging, and evidence collection.
+DNSResolver is a Python-based security tool for bulk DNS resolution and cloud infrastructure analysis. Given a list of domains it:
 
-## Features
+- Resolves DNS records and matches resolved IPs against known IP ranges for **AWS, GCP, and Azure**
+- Detects **dangling CNAME** records pointing to unclaimed cloud resources (potential subdomain takeover)
+- Detects **NS takeover** opportunities where nameservers are unresolvable
+- Collects forensic evidence (dig/nslookup output) for flagged domains
+- Performs optional **service connectivity checks** (HTTP, TLS, TCP port scanning)
 
-- DNS resolution for given domains
-- IP range checking against known CSPs (AWS, GCP, Azure)
-- Logging of results
-- Evidence collection for resolved IPs
+All domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
+
+## Demonstration
+
+![DNSResolver Demo](Media/simplerun.gif)
 
 ## Installation
 
-To get started with DNSResolver, follow these steps:
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/incendiary/DNSResolver.git
-   cd DNSResolver
-   ```
-
-2. **Create and activate a virtual environment:**
-
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   ```
-
-3. **Install the required dependencies:**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+git clone https://github.com/incendiary/DNSResolver.git
+cd DNSResolver
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
 
 ## Usage
 
-DNSResolver can be run with various options to perform DNS resolution and check against CSP IP ranges.
-
-### Basic Usage
-
 ```bash
-python resolver.py -d domains.txt -o output
+python resolver.py <domains_file> [options]
 ```
 
-- `-d`: Path to the file containing the list of domains to be resolved.
-- `-o`: Output directory where results will be saved.
+`domains_file` — path to a plain-text file with one domain per line.
 
-### Advanced Options
+### Options
 
-- `-c`: Configuration file path (default: `config.json`).
-- `-v`: Enable verbose logging.
-- `-e`: Enable extreme logging.
-- `-n`: Custom nameservers for DNS resolution.
-- `-t`: Timeout for DNS queries.
-- `-r`: Number of retries for DNS queries.
-- `--evidence`: Enable evidence collection for resolved IPs.
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--output-dir` | `-o` | Directory to save results (default: `output`) |
+| `--config-file` | | Path to config JSON (default: `config.json`) |
+| `--verbose` | `-v` | Enable verbose logging |
+| `--extreme` | `-e` | Enable extreme logging (includes full IP range dumps, implies `-v`) |
+| `--nameservers` | | Comma-separated custom resolvers, e.g. `8.8.8.8,1.1.1.1` |
+| `--service-checks` | `-sc` | Enable HTTP/TLS/TCP service connectivity checks |
+| `--max-threads` | `-mt` | Max concurrent domain tasks (default: 50) |
+| `--timeout` | `-t` | DNS query timeout in seconds |
+| `--retries` | | Retry attempts for failed domains (default from config) |
+| `--evidence` | | Save dig/nslookup output for flagged domains |
 
 ### Example
 
 ```bash
-python resolver.py -d domains.txt -o output --evidence -v -n 8.8.8.8,1.1.1.1 -t 2 -r 3
+python resolver.py domains.txt -o results --evidence -v --nameservers 8.8.8.8,1.1.1.1 --timeout 5 --retries 2
 ```
 
-## Demonstration
+## Output
 
-For a quick demonstration of DNSResolver in action, watch the video below:
+Each run creates a timestamped subdirectory under the output directory containing:
 
-![DNSResolver Demo](Media/simplerun.gif)
+| File | Contents |
+|------|----------|
+| `resolution_results_*.txt` | Successfully resolved domains and their DNS records |
+| `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
+| `dangling_cname_results_*.txt` | Domains with dangling CNAMEs — category, recommendation, and evidence link |
+| `ns_takeover_results_*.txt` | Domains with potentially unresolvable nameservers |
+| `gcp_results_*.txt` | Domains resolving to GCP IP ranges |
+| `aws_results_*.txt` | Domains resolving to AWS IP ranges |
+| `azure_results_*.txt` | Domains resolving to Azure IP ranges |
+| `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
+| `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
+
+## Architecture
+
+```
+resolver.py          — asyncio entry point, retry loop, concurrency cap
+├── EnvironmentManager   — argument parsing, config, logging, output setup
+├── DNSHandler           — async DNS resolution (aiodns primary, dnspython fallback)
+│   └── EvidenceCollector — async subprocess evidence capture (dig/nslookup)
+├── DomainProcessingContext — per-domain state (domain name, resolver, CSP IPs)
+├── CSPIPAddresses       — value object holding fetched AWS/GCP/Azure IP ranges
+└── domain_processor.py  — orchestrates DNS → CSP checks → service checks per domain
+```
+
+Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`) to run many domains concurrently without exhausting file descriptors or triggering DNS rate limits. Failed domains are collected after each pass and retried up to `--retries` times.
+
+## Configuration
+
+`config.json` sets defaults for timeout, retries, output directory, and domain categorisation patterns used for classifying dangling CNAME targets (e.g. AWS S3, GitHub Pages, Heroku). CLI flags always override config file values.
 
 ## Contributing
 
-We welcome contributions to DNSResolver. If you'd like to contribute, please follow these steps:
-
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Make your changes.
-4. Commit your changes (`git commit -am 'Add new feature'`).
-5. Push to the branch (`git push origin feature-branch`).
-6. Create a new Pull Request.
-
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-change`)
+3. Commit your changes
+4. Push and open a Pull Request

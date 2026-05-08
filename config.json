@@ -4,7 +4,7 @@
         "max_threads": 2,
         "timeout": 1,
 	    "nameservers": "1.1.1.1,8.8.8.8",
-        "verbose": true,
+        "verbose": false,
         "retries": 2,
         "evidence": true,
         "service_checks": true,
