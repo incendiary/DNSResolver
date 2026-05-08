@@ -148,6 +148,13 @@ Corporate subsidiaries and related organisations often share infrastructure sign
 
 Once related root domains are identified, enumerate subdomains for each and combine into a single input file as shown above.
 
+## Roadmap
+
+| Issue | Description |
+|-------|-------------|
+| [#36](https://github.com/incendiary/DNSResolver/issues/36) | **Progress bar stability** — route log output through `tqdm.write()` so the progress bar stays locked to the bottom of the terminal during verbose runs |
+| [#37](https://github.com/incendiary/DNSResolver/issues/37) | **AWS Lambda / S3 support** — abstract the I/O layer and add a `lambda_handler.py` entrypoint so DNSResolver can run inside a Lambda pipeline (domains in from S3, results out to S3) without duplicating any resolution logic |
+
 ## Contributing
 
 1. Fork the repository
