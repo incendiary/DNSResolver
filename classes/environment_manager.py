@@ -10,6 +10,7 @@ from datetime import datetime
 import aiofiles
 import requests
 from requests import RequestException
+from tqdm import tqdm
 
 from classes.custom_exceptions import (
     FileDoesNotExistError,
@@ -28,6 +29,16 @@ async def write_to_file(file_path, content):
         logger.error(f"Failed to write to {file_path}: {e}")
 
 
+class TqdmLoggingHandler(logging.StreamHandler):
+    """Routes log output through tqdm.write() so the progress bar stays pinned to the bottom."""
+
+    def emit(self, record):
+        try:
+            tqdm.write(self.format(record))
+        except Exception:
+            self.handleError(record)
+
+
 def setup_logger(log_file="dnsresolver.log", verbose=False):
     """
     Set up a logger for DNSResolver.
@@ -36,18 +47,16 @@ def setup_logger(log_file="dnsresolver.log", verbose=False):
     :return: Logger object.
     """
     logger = logging.getLogger("DNSResolver")
-    logger.setLevel(logging.INFO)  # Set up INFO as the base level for logger
+    logger.setLevel(logging.INFO)
 
-    if logger.hasHandlers():  # Clear any pre-existing handlers
+    if logger.hasHandlers():
         logger.handlers.clear()
 
-    # Create console handler with a log level of CRITICAL (suppresses output by default)
-    ch = logging.StreamHandler()
+    ch = TqdmLoggingHandler()
     ch.setLevel(logging.CRITICAL)  # Suppress console output by default
 
-    # Create file handler which logs all messages from INFO to higher
     fh = logging.FileHandler(log_file)
-    fh.setLevel(logging.INFO)  # Defaulting to INFO to file
+    fh.setLevel(logging.INFO)
 
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -55,14 +64,12 @@ def setup_logger(log_file="dnsresolver.log", verbose=False):
     ch.setFormatter(formatter)
     fh.setFormatter(formatter)
 
-    # Add the handlers to the logger
     logger.addHandler(ch)
     logger.addHandler(fh)
 
     if verbose:
-        ch.setLevel(logging.INFO)  # Enable console logging if verbose mode is set
+        ch.setLevel(logging.INFO)
 
-    # Test logging to ensure it's working
     logger.info("Logger initialized.")
 
     return logger
