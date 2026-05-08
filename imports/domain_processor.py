@@ -16,7 +16,7 @@ async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses, dns_
         f"Processing domain: {domain} was {'successful' if success else 'unsuccessful'}"
     )
 
-    if success:
+    if success and final_ips:
         output_files = env_manager.get_output_files()
         await env_manager.write_to_file(
             output_files["standard"]["resolved"],
