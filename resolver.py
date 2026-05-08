@@ -3,6 +3,7 @@ import asyncio
 from tqdm import tqdm
 
 from classes.csp_ip_addresses import CSPIPAddresses
+from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
@@ -30,24 +31,56 @@ async def main_async():
     )
 
     env_manager.set_domains()
-    current_domains = list(env_manager.domains)
-    failed_domains = set()
+    domains_to_process = list(env_manager.domains)
+    retries = env_manager.get_retries()
+    dns_handler = DNSHandler(env_manager)
+    sem = asyncio.Semaphore(env_manager.max_threads or 50)
+    all_dangling_domains: set = set()
 
-    with tqdm(
-        total=len(current_domains),
-        desc=f"Processing Domains",
-    ) as pbar:
-        tasks = [
-            process_domain_async(domain, env_manager, pbar, csp_ip_addresses)
-            for domain in current_domains
-        ]
-        results = await asyncio.gather(*tasks)
+    async def bounded_process(domain, pbar):
+        async with sem:
+            return await process_domain_async(
+                domain, env_manager, pbar, csp_ip_addresses, dns_handler
+            )
 
-    for domain, (success, final_ips) in zip(current_domains, results):
-        if not success:
-            failed_domains.add(domain)
+    for attempt in range(retries + 1):
+        if not domains_to_process:
+            break
 
-    env_manager.domains.update(failed_domains)
+        with tqdm(
+            total=len(domains_to_process),
+            desc=f"Processing Domains (Attempt {attempt + 1} of {retries + 1})",
+        ) as pbar:
+            tasks = [bounded_process(domain, pbar) for domain in domains_to_process]
+            results = await asyncio.gather(*tasks)
+
+        failed = []
+        for domain, (success, _final_ips, dangling) in zip(domains_to_process, results):
+            all_dangling_domains.update(dangling)
+            if not success:
+                failed.append(domain)
+        domains_to_process = failed
+
+        if domains_to_process and attempt < retries:
+            env_manager.log_info(
+                "%d domain(s) failed on attempt %d, retrying...",
+                len(domains_to_process),
+                attempt + 1,
+            )
+
+    if domains_to_process:
+        env_manager.log_info(
+            "%d domain(s) could not be resolved after %d attempt(s).",
+            len(domains_to_process),
+            retries + 1,
+        )
+
+    if all_dangling_domains:
+        env_manager.log_info(
+            "%d dangling domain(s) detected: %s",
+            len(all_dangling_domains),
+            ", ".join(sorted(all_dangling_domains)),
+        )
 
     env_manager.log_info(
         "All resolutions completed. Results saved to %s", env_manager.get_output_dir()

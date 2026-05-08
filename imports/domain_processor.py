@@ -17,11 +17,10 @@ Functions:
 
 from imports.cloud_service_provider_checks import perform_csp_checks
 from imports.create_domain_context import create_domain_context
-from classes.dns_handler import DNSHandler
 from imports.service_connectivity_checks import perform_service_connectivity_checks
 
 
-async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses):
+async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses, dns_handler):
     domain_context = create_domain_context(
         domain, env_manager, set(), set(), csp_ip_addresses
     )
@@ -29,8 +28,7 @@ async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses):
 
     env_manager.log_info(f"Processing domain: {domain}")
 
-    handler = DNSHandler(env_manager)
-    success, final_ips = await handler.resolve_domain_async(domain_context)
+    success, final_ips = await dns_handler.resolve_domain_async(domain_context)
 
     env_manager.log_info(
         f"Processing domain: {domain} was {'successful' if success else 'unsuccessful'}"
@@ -50,4 +48,4 @@ async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses):
         f"Finished processing domain: {domain_context.get_domain()}"
     )
 
-    return success, final_ips
+    return success, final_ips, domain_context.dangling_domains
