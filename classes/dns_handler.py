@@ -196,6 +196,7 @@ class DNSHandler:
         except (
             dns.resolver.NoAnswer,
             dns.resolver.NXDOMAIN,
+            dns.resolver.NoNameservers,
             dns.exception.Timeout,
         ) as e:
             self.env_manager.log_info(

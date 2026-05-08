@@ -52,10 +52,17 @@ async def main_async():
             desc=f"Processing Domains (Attempt {attempt + 1} of {retries + 1})",
         ) as pbar:
             tasks = [bounded_process(domain, pbar) for domain in domains_to_process]
-            results = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
         failed = []
-        for domain, (success, _final_ips, dangling) in zip(domains_to_process, results):
+        for domain, result in zip(domains_to_process, results):
+            if isinstance(result, Exception):
+                env_manager.log_error(
+                    "Unhandled exception processing %s: %s", domain, result
+                )
+                failed.append(domain)
+                continue
+            success, _final_ips, dangling = result
             all_dangling_domains.update(dangling)
             if not success:
                 failed.append(domain)
