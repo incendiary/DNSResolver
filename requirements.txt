@@ -5,3 +5,7 @@ argparse~=1.4.0
 selenium~=4.22.0
 aiodns~=3.2.0
 aiofiles~=24.1.0
+
+# dev / test
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
