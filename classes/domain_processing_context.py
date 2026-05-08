@@ -197,7 +197,7 @@ class DomainProcessingContext:
         """
         Retrieve the Google Cloud Platform IPV4 address.
         """
-        return self.gcp_ipv6
+        return self.gcp_ipv4
 
     def get_aws_ipv4(self):
         """
