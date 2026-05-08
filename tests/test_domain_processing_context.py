@@ -10,10 +10,10 @@ import pytest
 
 from classes.domain_processing_context import DomainProcessingContext
 
-
 # ---------------------------------------------------------------------------
 # Fixture: a fresh context for each test
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def ctx(mock_env_manager, csp_ips):
@@ -26,6 +26,7 @@ def ctx(mock_env_manager, csp_ips):
 # ---------------------------------------------------------------------------
 # Initial state
 # ---------------------------------------------------------------------------
+
 
 def test_dangling_domains_starts_empty(ctx):
     assert ctx.dangling_domains == set()
@@ -46,6 +47,7 @@ def test_csp_ip_addresses_stored(ctx, csp_ips):
 # ---------------------------------------------------------------------------
 # Dangling domain tracking
 # ---------------------------------------------------------------------------
+
 
 def test_add_dangling_domain(ctx):
     ctx.add_dangling_domain_to_domains("cname-target.example.com")
@@ -69,6 +71,7 @@ def test_add_duplicate_dangling_domain_is_idempotent(ctx):
 # Resolver creation
 # ---------------------------------------------------------------------------
 
+
 def test_resolver_is_none_before_create(ctx):
     assert ctx.get_resolver() is None
 
@@ -81,6 +84,7 @@ def test_create_resolver_produces_resolver(ctx):
 # ---------------------------------------------------------------------------
 # Setters and secondary getters
 # ---------------------------------------------------------------------------
+
 
 def test_set_current_domain(ctx):
     ctx.set_current_domain("sub.example.com")

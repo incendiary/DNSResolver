@@ -45,7 +45,9 @@ def get_tld_ns(tld):
     response = query_ns(root_ns_ip, tld)
     if response:
         tld_ns = [
-            rr.target.to_text() for rr in response.authority[0] if rr.rdtype == dns.rdatatype.NS
+            rr.target.to_text()
+            for rr in response.authority[0]
+            if rr.rdtype == dns.rdatatype.NS
         ]
         return tld_ns
     return None
@@ -129,7 +131,9 @@ if __name__ == "__main__":
     subdomain = args.subdomain
     domain_parts = subdomain.split(".")
     if len(domain_parts) < 2:
-        print("Invalid subdomain format. Please provide a full subdomain (e.g., www.example.com).")
+        print(
+            "Invalid subdomain format. Please provide a full subdomain (e.g., www.example.com)."
+        )
         exit(1)
 
     domain = ".".join(domain_parts[-2:])

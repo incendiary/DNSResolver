@@ -20,12 +20,15 @@ AZURE_IPV6 = ["2603:1000::/24"]
 
 
 def make_csp():
-    return CSPIPAddresses(GCP_IPV4, GCP_IPV6, AWS_IPV4, AWS_IPV6, AZURE_IPV4, AZURE_IPV6)
+    return CSPIPAddresses(
+        GCP_IPV4, GCP_IPV6, AWS_IPV4, AWS_IPV6, AZURE_IPV4, AZURE_IPV6
+    )
 
 
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
+
 
 def test_stores_all_ranges_on_construction():
     """All six IP range lists are stored correctly."""
@@ -41,6 +44,7 @@ def test_stores_all_ranges_on_construction():
 # ---------------------------------------------------------------------------
 # Individual getters — each test is narrow so a failure points to one thing
 # ---------------------------------------------------------------------------
+
 
 def test_gcp_ipv4_is_distinct_from_gcp_ipv6():
     """IPv4 and IPv6 getters must not be swapped (this caught a real bug)."""
