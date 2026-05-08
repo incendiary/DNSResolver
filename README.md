@@ -116,17 +116,136 @@ The Lambda execution role needs:
 - `s3:GetObject` on the input bucket
 - `s3:PutObject` on the output bucket
 
-### Build and deploy
+### Step-by-step setup
 
+Replace `<account>`, `<region>`, `<input-bucket>`, and `<output-bucket>` throughout.
+
+**1. Create the ECR repository**
 ```bash
-# Build (cross-compile for arm64 from an x86 machine if needed)
+aws ecr create-repository \
+  --repository-name dnsresolver-lambda \
+  --region <region>
+```
+
+**2. Build and push the container image**
+```bash
+# Build for arm64 (cross-compile if you're on an x86 machine)
 docker build --platform linux/arm64 -t dnsresolver-lambda .
 
-# Push to ECR
+# Authenticate and push
 aws ecr get-login-password --region <region> \
   | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
-docker tag dnsresolver-lambda <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
-docker push <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
+
+docker tag dnsresolver-lambda \
+  <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
+
+docker push \
+  <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
+```
+
+**3. Create the IAM execution role**
+```bash
+# Create role
+aws iam create-role \
+  --role-name dnsresolver-lambda-role \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Principal": {"Service": "lambda.amazonaws.com"},
+      "Action": "sts:AssumeRole"
+    }]
+  }'
+
+# Attach basic Lambda execution policy (CloudWatch Logs)
+aws iam attach-role-policy \
+  --role-name dnsresolver-lambda-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+# Allow S3 access (adjust bucket ARNs as needed)
+aws iam put-role-policy \
+  --role-name dnsresolver-lambda-role \
+  --policy-name dnsresolver-s3 \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": "s3:GetObject",
+        "Resource": "arn:aws:s3:::<input-bucket>/*"
+      },
+      {
+        "Effect": "Allow",
+        "Action": "s3:PutObject",
+        "Resource": "arn:aws:s3:::<output-bucket>/*"
+      }
+    ]
+  }'
+```
+
+**4. Create the Lambda function**
+```bash
+aws lambda create-function \
+  --function-name dnsresolver \
+  --package-type Image \
+  --code ImageUri=<account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest \
+  --role arn:aws:iam::<account>:role/dnsresolver-lambda-role \
+  --architectures arm64 \
+  --memory-size 512 \
+  --timeout 900 \
+  --environment 'Variables={
+    OUTPUT_BUCKET=<output-bucket>,
+    OUTPUT_PREFIX=results,
+    NAMESERVERS=8.8.8.8,1.1.1.1,
+    MAX_THREADS=50,
+    RETRIES=2
+  }'
+```
+
+> **Memory and timeout:** 512 MB is sufficient for most domain lists up to a few thousand entries. Increase memory for larger lists. Timeout is set to 900 seconds (Lambda maximum).
+
+**5. Add the S3 trigger**
+
+First, grant S3 permission to invoke the function:
+```bash
+aws lambda add-permission \
+  --function-name dnsresolver \
+  --statement-id s3-invoke \
+  --action lambda:InvokeFunction \
+  --principal s3.amazonaws.com \
+  --source-arn arn:aws:s3:::<input-bucket>
+```
+
+Then configure the bucket notification (replace `<input-bucket>`):
+```bash
+aws s3api put-bucket-notification-configuration \
+  --bucket <input-bucket> \
+  --notification-configuration '{
+    "LambdaFunctionConfigurations": [{
+      "LambdaFunctionArn": "arn:aws:lambda:<region>:<account>:function:dnsresolver",
+      "Events": ["s3:ObjectCreated:*"],
+      "Filter": {
+        "Key": {"FilterRules": [{"Name": "prefix", "Value": "domains/"}]}
+      }
+    }]
+  }'
+```
+
+Any file uploaded to `s3://<input-bucket>/domains/` will now trigger a run automatically.
+
+**6. Run a scan**
+```bash
+aws s3 cp domains.txt s3://<input-bucket>/domains/domains.txt
+# Results appear in s3://<output-bucket>/results/<timestamp>/ when complete
+```
+
+**7. Updating the function after a code change**
+```bash
+docker build --platform linux/arm64 -t dnsresolver-lambda . && \
+docker push <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest && \
+aws lambda update-function-code \
+  --function-name dnsresolver \
+  --image-uri <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
 ```
 
 ### Trigger configuration
@@ -214,10 +333,10 @@ Once related root domains are identified, enumerate subdomains for each and comb
 
 ## Roadmap
 
-| Issue | Description |
-|-------|-------------|
-| [#36](https://github.com/incendiary/DNSResolver/issues/36) | **Progress bar stability** — route log output through `tqdm.write()` so the progress bar stays locked to the bottom of the terminal during verbose runs |
-| [#37](https://github.com/incendiary/DNSResolver/issues/37) | **AWS Lambda / S3 support** — abstract the I/O layer and add a `lambda_handler.py` entrypoint so DNSResolver can run inside a Lambda pipeline (domains in from S3, results out to S3) without duplicating any resolution logic |
+| Issue | Status | Description |
+|-------|--------|-------------|
+| [#36](https://github.com/incendiary/DNSResolver/issues/36) | ✅ v1.1.1 | Progress bar stability — log output routed through `tqdm.write()` |
+| [#37](https://github.com/incendiary/DNSResolver/issues/37) | ✅ v1.2.0 | AWS Lambda / S3 support — `lambda_handler.py` entrypoint with S3 I/O |
 
 ## Contributing
 
