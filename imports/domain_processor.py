@@ -48,4 +48,4 @@ async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses, dns_
         f"Finished processing domain: {domain_context.get_domain()}"
     )
 
-    return success, final_ips
+    return success, final_ips, domain_context.dangling_domains
