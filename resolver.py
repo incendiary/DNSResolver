@@ -1,125 +1,103 @@
-"""
-Release 1.0
-This python module resolves DNS records for a given list of domains
-and checks them against the known IP ranges of major cloud providers
-(AWS, GCP, and Azure).
-
-This script handles multithreading for DNS resolutions and provides
-different verbose levels for extra logging (default, verbose, and extreme).
-The results of DNS resolution and Cloud IPs matching are stored in the specified
-output directory.
-
-The script can be run directly with the use of command-line arguments for
-specifying the domains file, output directory, verbosity mode and custom resolvers.
-"""
-
-import threading
+import asyncio
 
 from tqdm import tqdm
 
-from classes.domain_processing_context import DomainProcessingContext
+from classes.csp_ip_addresses import CSPIPAddresses
+from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
-from imports.dns_based_checks import load_domain_categorisation_patterns
-from imports.domain_processor import process_domain
+from imports.domain_processor import process_domain_async
 
 
-def main():
-    """
-    Main function of the program.
-    Processes domain names and retrieves IP ranges from Google Cloud, AWS, and Azure.
-    Resolves domain names and performs various checks on them.
-    Prints final messages and results.
-
-    :return: None
-    """
+async def main_async():
     env_manager = EnvironmentManager()
-    # env_manager.parse_arguments()
 
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(
         env_manager.get_output_dir(), env_manager.extreme
     )
-    aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(env_manager.get_output_dir(), env_manager.extreme)
+    aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(
+        env_manager.get_output_dir(), env_manager.extreme
+    )
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(
         env_manager.get_output_dir(), env_manager.extreme
     )
 
+    csp_ip_addresses = CSPIPAddresses(
+        gcp_ipv4, gcp_ipv6, aws_ipv4, aws_ipv6, azure_ipv4, azure_ipv6
+    )
+
     env_manager.set_domains()
+    domains_to_process = list(env_manager.domains)
+    retries = env_manager.get_retries()
+    dns_handler = DNSHandler(env_manager)
+    sem = asyncio.Semaphore(env_manager.max_threads or 50)
+    all_dangling_domains: set = set()
 
-    if env_manager.verbose:
-        env_manager.get_logger().info("Domains to process: %s", env_manager.get_domains())
+    async def bounded_process(domain, pbar):
+        async with sem:
+            return await process_domain_async(
+                domain, env_manager, pbar, csp_ip_addresses, dns_handler
+            )
 
-    patterns = load_domain_categorisation_patterns(env_manager.get_config_file())
-
-    max_threads = env_manager.max_threads or 10
-
-    dangling_domains = set()
-    failed_domains = set(env_manager.get_domains())
-
-    for attempt in range(env_manager.retries + 1):
-        if not failed_domains:
+    for attempt in range(retries + 1):
+        if not domains_to_process:
             break
 
-        current_failed_domains = list(failed_domains)
-        failed_domains.clear()
-
         with tqdm(
-            total=len(current_failed_domains),
-            desc=f"Processing Domains (Attempt {attempt + 1})",
+            total=len(domains_to_process),
+            desc=f"Processing Domains (Attempt {attempt + 1} of {retries + 1})",
         ) as pbar:
-            threads = []
+            tasks = [bounded_process(domain, pbar) for domain in domains_to_process]
+            results = await asyncio.gather(*tasks)
 
-            for domain in current_failed_domains:
-                if env_manager.verbose:
-                    env_manager.log_info(f"Starting thread for domain: {domain}")
-                if len(threads) >= max_threads:
-                    threads.pop(0).join()
+        failed = []
+        for domain, (success, _final_ips, dangling) in zip(domains_to_process, results):
+            all_dangling_domains.update(dangling)
+            if not success:
+                failed.append(domain)
+        domains_to_process = failed
 
-                domain_context = DomainProcessingContext(env_manager)
-                domain_context.set_domain(domain)
-                domain_context.set_nameservers(env_manager.get_resolvers())
-                domain_context.set_output_files(env_manager.get_output_files())
-                domain_context.set_verbose(env_manager.get_verbose())
-                domain_context.set_extreme(env_manager.get_extreme())
-                domain_context.set_gcp_ip(gcp_ipv4, gcp_ipv6)
-                domain_context.set_aws_ip(aws_ipv4, aws_ipv6)
-                domain_context.set_azure_ip(azure_ipv4, azure_ipv6)
-                domain_context.set_perform_service_checks(env_manager.get_service_checks())
-                domain_context.set_timeout(env_manager.get_timeout())
-                domain_context.set_retries(env_manager.get_retries())
-                domain_context.set_patterns(patterns)
-                domain_context.set_dangling_domains(dangling_domains)
-                domain_context.set_failed_domains(failed_domains)
-                domain_context.set_evidence_enabled(env_manager.get_evidence())
-                domain_context.set_logger(env_manager.get_logger())
+        if domains_to_process and attempt < retries:
+            env_manager.log_info(
+                "%d domain(s) failed on attempt %d, retrying...",
+                len(domains_to_process),
+                attempt + 1,
+            )
 
-                thread = threading.Thread(
-                    target=process_domain,
-                    args=(domain_context, env_manager, pbar),
-                )
-                threads.append(thread)
-                thread.start()
+    if domains_to_process:
+        env_manager.log_info(
+            "%d domain(s) could not be resolved after %d attempt(s).",
+            len(domains_to_process),
+            retries + 1,
+        )
 
-            for thread in threads:
-                thread.join()
+    if all_dangling_domains:
+        env_manager.log_info(
+            "%d dangling domain(s) detected: %s",
+            len(all_dangling_domains),
+            ", ".join(sorted(all_dangling_domains)),
+        )
 
-    # Print final messages
     env_manager.log_info(
         "All resolutions completed. Results saved to %s", env_manager.get_output_dir()
     )
 
     if env_manager.get_extreme():
-        env_manager.log_info("AWS IPv4 Ranges: %s", aws_ipv4)
-        env_manager.log_info("AWS IPv6 Ranges: %s", aws_ipv6)
-        env_manager.log_info("Google Cloud IPv4 Ranges: %s", gcp_ipv4)
-        env_manager.log_info("Google Cloud IPv6 Ranges: %s", gcp_ipv6)
-        env_manager.log_info("Azure IPv4 Ranges: %s", azure_ipv4)
-        env_manager.log_info("Azure IPv6 Ranges: %s", azure_ipv6)
+        env_manager.log_info("AWS IPv4 Ranges: %s", csp_ip_addresses.get_aws_ipv4())
+        env_manager.log_info("AWS IPv6 Ranges: %s", csp_ip_addresses.get_aws_ipv6())
+        env_manager.log_info(
+            "Google Cloud IPv4 Ranges: %s", csp_ip_addresses.get_gcp_ipv4()
+        )
+        env_manager.log_info(
+            "Google Cloud IPv6 Ranges: %s", csp_ip_addresses.get_gcp_ipv6()
+        )
+        env_manager.log_info("Azure IPv4 Ranges: %s", csp_ip_addresses.get_azure_ipv4())
+        env_manager.log_info("Azure IPv6 Ranges: %s", csp_ip_addresses.get_azure_ipv6())
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main_async())
