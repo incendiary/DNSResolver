@@ -183,9 +183,12 @@ class DNSHandler:
                 f"DNS resolution error for {current_domain}: {error} | final_retry={final_retry}"
             )
 
-        # Use dnspython_resolver for better error handling
+        # Second-opinion check using dnspython — run in executor to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
         try:
-            self.dnspython_resolver.resolve(current_domain, "A")
+            await loop.run_in_executor(
+                None, self.dnspython_resolver.resolve, current_domain, "A"
+            )
             self.env_manager.log_info(
                 f"Domain {current_domain} resolved successfully with dnspython_resolver."
             )
@@ -318,27 +321,23 @@ class DNSHandler:
         # Check for dangling A, AAAA, MX records
         for record_type in ["A", "AAAA", "MX"]:
             try:
-                self.dnspython_resolver.resolve(current_domain, record_type)
+                await self.aiodns_resolver.query(current_domain, record_type)
                 self.env_manager.log_info(
                     f"Domain {current_domain} has a valid {record_type} record."
                 )
                 return False
-            except (
-                dns.resolver.NoAnswer,
-                dns.resolver.NXDOMAIN,
-                dns.exception.Timeout,
-            ) as e:
+            except aiodns.error.DNSError as e:
                 self.env_manager.log_info(
                     f"Error querying {record_type} for {current_domain}: {e}"
                 )
-                if isinstance(e, dns.resolver.NoAnswer):
+                if self.is_dns_error_present(e, [NO_DATA]):
                     continue
-                if isinstance(e, dns.exception.Timeout):
+                if self.is_dns_error_present(e, [TIMEOUT]):
                     return False
 
-        # Check NS records for original domain
+        # Check NS records for current_domain to detect potential NS takeover
         try:
-            self.dnspython_resolver.resolve(original_domain, "NS")
+            await self.aiodns_resolver.query(current_domain, "NS")
             await self.env_manager.write_to_file(
                 output_files["standard"]["ns_takeover"],
                 f"{original_domain}|{current_domain}",
@@ -347,14 +346,8 @@ class DNSHandler:
                 f"NS takeover possible for domain {current_domain}"
             )
             return False
-        except (
-            dns.resolver.NoAnswer,
-            dns.resolver.NXDOMAIN,
-            dns.exception.Timeout,
-        ) as e:
-            self.env_manager.log_info(f"Error querying NS for {original_domain}: {e}")
-            if isinstance(e, dns.resolver.NoAnswer):
-                pass
+        except aiodns.error.DNSError as e:
+            self.env_manager.log_info(f"Error querying NS for {current_domain}: {e}")
 
         patterns = self.env_manager.get_patterns()
         category, recommendation, evidence_link = self.categorise_domain(
