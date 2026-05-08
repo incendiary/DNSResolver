@@ -13,9 +13,12 @@ from imports.cloud_ip_ranges import (
 from imports.domain_processor import process_domain_async
 
 
-async def main_async():
-    env_manager = EnvironmentManager()
-
+async def run(env_manager):
+    """
+    Core resolution pipeline. Accepts any EnvironmentManager-compatible object so
+    both the CLI entrypoint (resolver.py) and the Lambda entrypoint (lambda_handler.py)
+    can share the same logic.
+    """
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(
         env_manager.get_output_dir(), env_manager.extreme
     )
@@ -104,6 +107,11 @@ async def main_async():
         )
         env_manager.log_info("Azure IPv4 Ranges: %s", csp_ip_addresses.get_azure_ipv4())
         env_manager.log_info("Azure IPv6 Ranges: %s", csp_ip_addresses.get_azure_ipv6())
+
+
+async def main_async():
+    env_manager = EnvironmentManager()
+    await run(env_manager)
 
 
 if __name__ == "__main__":
