@@ -17,6 +17,11 @@ async def process_domain_async(domain, env_manager, pbar, csp_ip_addresses, dns_
     )
 
     if success:
+        output_files = env_manager.get_output_files()
+        await env_manager.write_to_file(
+            output_files["standard"]["resolved"],
+            f"{domain}|{'|'.join(final_ips)}",
+        )
         perform_csp_checks(domain_context, env_manager, final_ips)
         env_manager.log_info(f"Performing CSP Checks for: {domain} and {final_ips}")
 
