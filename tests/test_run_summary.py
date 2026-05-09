@@ -63,11 +63,11 @@ def test_counts_are_accurate(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
-# Dangling CNAMEs
+# Classified dangling CNAMEs — shown in full
 # ---------------------------------------------------------------------------
 
 
-def test_dangling_cname_flagged(tmp_path, capsys):
+def test_classified_dangling_cname_shown_in_full(tmp_path, capsys):
     dangling = "root.example.com|app.s3.amazonaws.com|aws_s3|Remove the CNAME|https://evidence.link\n"
     summary = _make_summary(tmp_path, {"dangling": dangling})
     summary.display(total_input=1, failed_count=0)
@@ -75,14 +75,14 @@ def test_dangling_cname_flagged(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "[!]" in out
     assert "TAKEOVER CANDIDATE" in out
-    assert "Dangling CNAMEs (1)" in out
+    assert "Classified dangling CNAMEs (1)" in out
     assert "[aws_s3]" in out
     assert "app.s3.amazonaws.com" in out
     assert "Remove the CNAME" in out
     assert "https://evidence.link" in out
 
 
-def test_dangling_cnames_grouped_by_category(tmp_path, capsys):
+def test_classified_cnames_grouped_by_category(tmp_path, capsys):
     dangling = (
         "a.com|a.herokudns.com|heroku|Remove it|https://heroku.example\n"
         "b.com|b.herokudns.com|heroku|Remove it|https://heroku.example\n"
@@ -92,20 +92,64 @@ def test_dangling_cnames_grouped_by_category(tmp_path, capsys):
     summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
-    assert "Dangling CNAMEs (3)" in out
+    assert "Classified dangling CNAMEs (3)" in out
     # aws_s3 sorts before heroku alphabetically
-    aws_pos = out.index("[aws_s3]")
-    heroku_pos = out.index("[heroku]")
-    assert aws_pos < heroku_pos
+    assert out.index("[aws_s3]") < out.index("[heroku]")
 
 
-def test_dangling_line_missing_fields_skipped_gracefully(tmp_path, capsys):
-    """A malformed dangling line (< 5 fields) should not crash and is silently ignored."""
-    summary = _make_summary(tmp_path, {"dangling": "only|two\n"})
-    summary.display(total_input=1, failed_count=0)
+# ---------------------------------------------------------------------------
+# Unclassified dangling CNAMEs — collapsed to a count
+# ---------------------------------------------------------------------------
+
+
+def test_unclassified_cnames_collapsed_to_count(tmp_path, capsys):
+    """Unclassified entries must not appear individually — only a count line."""
+    dangling = (
+        "a.com|mystery-target.example.com|unknown|Unclassified|N/A\n"
+        "b.com|another-unknown.example.com|unknown|Unclassified|N/A\n"
+    )
+    summary = _make_summary(tmp_path, {"dangling": dangling})
+    summary.display(total_input=2, failed_count=0)
 
     out = capsys.readouterr().out
-    assert "No takeover candidates detected." in out
+    assert "[!]" in out
+    assert "Unclassified dangling CNAMEs : 2" in out
+    assert "mystery-target.example.com" not in out
+    assert "another-unknown.example.com" not in out
+    assert "Classified dangling CNAMEs" not in out
+
+
+def test_unclassified_count_included_in_total_banner(tmp_path, capsys):
+    """Unclassified dangles must count toward the [!] total."""
+    dangling = (
+        "a.com|known.herokudns.com|heroku|Remove it|https://h.example\n"
+        "b.com|unknown1.example.com|unknown|Unclassified|N/A\n"
+        "c.com|unknown2.example.com|unknown|Unclassified|N/A\n"
+    )
+    summary = _make_summary(tmp_path, {"dangling": dangling})
+    summary.display(total_input=3, failed_count=0)
+
+    out = capsys.readouterr().out
+    # 1 classified + 2 unclassified = 3
+    assert "3 TAKEOVER CANDIDATE(S)" in out
+    assert "Classified dangling CNAMEs (1)" in out
+    assert "Unclassified dangling CNAMEs : 2" in out
+
+
+def test_classified_and_unclassified_split(tmp_path, capsys):
+    """Classified entries are shown in full; unclassified collapsed alongside them."""
+    dangling = (
+        "a.com|app.herokudns.com|heroku|Remove the app|https://heroku.example\n"
+        "b.com|noise.example.com|unknown|Unclassified|N/A\n"
+    )
+    summary = _make_summary(tmp_path, {"dangling": dangling})
+    summary.display(total_input=2, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "Classified dangling CNAMEs (1)" in out
+    assert "app.herokudns.com" in out
+    assert "Unclassified dangling CNAMEs : 1" in out
+    assert "noise.example.com" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +181,15 @@ def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 # Resilience
 # ---------------------------------------------------------------------------
+
+
+def test_dangling_line_missing_fields_skipped_gracefully(tmp_path, capsys):
+    """A malformed dangling line (< 5 fields) should not crash and is silently ignored."""
+    summary = _make_summary(tmp_path, {"dangling": "only|two\n"})
+    summary.display(total_input=1, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "No takeover candidates detected." in out
 
 
 def test_missing_file_treated_as_empty(tmp_path, capsys):
