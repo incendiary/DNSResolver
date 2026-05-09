@@ -19,7 +19,7 @@ async def process_domain_async(
     )
 
     if success and final_ips:
-        output_files = env_manager.get_output_files()
+        output_files = env_manager.output_files
         await env_manager.write_to_file(
             output_files["standard"]["resolved"],
             f"{domain}|{'|'.join(final_ips)}",

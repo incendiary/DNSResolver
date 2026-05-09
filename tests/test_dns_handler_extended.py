@@ -88,8 +88,8 @@ async def test_log_and_write_dns_error_includes_additional_message(
 
 
 async def test_collect_evidence_skipped_when_disabled(handler, mock_env_manager):
-    mock_env_manager.get_evidence.return_value = False
-    output_files = mock_env_manager.get_output_files.return_value
+    mock_env_manager.evidence = False
+    output_files = mock_env_manager.output_files
 
     await handler.collect_evidence("example.com", "dangling", output_files)
 
@@ -97,10 +97,10 @@ async def test_collect_evidence_skipped_when_disabled(handler, mock_env_manager)
 
 
 async def test_collect_evidence_called_per_nameserver(handler, mock_env_manager):
-    mock_env_manager.get_evidence.return_value = True
-    mock_env_manager.get_resolvers.return_value = ["8.8.8.8", "1.1.1.1"]
+    mock_env_manager.evidence = True
+    mock_env_manager.nameservers = ["8.8.8.8", "1.1.1.1"]
     handler.evidence_collector.perform_dns_evidence = AsyncMock()
-    output_files = mock_env_manager.get_output_files.return_value
+    output_files = mock_env_manager.output_files
 
     await handler.collect_evidence("example.com", "dangling", output_files)
 

@@ -77,7 +77,7 @@ async def _main(event):
 
     await run(env_manager)
 
-    _upload_results(s3, env_manager.get_output_dir(), output_bucket, output_prefix)
+    _upload_results(s3, env_manager.output_dir, output_bucket, output_prefix)
     logger.info("Results uploaded to s3://%s/%s/", output_bucket, output_prefix)
 
 

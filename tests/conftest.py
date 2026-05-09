@@ -48,15 +48,15 @@ def mock_env_manager():
     """
     env = MagicMock()
 
-    # DNS / resolver config
-    env.get_random_nameserver.return_value = None
-    env.get_resolvers.return_value = ["8.8.8.8"]
-    env.get_retries.return_value = 2
-    env.get_timeout.return_value = 5
-    env.get_evidence.return_value = False
+    # DNS / resolver config — direct attribute access (no getters)
+    env.get_random_nameserver.return_value = None  # method with logic, kept as method
+    env.nameservers = ["8.8.8.8"]
+    env.retries = 2
+    env.timeout = 5
+    env.evidence = False
 
     # Output files the handler writes results to
-    env.get_output_files.return_value = {
+    env.output_files = {
         "standard": {
             "dangling": "/tmp/test_dangling.txt",
             "ns_takeover": "/tmp/test_ns_takeover.txt",
@@ -67,7 +67,7 @@ def mock_env_manager():
     }
 
     # Domain categorisation patterns (empty → every domain is "unknown")
-    env.get_patterns.return_value = {}
+    env.patterns = {}
 
     # write_to_file is async, so it needs AsyncMock not MagicMock
     env.write_to_file = AsyncMock()

@@ -205,7 +205,7 @@ def test_perform_csp_checks_matches_gcp_ip(tmp_path, mock_env_manager, ctx):
     aws_file.touch()
     azure_file = tmp_path / "azure.txt"
     azure_file.touch()
-    mock_env_manager.get_output_files.return_value = {
+    mock_env_manager.output_files = {
         "standard": {
             "gcp": str(gcp_file),
             "aws": str(aws_file),
@@ -222,7 +222,7 @@ def test_perform_csp_checks_matches_gcp_ip(tmp_path, mock_env_manager, ctx):
 def test_perform_csp_checks_no_match_returns_false(tmp_path, mock_env_manager, ctx):
     for vendor in ("gcp", "aws", "azure"):
         (tmp_path / f"{vendor}.txt").touch()
-    mock_env_manager.get_output_files.return_value = {
+    mock_env_manager.output_files = {
         "standard": {
             "gcp": str(tmp_path / "gcp.txt"),
             "aws": str(tmp_path / "aws.txt"),
