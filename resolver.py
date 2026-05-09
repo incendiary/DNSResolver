@@ -20,13 +20,13 @@ async def run(env_manager):
     can share the same logic.
     """
     gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(
-        env_manager.get_output_dir(), env_manager.extreme
+        env_manager.output_dir, env_manager.extreme
     )
     aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(
-        env_manager.get_output_dir(), env_manager.extreme
+        env_manager.output_dir, env_manager.extreme
     )
     azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(
-        env_manager.get_output_dir(), env_manager.extreme
+        env_manager.output_dir, env_manager.extreme
     )
 
     csp_ip_addresses = CSPIPAddresses(
@@ -35,7 +35,7 @@ async def run(env_manager):
 
     env_manager.set_domains()
     domains_to_process = list(env_manager.domains)
-    retries = env_manager.get_retries()
+    retries = env_manager.retries
     dns_handler = DNSHandler(env_manager)
     sem = asyncio.Semaphore(env_manager.max_threads or 50)
     all_dangling_domains: set = set()
@@ -93,10 +93,10 @@ async def run(env_manager):
         )
 
     env_manager.log_info(
-        "All resolutions completed. Results saved to %s", env_manager.get_output_dir()
+        "All resolutions completed. Results saved to %s", env_manager.output_dir
     )
 
-    if env_manager.get_extreme():
+    if env_manager.extreme:
         env_manager.log_info("AWS IPv4 Ranges: %s", csp_ip_addresses.get_aws_ipv4())
         env_manager.log_info("AWS IPv6 Ranges: %s", csp_ip_addresses.get_aws_ipv6())
         env_manager.log_info(

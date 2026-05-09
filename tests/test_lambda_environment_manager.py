@@ -99,7 +99,7 @@ def test_logger_has_stream_handler(tmp_path):
 
 def test_output_files_created(tmp_path):
     mgr = _make_manager(tmp_path)
-    output_files = mgr.get_output_files()
+    output_files = mgr.output_files
     assert "standard" in output_files
     for key, path in output_files["standard"].items():
         if key != "environment":  # JSON written separately

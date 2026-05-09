@@ -174,7 +174,7 @@ async def test_resolve_domain_async_retries_before_giving_up(
     The handler should attempt the query (retries + 1) times before
     declaring failure.  We configure 2 retries, so expect 3 total calls.
     """
-    mock_env_manager.get_retries.return_value = 2
+    mock_env_manager.retries = 2
     handler.aiodns_resolver.query = AsyncMock(side_effect=make_nxdomain())
     handler.handle_domain_resolution_errors = AsyncMock(return_value=(False, []))
 
