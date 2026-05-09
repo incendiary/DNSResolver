@@ -36,7 +36,7 @@ def test_no_candidates_prints_clean_message(tmp_path, capsys):
             "resolved": "example.com|1.2.3.4\nfoo.com|5.6.7.8\n",
         },
     )
-    summary.print(total_input=2, failed_count=0)
+    summary.display(total_input=2, failed_count=0)
 
     out = capsys.readouterr().out
     assert "No takeover candidates detected." in out
@@ -53,7 +53,7 @@ def test_counts_are_accurate(tmp_path, capsys):
             "gcp": "b.com|2.2.2.2\nb2.com|3.3.3.3\n",
         },
     )
-    summary.print(total_input=5, failed_count=1)
+    summary.display(total_input=5, failed_count=1)
 
     out = capsys.readouterr().out
     assert "5" in out  # total input
@@ -70,7 +70,7 @@ def test_counts_are_accurate(tmp_path, capsys):
 def test_dangling_cname_flagged(tmp_path, capsys):
     dangling = "root.example.com|app.s3.amazonaws.com|aws_s3|Remove the CNAME|https://evidence.link\n"
     summary = _make_summary(tmp_path, {"dangling": dangling})
-    summary.print(total_input=1, failed_count=0)
+    summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
     assert "[!]" in out
@@ -89,7 +89,7 @@ def test_dangling_cnames_grouped_by_category(tmp_path, capsys):
         "c.com|c.s3.amazonaws.com|aws_s3|Remove the CNAME|https://aws.example\n"
     )
     summary = _make_summary(tmp_path, {"dangling": dangling})
-    summary.print(total_input=3, failed_count=0)
+    summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
     assert "Dangling CNAMEs (3)" in out
@@ -100,13 +100,12 @@ def test_dangling_cnames_grouped_by_category(tmp_path, capsys):
 
 
 def test_dangling_line_missing_fields_skipped_gracefully(tmp_path, capsys):
-    """A malformed dangling line (< 5 fields) should not crash the summary."""
+    """A malformed dangling line (< 5 fields) should not crash and is silently ignored."""
     summary = _make_summary(tmp_path, {"dangling": "only|two\n"})
-    summary.print(total_input=1, failed_count=0)
+    summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
-    # The line is silently skipped; candidate block still shown but empty category
-    assert "Dangling CNAMEs (1)" in out
+    assert "No takeover candidates detected." in out
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +116,7 @@ def test_dangling_line_missing_fields_skipped_gracefully(tmp_path, capsys):
 def test_ns_takeover_flagged(tmp_path, capsys):
     ns = "vuln.example.com|ns1.orphaned-registrar.com\n"
     summary = _make_summary(tmp_path, {"ns_takeover": ns})
-    summary.print(total_input=1, failed_count=0)
+    summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
     assert "[!]" in out
@@ -129,7 +128,7 @@ def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):
     dangling = "a.com|a.herokudns.com|heroku|Remove|https://h.example\n"
     ns = "b.com|ns1.dead.example\nc.com|ns2.dead.example\n"
     summary = _make_summary(tmp_path, {"dangling": dangling, "ns_takeover": ns})
-    summary.print(total_input=3, failed_count=0)
+    summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
     assert "3 TAKEOVER CANDIDATE(S)" in out
@@ -154,7 +153,7 @@ def test_missing_file_treated_as_empty(tmp_path, capsys):
         }
     }
     summary = RunSummary(output_files, "/tmp/output")
-    summary.print(total_input=0, failed_count=0)
+    summary.display(total_input=0, failed_count=0)
 
     out = capsys.readouterr().out
     assert "No takeover candidates detected." in out

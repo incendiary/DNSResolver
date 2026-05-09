@@ -4,14 +4,16 @@ class RunSummary:
         self._output_dir = output_dir
 
     def _lines(self, key):
-        path = self._files.get(key, "")
+        path = self._files.get(key)
+        if not path:
+            return []
         try:
             with open(path, encoding="utf-8") as f:
                 return [ln.strip() for ln in f if ln.strip()]
         except OSError:
             return []
 
-    def print(self, total_input, failed_count):
+    def display(self, total_input, failed_count):
         resolved_count = len(self._lines("resolved"))
         unresolved_count = len(self._lines("unresolved"))
         dangling = self._lines("dangling")
@@ -26,12 +28,14 @@ class RunSummary:
             if len(parts) >= 5:
                 orig, current, category, recommendation, evidence = parts[:5]
                 by_category.setdefault(category, []).append(
-                    (orig, current, recommendation, evidence)
+                    (current, recommendation, evidence)
                 )
+
+        dangling_count = sum(len(v) for v in by_category.values())
+        total_candidates = dangling_count + len(ns_takeover)
 
         bar = "=" * 64
         thin = "-" * 64
-        total_candidates = len(dangling) + len(ns_takeover)
 
         print(f"\n{bar}")
         print("  DNSResolver — Run Summary")
@@ -51,14 +55,13 @@ class RunSummary:
         else:
             print(f"  [!] {total_candidates} TAKEOVER CANDIDATE(S) DETECTED [!]")
 
-            if dangling:
+            if dangling_count:
                 print()
-                print(f"  Dangling CNAMEs ({len(dangling)})")
+                print(f"  Dangling CNAMEs ({dangling_count})")
                 for category, entries in sorted(by_category.items()):
                     print(f"    [{category}]")
-                    for orig, current, rec, evidence in entries:
-                        label = current if current != orig else orig
-                        print(f"      {label}")
+                    for current, rec, evidence in entries:
+                        print(f"      {current}")
                         print(f"        Recommendation : {rec}")
                         print(f"        Evidence       : {evidence}")
 

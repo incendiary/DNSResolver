@@ -39,7 +39,6 @@ async def run(env_manager):
     retries = env_manager.retries
     dns_handler = DNSHandler(env_manager)
     sem = asyncio.Semaphore(env_manager.max_threads or 50)
-    all_dangling_domains: set = set()
 
     async def bounded_process(domain, pbar):
         async with sem:
@@ -66,8 +65,7 @@ async def run(env_manager):
                 )
                 failed.append(domain)
                 continue
-            success, _final_ips, dangling = result
-            all_dangling_domains.update(dangling)
+            success, _final_ips, _dangling = result
             if not success:
                 failed.append(domain)
         domains_to_process = failed
@@ -86,7 +84,7 @@ async def run(env_manager):
             retries + 1,
         )
 
-    RunSummary(env_manager.output_files, env_manager.output_dir).print(
+    RunSummary(env_manager.output_files, env_manager.output_dir).display(
         len(env_manager.domains), len(domains_to_process)
     )
 
