@@ -158,6 +158,28 @@ async def test_cname_chain_dangling_returns_true(handler, domain_context):
     assert result is True
 
 
+async def test_cname_target_without_trailing_dot_is_normalised(handler, domain_context):
+    """aiodns returns CNAME targets without trailing dot; the normalisation must add one
+    so that regex patterns ending with \\. match correctly."""
+    received_targets = []
+    cname_result = MagicMock()
+    cname_result.cname = "gbe8q5o.impervadns.net"  # no trailing dot — as aiodns returns it
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "CNAME" and domain == "example.com":
+            return cname_result
+        if domain != "example.com":
+            received_targets.append(domain)
+        raise make_error(NXDOMAIN)
+
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
+
+    await handler.takeover_detector.check_dangling_cname_async(domain_context, "example.com")
+
+    # The recursive call must use the normalised form with trailing dot
+    assert any(t == "gbe8q5o.impervadns.net." for t in received_targets)
+
+
 async def test_a_record_exists_not_dangling(handler, domain_context):
     """If the A record resolves, the domain is not dangling."""
 
