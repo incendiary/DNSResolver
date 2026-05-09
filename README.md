@@ -343,7 +343,7 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#48](https://github.com/incendiary/DNSResolver/issues/48) | ✅ v1.4.0 | End-of-run summary — at-a-glance verdict with prominently flagged takeover candidates |
 | [#50](https://github.com/incendiary/DNSResolver/issues/50) | ✅ v1.5.0 | AI-assisted code review and refactoring pass using [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) guidelines — surgical changes, simplicity-first, no speculative abstractions |
 | [#52](https://github.com/incendiary/DNSResolver/issues/52) | ✅ v1.6.0 | Refine run summary — elevate classified takeover candidates, collapse unclassified noise to a count |
-| [#54](https://github.com/incendiary/DNSResolver/issues/54) | [ ] v1.7.0 | Expand domain categorisation patterns — fix key mismatch bug, remove proprietary entry, add 11 missing takeover services |
+| [#54](https://github.com/incendiary/DNSResolver/issues/54) | ✅ v1.7.0 | Expand domain categorisation patterns — fix key mismatch bug, remove proprietary entry, add 11 missing takeover services |
 
 ## Contributing
 
