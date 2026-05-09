@@ -1,7 +1,5 @@
 """Tests for RunSummary — verifies stdout output using capsys and tmp_path."""
 
-import pytest
-
 from classes.run_summary import RunSummary
 
 
