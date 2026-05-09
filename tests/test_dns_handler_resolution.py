@@ -14,7 +14,8 @@ import dns.exception
 import dns.resolver
 import pytest
 
-from classes.dns_handler import NO_DATA, NXDOMAIN, SERVFAIL, TIMEOUT, DNSHandler
+from classes.dns_constants import NO_DATA, NXDOMAIN, SERVFAIL, TIMEOUT
+from classes.dns_handler import DNSHandler
 from classes.domain_categoriser import DomainCategoriser
 
 
