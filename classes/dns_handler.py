@@ -4,7 +4,7 @@ import aiodns
 import dns.exception
 import dns.resolver
 
-from classes.dns_constants import NO_DATA, NXDOMAIN, REFUSED, SERVFAIL, TIMEOUT  # noqa: F401
+from classes.dns_constants import NXDOMAIN, SERVFAIL, is_dns_error_present
 from classes.takeover_detector import TakeoverDetector
 
 
@@ -20,10 +20,6 @@ class DNSHandler:
             self.dnspython_resolver.nameservers = [random_nameserver]
 
         self.takeover_detector = TakeoverDetector(self.aiodns_resolver, env_manager)
-
-    @staticmethod
-    def is_dns_error_present(error, error_types):
-        return error.args[0] in error_types
 
     async def log_and_write_dns_error(self, domain, error, additional_message=""):
         message = f"DNS resolution error for {domain}: {error}"
@@ -42,7 +38,7 @@ class DNSHandler:
             f"Handling DNS error for {current_domain}: {error} | final_retry={final_retry}"
         )
 
-        if self.is_dns_error_present(error, [NXDOMAIN]):
+        if is_dns_error_present(error, [NXDOMAIN]):
             self.env_manager.log_info(
                 f"{current_domain} not found, checking for dangling CNAME."
             )
@@ -52,7 +48,7 @@ class DNSHandler:
                 return True, []
 
         if final_retry:
-            if self.is_dns_error_present(error, [SERVFAIL]):
+            if is_dns_error_present(error, [SERVFAIL]):
                 await self.log_and_write_dns_error(
                     current_domain, error, "Could not contact DNS servers"
                 )
