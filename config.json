@@ -156,7 +156,7 @@
             "evidence": "https://github.com/EdOverflow/can-i-take-over-xyz/issues/22"
         },
         "incapsula": {
-            "regex": "\\.incapdns\\.net\\.",
+            "regex": "\\.incapdns\\.net\\.|\\.impervadns\\.net\\.",
             "recommendation": "Remove the CNAME if the Imperva/Incapsula site is no longer protected",
             "evidence": "https://docs.imperva.com/bundle/cloud-application-security/page/more/faq/incapsula-nameserver.html"
         },
