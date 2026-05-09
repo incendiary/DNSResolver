@@ -10,6 +10,7 @@ from imports.cloud_ip_ranges import (
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
+from classes.run_summary import RunSummary
 from imports.domain_processor import process_domain_async
 
 
@@ -38,7 +39,6 @@ async def run(env_manager):
     retries = env_manager.retries
     dns_handler = DNSHandler(env_manager)
     sem = asyncio.Semaphore(env_manager.max_threads or 50)
-    all_dangling_domains: set = set()
 
     async def bounded_process(domain, pbar):
         async with sem:
@@ -65,8 +65,7 @@ async def run(env_manager):
                 )
                 failed.append(domain)
                 continue
-            success, _final_ips, dangling = result
-            all_dangling_domains.update(dangling)
+            success, _final_ips, _dangling = result
             if not success:
                 failed.append(domain)
         domains_to_process = failed
@@ -85,15 +84,8 @@ async def run(env_manager):
             retries + 1,
         )
 
-    if all_dangling_domains:
-        env_manager.log_info(
-            "%d dangling domain(s) detected: %s",
-            len(all_dangling_domains),
-            ", ".join(sorted(all_dangling_domains)),
-        )
-
-    env_manager.log_info(
-        "All resolutions completed. Results saved to %s", env_manager.output_dir
+    RunSummary(env_manager.output_files, env_manager.output_dir).display(
+        len(env_manager.domains), len(domains_to_process)
     )
 
     if env_manager.extreme:
