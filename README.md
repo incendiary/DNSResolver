@@ -346,6 +346,12 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#54](https://github.com/incendiary/DNSResolver/issues/54) | ✅ v1.7.0 | Expand domain categorisation patterns — fix key mismatch bug, remove proprietary entry, add 11 missing takeover services |
 | [#56](https://github.com/incendiary/DNSResolver/issues/56) | ✅ v1.8.0 | Formal git history secret scan — confirm no credentials, internal hostnames, or tokens in history |
 | [#57](https://github.com/incendiary/DNSResolver/issues/57) | ✅ v1.8.0 | Dependency audit — run pip-audit against all requirements files and resolve any high/critical CVEs |
+| [#60](https://github.com/incendiary/DNSResolver/issues/60) | ✅ v1.8.0 | GitHub Actions CI — flake8 + pytest on Python 3.12 for all PRs and pushes to main |
+| [#61](https://github.com/incendiary/DNSResolver/issues/61) | ✅ v1.8.0 | pre-commit: add gitleaks hook at commit time; sync black rev to CVE-fixed 26.3.1 |
+| [#63](https://github.com/incendiary/DNSResolver/issues/63) | [ ] v1.9.0 | Dead code removal — unreachable guards in `cloud_service_provider_checks` and `config_resolver` |
+| [#64](https://github.com/incendiary/DNSResolver/issues/64) | [ ] v1.9.0 | Deduplicate `fetch_google_cloud_ip_ranges` / `fetch_aws_ip_ranges` into a shared helper |
+| [#65](https://github.com/incendiary/DNSResolver/issues/65) | [ ] v1.9.0 | Strip what-not-why docstrings from `cloud_ip_ranges.py` |
+| [#66](https://github.com/incendiary/DNSResolver/issues/66) | [ ] v1.9.0 | Branch protection — require CI status check to pass before merge |
 
 ## Contributing
 
@@ -353,3 +359,5 @@ Once related root domains are identified, enumerate subdomains for each and comb
 2. Create a feature branch (`git checkout -b feature/my-change`)
 3. Commit your changes
 4. Push and open a Pull Request
+
+> **Note:** Claude Code (claude-sonnet-4-6) has been used to help uplift this project for public release — security hardening, dependency audits, tooling, and documentation. Things should work, but in some cases the changes haven't been fully verified end-to-end. PRs and fixes are very welcome.
