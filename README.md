@@ -340,7 +340,8 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#42](https://github.com/incendiary/DNSResolver/issues/42) | ✅ v1.2.1 | Enforce code style with Black, isort, flake8, and pre-commit hooks |
 | [#41](https://github.com/incendiary/DNSResolver/issues/41) | ✅ v1.3.0 | Refactor `EnvironmentManager` — `ConfigResolver` + `OutputManager` split; trivial getters replaced with direct attribute access |
 | [#43](https://github.com/incendiary/DNSResolver/issues/43) | 🔄 v1.3.0 | Refactor `DNSHandler` — split resolution, takeover detection, and categorisation into focused classes (PR open) |
-| [#48](https://github.com/incendiary/DNSResolver/issues/48) | 🔄 v1.4.0 | End-of-run summary — at-a-glance verdict with prominently flagged takeover candidates (PR open) |
+| [#48](https://github.com/incendiary/DNSResolver/issues/48) | ✅ v1.4.0 | End-of-run summary — at-a-glance verdict with prominently flagged takeover candidates |
+| [#50](https://github.com/incendiary/DNSResolver/issues/50) | [ ] v1.5.0 | AI-assisted code review and refactoring pass using [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) guidelines — surgical changes, simplicity-first, no speculative abstractions |
 
 ## Contributing
 
