@@ -1,14 +1,12 @@
+from classes.domain_processing_context import DomainProcessingContext
 from imports.cloud_service_provider_checks import perform_csp_checks
-from imports.create_domain_context import create_domain_context
 
 
 async def process_domain_async(
     domain, env_manager, pbar, csp_ip_addresses, dns_handler
 ):
-    domain_context = create_domain_context(
-        domain, env_manager, set(), set(), csp_ip_addresses
-    )
-    domain_context.create_resolver()
+    domain_context = DomainProcessingContext(env_manager, csp_ip_addresses)
+    domain_context.set_domain(domain)
 
     env_manager.log_info(f"Processing domain: {domain}")
 

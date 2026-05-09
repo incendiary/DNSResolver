@@ -128,5 +128,3 @@ class DNSHandler:
                         f"Failed to resolve {current_domain} after {retries + 1} attempts."
                     )
                     return False, []
-
-        return False, []
