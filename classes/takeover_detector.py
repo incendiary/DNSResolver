@@ -2,15 +2,9 @@ import asyncio
 
 import aiodns
 
+from classes.dns_constants import NO_DATA, NXDOMAIN, SERVFAIL
 from classes.domain_categoriser import DomainCategoriser
 from classes.evidence_collector import EvidenceCollector
-
-# pycares errno values (not DNS RCODEs — see pycares.errno)
-NO_DATA = 1   # ARES_ENODATA
-SERVFAIL = 3  # ARES_ESERVFAIL
-NXDOMAIN = 4  # ARES_ENOTFOUND
-REFUSED = 6   # ARES_EREFUSED
-TIMEOUT = 12  # ARES_ETIMEOUT
 
 
 class TakeoverDetector:
@@ -70,8 +64,6 @@ class TakeoverDetector:
                         return True
         except aiodns.error.DNSError as e:
             self.env_manager.log_info(f"Error querying NS records for {domain}: {e}")
-            if self.is_dns_error_present(e, [NXDOMAIN, SERVFAIL]):
-                pass
         return False
 
     async def handle_takeover_checks(self, domain_context, current_domain):

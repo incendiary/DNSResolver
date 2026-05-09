@@ -4,14 +4,8 @@ import aiodns
 import dns.exception
 import dns.resolver
 
+from classes.dns_constants import NO_DATA, NXDOMAIN, REFUSED, SERVFAIL, TIMEOUT  # noqa: F401
 from classes.takeover_detector import TakeoverDetector
-
-# pycares errno values (not DNS RCODEs — see pycares.errno)
-NO_DATA = 1   # ARES_ENODATA
-SERVFAIL = 3  # ARES_ESERVFAIL
-NXDOMAIN = 4  # ARES_ENOTFOUND
-REFUSED = 6   # ARES_EREFUSED
-TIMEOUT = 12  # ARES_ETIMEOUT
 
 
 class DNSHandler:

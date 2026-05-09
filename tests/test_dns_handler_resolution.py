@@ -29,6 +29,8 @@ async def handler(mock_env_manager):
         patch("classes.takeover_detector.EvidenceCollector"),
     ):
         h = DNSHandler(mock_env_manager)
+    # TakeoverDetector holds the resolver by reference from construction time,
+    # so reassign both to the same mock to keep them in sync.
     mock_aiodns = AsyncMock()
     h.aiodns_resolver = mock_aiodns
     h.dnspython_resolver = MagicMock()
