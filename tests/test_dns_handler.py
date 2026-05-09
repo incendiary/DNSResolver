@@ -16,7 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiodns
 import pytest
 
-from classes.dns_handler import NO_DATA, NXDOMAIN, SERVFAIL, TIMEOUT, DNSHandler
+from classes.dns_constants import NO_DATA, NXDOMAIN, SERVFAIL, TIMEOUT, is_dns_error_present
+from classes.dns_handler import DNSHandler
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,14 +93,14 @@ def domain_context(mock_env_manager, csp_ips):
 # ---------------------------------------------------------------------------
 
 
-def test_is_dns_error_present_matches_correct_code(handler):
+def test_is_dns_error_present_matches_correct_code():
     error = make_nxdomain()
-    assert handler.is_dns_error_present(error, [NXDOMAIN]) is True
+    assert is_dns_error_present(error, [NXDOMAIN]) is True
 
 
-def test_is_dns_error_present_no_match(handler):
+def test_is_dns_error_present_no_match():
     error = make_timeout()
-    assert handler.is_dns_error_present(error, [NXDOMAIN, SERVFAIL]) is False
+    assert is_dns_error_present(error, [NXDOMAIN, SERVFAIL]) is False
 
 
 # ---------------------------------------------------------------------------

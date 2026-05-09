@@ -13,7 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiodns
 import pytest
 
-from classes.dns_handler import NXDOMAIN, SERVFAIL, DNSHandler
+from classes.dns_constants import NXDOMAIN, SERVFAIL
+from classes.dns_handler import DNSHandler
 
 # ---------------------------------------------------------------------------
 # Shared helpers (duplicated from test_dns_handler.py for clarity)
