@@ -4,8 +4,6 @@ import logging
 import os
 import sys
 
-from classes.custom_exceptions import FileDoesNotExistError
-
 
 class ConfigResolver:
     """Parses CLI arguments and merges them with values from config.json."""
