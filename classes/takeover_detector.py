@@ -7,6 +7,9 @@ from classes.domain_categoriser import DomainCategoriser
 from classes.evidence_collector import EvidenceCollector
 
 
+MAX_CNAME_DEPTH = 20
+
+
 class TakeoverDetector:
     def __init__(self, aiodns_resolver, env_manager):
         self.aiodns_resolver = aiodns_resolver
@@ -26,15 +29,6 @@ class TakeoverDetector:
             for nameserver in self.env_manager.nameservers
         ]
         await asyncio.gather(*tasks)
-
-    async def is_dangling_record_async(self, domain, record_type):
-        try:
-            await self.aiodns_resolver.query(domain, record_type)
-            self.env_manager.log_info(f"Domain {domain} has a valid {record_type} record.")
-            return False
-        except aiodns.error.DNSError as e:
-            self.env_manager.log_info(f"Error querying {record_type} for {domain}: {e}")
-            return is_dns_error_present(e, [NXDOMAIN, SERVFAIL])
 
     async def check_ns_takeover(self, domain_context, domain):
         original_domain = domain_context.get_domain()
@@ -78,7 +72,14 @@ class TakeoverDetector:
             domain_context.add_dangling_domain_to_domains(current_domain)
         return is_dangling or is_nstakeover
 
-    async def check_dangling_cname_async(self, domain_context, current_domain):
+    async def check_dangling_cname_async(self, domain_context, current_domain, depth=0):
+        if depth >= MAX_CNAME_DEPTH:
+            self.env_manager.log_info(
+                f"CNAME chain depth limit ({MAX_CNAME_DEPTH}) reached for "
+                f"{current_domain} — treating as non-dangling"
+            )
+            return False
+
         original_domain = domain_context.get_domain()
         output_files = self.env_manager.output_files
         self.env_manager.log_info(
@@ -95,7 +96,7 @@ class TakeoverDetector:
                 if not target.endswith("."):
                     target += "."
                 self.env_manager.log_info(f"CNAME target: {target}")
-                if await self.check_dangling_cname_async(domain_context, target):
+                if await self.check_dangling_cname_async(domain_context, target, depth + 1):
                     return True
         except aiodns.error.DNSError as e:
             self.env_manager.log_info(f"Error querying CNAME for {current_domain}: {e}")
