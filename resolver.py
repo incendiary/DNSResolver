@@ -10,6 +10,7 @@ from imports.cloud_ip_ranges import (
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
+from classes.run_summary import RunSummary
 from imports.domain_processor import process_domain_async
 
 
@@ -85,15 +86,8 @@ async def run(env_manager):
             retries + 1,
         )
 
-    if all_dangling_domains:
-        env_manager.log_info(
-            "%d dangling domain(s) detected: %s",
-            len(all_dangling_domains),
-            ", ".join(sorted(all_dangling_domains)),
-        )
-
-    env_manager.log_info(
-        "All resolutions completed. Results saved to %s", env_manager.output_dir
+    RunSummary(env_manager.output_files, env_manager.output_dir).print(
+        len(env_manager.domains), len(domains_to_process)
     )
 
     if env_manager.extreme:
