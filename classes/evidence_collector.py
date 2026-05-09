@@ -67,54 +67,28 @@ class EvidenceCollector:
         )
 
     async def perform_nslookup(self, domain, nameserver, reason, evidence_dir):
-        """
-        Perform a DNS lookup using the nslookup command and save the output to a file.
-
-        :param domain: The domain name to query.
-        :param nameserver: The nameserver to use for the query.
-        :param reason: The reason for performing the query.
-        :param evidence_dir: The directory to save the evidence file.
-        :return: None
-        """
-        try:
-            result = await asyncio.create_subprocess_exec(
-                "nslookup",
-                domain,
-                nameserver,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await self.save_and_log_dns_result(
-                result, domain, nameserver, reason, evidence_dir, "nslookup"
-            )
-        except Exception as e:
-            self.env_manager.log_error(f"Command failed with error: {e}")
-            raise e from None
+        result = await asyncio.create_subprocess_exec(
+            "nslookup",
+            domain,
+            nameserver,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await self.save_and_log_dns_result(
+            result, domain, nameserver, reason, evidence_dir, "nslookup"
+        )
 
     async def perform_dig(self, domain, nameserver, reason, evidence_dir):
-        """
-        Perform a DNS lookup using the dig command and save the output to a file.
-
-        :param domain: The domain name to query.
-        :param nameserver: The nameserver to use for the query.
-        :param reason: The reason for performing the query.
-        :param evidence_dir: The directory to save the evidence file.
-        :return: None
-        """
-        try:
-            result = await asyncio.create_subprocess_exec(
-                "dig",
-                f"@{nameserver}",
-                domain,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await self.save_and_log_dns_result(
-                result, domain, nameserver, reason, evidence_dir, "dig"
-            )
-        except Exception as e:
-            self.env_manager.log_error(f"Command failed with error: {e}")
-            raise e from None
+        result = await asyncio.create_subprocess_exec(
+            "dig",
+            f"@{nameserver}",
+            domain,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await self.save_and_log_dns_result(
+            result, domain, nameserver, reason, evidence_dir, "dig"
+        )
 
     async def perform_dns_evidence(self, domain, nameserver, reason, evidence_dir):
         """
