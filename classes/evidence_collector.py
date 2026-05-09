@@ -10,11 +10,6 @@ class EvidenceCollector:
 
     @staticmethod
     def check_tools_availability():
-        """
-        Check the availability of nslookup and dig tools in the system path.
-
-        :return: Tuple indicating the availability of nslookup and dig (nslookup_available, dig_available).
-        """
         if platform.system() == "Windows":
             nslookup_available = (
                 subprocess.run(
@@ -47,17 +42,6 @@ class EvidenceCollector:
     async def save_and_log_dns_result(
         self, result, domain, nameserver, reason, evidence_dir, command_name
     ):
-        """
-        Save and log the result of a DNS query command.
-
-        :param result: The subprocess result object.
-        :param domain: The domain name queried.
-        :param nameserver: The nameserver used for the query.
-        :param reason: The reason for performing the query.
-        :param evidence_dir: The directory to save the evidence file.
-        :param command_name: The name of the DNS query command (e.g., nslookup, dig).
-        :return: None
-        """
         stdout, stderr = await result.communicate()
         content = stdout.decode() + "\n" + stderr.decode()
         filename = os.path.join(evidence_dir, f"{domain}_{reason}_{nameserver}.txt")
@@ -91,15 +75,6 @@ class EvidenceCollector:
         )
 
     async def perform_dns_evidence(self, domain, nameserver, reason, evidence_dir):
-        """
-        Perform a DNS lookup using either nslookup or dig, depending on the system.
-
-        :param domain: The domain name to perform the DNS lookup for.
-        :param nameserver: The nameserver to use for the DNS lookup.
-        :param reason: The reason for performing the DNS lookup.
-        :param evidence_dir: The directory where the output file will be saved.
-        :return: None
-        """
         nslookup_available, dig_available = self.check_tools_availability()
 
         if platform.system() == "Windows":
