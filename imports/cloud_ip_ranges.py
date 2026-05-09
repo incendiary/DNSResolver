@@ -15,26 +15,6 @@ IPV6_KEYWORDS = ["ipv6Prefix", "ipv6_prefix", "addressPrefixes"]
 
 
 def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List]:
-    """
-    :param url: The URL from which to fetch the IP ranges for Azure.
-    :param extreme: A boolean flag indicating whether to print the fetched IP ranges or not.
-    :return: A tuple containing two lists: the list of IPv4 ranges and the list of IPv6 ranges.
-
-    This method fetches the IP ranges for Azure from the provided URL. It sends a GET request to the URL and
-    checks the response status code. If the status code is not 200, it prints an error message and returns empty
-    lists for both IPv4 and IPv6 ranges.
-
-    If the status code is 200, it parses the response JSON and extracts the IPv4 and IPv6 ranges from the
-    "addressPrefixes" property of each "properties" object in the "values" list. It filters out any IPv6 addresses
-    from the IPv4 ranges list and filters out any non-IPv6 addresses from the IPv6 ranges list.
-
-    If the "extreme" flag is set to True, it also prints the fetched IPv4 and IPv6 ranges.
-
-    Finally, it returns a tuple containing the filtered IPv4 ranges and the filtered IPv6 ranges.
-
-    If any error occurs during the request or parsing the response, it prints an error message and exits the program
-    with a non-zero status code.
-    """
     try:
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
@@ -69,13 +49,6 @@ def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List]:
 
 
 def fetch_ip_ranges(url: str, extreme: bool = False) -> Tuple[List, List]:
-    """
-    Fetch IP ranges from specified URL.
-
-    :param url: URL for HTTP request
-    :param extreme: Boolean to print IP ranges
-    :return: IPv4 and IPv6 ranges
-    """
     try:
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
@@ -114,50 +87,36 @@ def fetch_ip_ranges(url: str, extreme: bool = False) -> Tuple[List, List]:
     return [], []
 
 
+def _fetch_and_save(
+    url: str, filename: str, output_dir: str, extreme: bool
+) -> Tuple[List, List]:
+    ranges = fetch_ip_ranges(url, extreme)
+    with open(os.path.join(output_dir, filename), "w", encoding="utf-8") as f:
+        json.dump(ranges, f, indent=4)
+    return ranges
+
+
 def fetch_google_cloud_ip_ranges(
     output_dir: str, extreme: bool = False
 ) -> Tuple[List, List]:
-    """
-    Fetch Google Cloud IP ranges and save as JSON.
-
-    :param output_dir: Directory for JSON output
-    :param extreme: Boolean to print IP ranges
-    :return: IP ranges
-    """
-    url = "https://www.gstatic.com/ipranges/cloud.json"
-    ranges = fetch_ip_ranges(url, extreme)
-    with open(
-        os.path.join(output_dir, "gcp_ip_ranges.json"), "w", encoding="utf-8"
-    ) as f:
-        json.dump(ranges, f, indent=4)
-    return ranges
+    return _fetch_and_save(
+        "https://www.gstatic.com/ipranges/cloud.json",
+        "gcp_ip_ranges.json",
+        output_dir,
+        extreme,
+    )
 
 
 def fetch_aws_ip_ranges(output_dir: str, extreme: bool = False) -> Tuple[List, List]:
-    """
-    Fetch AWS IP ranges and save as JSON.
-
-    :param output_dir: Directory for JSON output
-    :param extreme: Boolean to print IP ranges
-    :return: IP ranges
-    """
-    url = "https://ip-ranges.amazonaws.com/ip-ranges.json"
-    ranges = fetch_ip_ranges(url, extreme)
-    with open(
-        os.path.join(output_dir, "aws_ip_ranges.json"), "w", encoding="utf-8"
-    ) as f:
-        json.dump(ranges, f, indent=4)
-    return ranges
+    return _fetch_and_save(
+        "https://ip-ranges.amazonaws.com/ip-ranges.json",
+        "aws_ip_ranges.json",
+        output_dir,
+        extreme,
+    )
 
 
 def fetch_azure_ip_ranges(output_dir: str, extreme: bool = False) -> Tuple[List, List]:
-    """
-    Fetch Azure IP ranges and save as JSON.
-
-    :param output_dir: Directory for JSON output
-    :param extreme: Boolean to print IP ranges
-    :return: IP ranges
-    """
     url = "https://www.microsoft.com/en-us/download/confirmation.aspx?id=56519"
     try:
         with urlopen(url) as response:

@@ -183,16 +183,6 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
     assert len(lines) == 1
 
 
-def test_log_and_write_empty_ips_returns_false(tmp_path, ctx):
-    out_file = tmp_path / "gcp.txt"
-    out_file.touch()
-    output_files = {"standard": {"gcp": str(out_file)}}
-
-    result = log_and_write("gcp", [], "example.com", output_files, ctx)
-
-    assert result is False
-
-
 # ---------------------------------------------------------------------------
 # perform_csp_checks  (end-to-end through the module)
 # ---------------------------------------------------------------------------

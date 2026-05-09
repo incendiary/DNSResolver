@@ -86,20 +86,18 @@ def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
 
 
 def log_and_write(vendor, matched_ips, domain, output_files, domain_context):
-    if matched_ips:
-        message = f"{domain} resolved to {vendor} IPs: {matched_ips}"
-        file_path = output_files["standard"][vendor]
+    message = f"{domain} resolved to {vendor} IPs: {matched_ips}"
+    file_path = output_files["standard"][vendor]
 
-        # Deduplicate: skip write if this exact line already exists
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as file:
-                if message in file.read():
-                    return False
+    # Deduplicate: skip write if this exact line already exists
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as file:
+            if message in file.read():
+                return False
 
-        with open(file_path, "a", encoding="utf-8") as file:
-            file.write(message + "\n")
+    with open(file_path, "a", encoding="utf-8") as file:
+        file.write(message + "\n")
 
-        domain_context.log_info(message)
+    domain_context.log_info(message)
 
-        return True
-    return False
+    return True
