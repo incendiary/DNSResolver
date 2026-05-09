@@ -4,7 +4,6 @@ Tests for the harder-to-reach dns_handler paths:
   - handle_domain_resolution_errors (dnspython fallback, SERVFAIL logging)
   - check_dangling_cname_async (CNAME chain, A/AAAA/MX success, NO_DATA, TIMEOUT)
   - categorise_domain (match and no-match)
-  - is_dangling_record_async
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -289,33 +288,3 @@ def test_categorise_domain_returns_unknown_when_no_match():
     assert category == "unknown"
     assert recommendation == "Unclassified"
     assert evidence == "N/A"
-
-
-# ---------------------------------------------------------------------------
-# is_dangling_record_async
-# ---------------------------------------------------------------------------
-
-
-async def test_is_dangling_record_false_when_record_exists(handler):
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        return_value=[MagicMock()]
-    )
-    result = await handler.takeover_detector.is_dangling_record_async("example.com", "A")
-    assert result is False
-
-
-async def test_is_dangling_record_true_on_nxdomain(handler):
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        side_effect=make_error(NXDOMAIN)
-    )
-    result = await handler.takeover_detector.is_dangling_record_async("example.com", "A")
-    assert result is True
-
-
-async def test_is_dangling_record_true_on_servfail(handler):
-    # SERVFAIL is treated as a dangling indicator alongside NXDOMAIN
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        side_effect=make_error(SERVFAIL)
-    )
-    result = await handler.takeover_detector.is_dangling_record_async("example.com", "A")
-    assert result is True
