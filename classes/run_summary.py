@@ -1,3 +1,6 @@
+import os
+
+
 class RunSummary:
     def __init__(self, output_files, output_dir):
         self._files = output_files["standard"]
@@ -22,17 +25,21 @@ class RunSummary:
         gcp_count = len(self._lines("gcp"))
         azure_count = len(self._lines("azure"))
 
-        by_category = {}
+        classified = {}
+        unclassified_count = 0
         for line in dangling:
             parts = line.split("|")
             if len(parts) >= 5:
-                orig, current, category, recommendation, evidence = parts[:5]
-                by_category.setdefault(category, []).append(
-                    (current, recommendation, evidence)
-                )
+                _orig, current, category, recommendation, evidence = parts[:5]
+                if category == "unknown":
+                    unclassified_count += 1
+                else:
+                    classified.setdefault(category, []).append(
+                        (current, recommendation, evidence)
+                    )
 
-        dangling_count = sum(len(v) for v in by_category.values())
-        total_candidates = dangling_count + len(ns_takeover)
+        classified_count = sum(len(v) for v in classified.values())
+        total_candidates = classified_count + unclassified_count + len(ns_takeover)
 
         bar = "=" * 64
         thin = "-" * 64
@@ -55,10 +62,10 @@ class RunSummary:
         else:
             print(f"  [!] {total_candidates} TAKEOVER CANDIDATE(S) DETECTED [!]")
 
-            if dangling_count:
+            if classified_count:
                 print()
-                print(f"  Dangling CNAMEs ({dangling_count})")
-                for category, entries in sorted(by_category.items()):
+                print(f"  Classified dangling CNAMEs ({classified_count})")
+                for category, entries in sorted(classified.items()):
                     print(f"    [{category}]")
                     for current, rec, evidence in entries:
                         print(f"      {current}")
@@ -72,6 +79,16 @@ class RunSummary:
                     parts = line.split("|")
                     if len(parts) >= 2:
                         print(f"    {parts[0]} -> NS: {parts[1]}")
+
+            if unclassified_count:
+                print()
+                dangling_file = os.path.basename(
+                    self._files.get("dangling", "dangling_cname_results.txt")
+                )
+                print(
+                    f"  Unclassified dangling CNAMEs : {unclassified_count}"
+                    f"  (see {dangling_file})"
+                )
 
         print(thin)
         print(f"  Output : {self._output_dir}")
