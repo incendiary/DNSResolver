@@ -59,7 +59,7 @@ class DNSHandler:
             )
 
         # Second-opinion check using dnspython — run in executor to avoid blocking the event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
                 None, self.dnspython_resolver.resolve, current_domain, "A"
@@ -90,37 +90,19 @@ class DNSHandler:
 
     async def resolve_domain_async(self, domain_context):
         current_domain = domain_context.get_domain()
-        retries = self.env_manager.retries
-        self.env_manager.log_info(
-            f"Starting DNS resolution for {current_domain} with {retries + 1} attempts."
-        )
-
-        for attempt in range(retries + 1):
+        self.env_manager.log_info(f"Resolving {current_domain}")
+        try:
+            answers = await self.aiodns_resolver.query(current_domain, "A")
+            final_ips = [answer.host for answer in answers]
             self.env_manager.log_info(
-                f"Attempt {attempt + 1} for resolving {current_domain}"
+                f"Successfully resolved {current_domain} to {final_ips}"
             )
-            try:
-                answers = await self.aiodns_resolver.query(current_domain, "A")
-                final_ips = [answer.host for answer in answers]
-                self.env_manager.log_info(
-                    f"Successfully resolved {current_domain} to {final_ips}"
-                )
-                await self.takeover_detector.handle_takeover_checks(
-                    domain_context, current_domain
-                )
-                return True, final_ips
-            except aiodns.error.DNSError as e:
-                self.env_manager.log_info(
-                    f"DNS error on attempt {attempt + 1} of {retries + 1} for {current_domain}: {e}"
-                )
-                final_retry = attempt == retries
-                success, ips = await self.handle_domain_resolution_errors(
-                    domain_context, current_domain, e, final_retry
-                )
-                if success:
-                    return success, ips
-                if final_retry:
-                    self.env_manager.log_info(
-                        f"Failed to resolve {current_domain} after {retries + 1} attempts."
-                    )
-                    return False, []
+            await self.takeover_detector.handle_takeover_checks(
+                domain_context, current_domain
+            )
+            return True, final_ips
+        except aiodns.error.DNSError as e:
+            self.env_manager.log_info(f"DNS error for {current_domain}: {e}")
+            return await self.handle_domain_resolution_errors(
+                domain_context, current_domain, e, final_retry=True
+            )

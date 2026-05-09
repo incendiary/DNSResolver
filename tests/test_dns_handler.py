@@ -104,51 +104,6 @@ def test_is_dns_error_present_no_match():
 
 
 # ---------------------------------------------------------------------------
-# is_dangling_record_async
-# ---------------------------------------------------------------------------
-
-
-async def test_is_dangling_record_returns_false_when_record_exists(handler):
-    """A successful DNS query means the record exists — not dangling."""
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        return_value=[dns_answer("1.2.3.4")]
-    )
-
-    result = await handler.takeover_detector.is_dangling_record_async("example.com", "A")
-
-    assert result is False
-
-
-async def test_is_dangling_record_returns_true_for_nxdomain(handler):
-    """NXDOMAIN means the record is gone — dangling."""
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        side_effect=make_nxdomain()
-    )
-
-    result = await handler.takeover_detector.is_dangling_record_async(
-        "gone.example.com", "A"
-    )
-
-    assert result is True
-
-
-async def test_is_dangling_record_returns_false_for_timeout(handler):
-    """
-    A timeout means we can't tell — we conservatively say not dangling
-    rather than risk a false positive.
-    """
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        side_effect=make_timeout()
-    )
-
-    result = await handler.takeover_detector.is_dangling_record_async(
-        "slow.example.com", "A"
-    )
-
-    assert result is False
-
-
-# ---------------------------------------------------------------------------
 # resolve_domain_async — happy path
 # ---------------------------------------------------------------------------
 
@@ -181,20 +136,20 @@ async def test_resolve_domain_async_exhausted_retries_returns_false(
     assert ips == []
 
 
-async def test_resolve_domain_async_retries_before_giving_up(
+async def test_resolve_domain_async_makes_single_attempt(
     handler, domain_context, mock_env_manager
 ):
     """
-    The handler should attempt the query (retries + 1) times before
-    declaring failure.  We configure 2 retries, so expect 3 total calls.
+    resolve_domain_async makes exactly one DNS query per call.
+    Retry orchestration is the responsibility of the outer run() loop,
+    not the handler itself.
     """
-    mock_env_manager.retries = 2
     handler.aiodns_resolver.query = AsyncMock(side_effect=make_nxdomain())
     handler.handle_domain_resolution_errors = AsyncMock(return_value=(False, []))
 
     await handler.resolve_domain_async(domain_context)
 
-    assert handler.aiodns_resolver.query.call_count == 3
+    assert handler.aiodns_resolver.query.call_count == 1
 
 
 # ---------------------------------------------------------------------------
