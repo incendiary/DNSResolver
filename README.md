@@ -351,7 +351,7 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#63](https://github.com/incendiary/DNSResolver/issues/63) | [ ] v1.9.0 | Dead code removal — unreachable guards in `cloud_service_provider_checks` and `config_resolver` |
 | [#64](https://github.com/incendiary/DNSResolver/issues/64) | [ ] v1.9.0 | Deduplicate `fetch_google_cloud_ip_ranges` / `fetch_aws_ip_ranges` into a shared helper |
 | [#65](https://github.com/incendiary/DNSResolver/issues/65) | [ ] v1.9.0 | Strip what-not-why docstrings from `cloud_ip_ranges.py` |
-| [#66](https://github.com/incendiary/DNSResolver/issues/66) | [ ] v1.9.0 | Branch protection — require CI status check to pass before merge |
+| [#66](https://github.com/incendiary/DNSResolver/issues/66) | ✅ v1.8.0 | Branch protection — require CI status check to pass before merge |
 
 ## Contributing
 
