@@ -48,7 +48,7 @@ class DNSHandler:
         :param output_files: The output files configuration from the environment manager.
         :return: None
         """
-        evidence_enabled = self.env_manager.get_evidence()
+        evidence_enabled = self.env_manager.evidence
         if evidence_enabled:
             tasks = [
                 self.evidence_collector.perform_dns_evidence(
@@ -57,7 +57,7 @@ class DNSHandler:
                     reason,
                     output_files["evidence"]["dns"],
                 )
-                for nameserver in self.env_manager.get_resolvers()
+                for nameserver in self.env_manager.nameservers
             ]
 
             await asyncio.gather(*tasks)
@@ -72,7 +72,7 @@ class DNSHandler:
         :return: True if potential nameserver takeover is detected, False otherwise.
         """
         original_domain = domain_context.get_domain()
-        output_files = self.env_manager.get_output_files()
+        output_files = self.env_manager.output_files
 
         self.env_manager.log_info(f"Checking NS takeover for domain: {domain}")
 
@@ -238,7 +238,7 @@ class DNSHandler:
             message += f"|{additional_message}"
         self.env_manager.log_error(message)
         await self.env_manager.write_to_file(
-            self.env_manager.get_output_files()["standard"]["unresolved"],
+            self.env_manager.output_files["standard"]["unresolved"],
             message,
         )
 
@@ -251,7 +251,7 @@ class DNSHandler:
         """
         resolved_records = []
         current_domain = domain_context.get_domain()
-        retries = self.env_manager.get_retries()
+        retries = self.env_manager.retries
 
         self.env_manager.log_info(
             f"Starting DNS resolution for {current_domain} with {retries + 1} attempts."
@@ -298,7 +298,7 @@ class DNSHandler:
         :return: True if the domain is a dangling CNAME, False otherwise.
         """
         original_domain = domain_context.get_domain()
-        output_files = self.env_manager.get_output_files()
+        output_files = self.env_manager.output_files
 
         self.env_manager.log_info(
             f"Checking for dangling CNAME for domain: {current_domain}"
@@ -353,7 +353,7 @@ class DNSHandler:
         except aiodns.error.DNSError as e:
             self.env_manager.log_info(f"Error querying NS for {current_domain}: {e}")
 
-        patterns = self.env_manager.get_patterns()
+        patterns = self.env_manager.patterns
         category, recommendation, evidence_link = self.categorise_domain(
             current_domain, patterns
         )

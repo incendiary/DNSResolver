@@ -53,7 +53,7 @@ def perform_csp_checks(domain_context, env_manager, final_ips):
     :return: None
     """
     domain = domain_context.get_domain()
-    output_files = env_manager.get_output_files()
+    output_files = env_manager.output_files
 
     vendor_ips_context_ipv4 = get_vendor_ips(domain_context, ip_version=4)
     vendor_ips_context_ipv6 = get_vendor_ips(domain_context, ip_version=6)

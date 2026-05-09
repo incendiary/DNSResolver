@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 
 from classes.environment_manager import EnvironmentManager
+from classes.output_manager import OutputManager
 
 
 class LambdaEnvironmentManager(EnvironmentManager):
@@ -10,8 +11,7 @@ class LambdaEnvironmentManager(EnvironmentManager):
     EnvironmentManager variant for AWS Lambda.
 
     Differences from the CLI version:
-      - Config comes from constructor parameters and environment variables,
-        not argparse / sys.argv.
+      - Config comes from constructor parameters, not argparse / sys.argv.
       - Logs to stdout only (CloudWatch captures Lambda stdout automatically);
         no log file is created.
       - Evidence collection is disabled — dig/nslookup are not available in
@@ -33,22 +33,13 @@ class LambdaEnvironmentManager(EnvironmentManager):
         verbose=False,
     ):
         # Initialise base attributes directly — do NOT call super().__init__()
-        # because that triggers argparse which has no meaning in Lambda.
-        self.config = {}
-        self.args = None
+        # because that triggers ConfigResolver / argparse, which has no meaning in Lambda.
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.environment_info = {
-            "command_executed": "lambda",
-            "external_ip": None,
-            "run_in_docker": False,
-        }
         self.domains = set()
         self.patterns = None
-        self.output_files = None
         self._config_file = config_file
 
         self.domains_file = domains_file
-        self.output_dir = output_dir
         self.verbose = verbose
         self.extreme = False
         self.nameservers = nameservers if nameservers else None
@@ -58,18 +49,26 @@ class LambdaEnvironmentManager(EnvironmentManager):
         self.evidence = False  # dig/nslookup not available in Lambda runtime
 
         self.logger = self._setup_lambda_logger(verbose)
-
         self._load_config(config_file)
         self._apply_config_defaults()
 
-        self.initialise_environment()
+        om = OutputManager(output_dir, self.timestamp, evidence=False)
+        self.output_dir = om.output_dir
+        self.output_files = om.output_files
+        self.write_to_file = om.write_to_file
+
+        self.environment_info = {
+            "command_executed": "lambda",
+            "external_ip": None,
+            "run_in_docker": False,
+        }
         self.save_environment_info()
         self.load_patterns()
 
         self.logger.info("LambdaEnvironmentManager initialized.")
 
     # ------------------------------------------------------------------
-    # Overrides
+    # Lambda-specific helpers (not overrides of EnvironmentManager logic)
     # ------------------------------------------------------------------
 
     def _setup_lambda_logger(self, verbose=False):
@@ -96,7 +95,6 @@ class LambdaEnvironmentManager(EnvironmentManager):
             self.config = {}
 
     def _apply_config_defaults(self):
-        """Fill in any unset values from config.json."""
         config_args = self.config.get("config", {})
         if self.timeout is None:
             self.timeout = config_args.get("timeout")
@@ -105,17 +103,9 @@ class LambdaEnvironmentManager(EnvironmentManager):
         if self.max_threads is None:
             self.max_threads = config_args.get("max_threads", 50)
 
-    def load_patterns(self):
-        """Override to handle missing config file gracefully."""
-        try:
-            with open(self._config_file, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            self.patterns = config.get("domain_categorisation", {})
-        except (IOError, json.JSONDecodeError):
-            self.patterns = {}
-
-    def get_config_file(self):
-        return self._config_file
+    # ------------------------------------------------------------------
+    # Override: Lambda-specific formatting only
+    # ------------------------------------------------------------------
 
     def log_effective_configuration(self):
         self.logger.info(
@@ -128,9 +118,3 @@ class LambdaEnvironmentManager(EnvironmentManager):
             self.retries,
             self.verbose,
         )
-
-    def save_environment_info(self):
-        """Write environment JSON to the local output dir (will be uploaded to S3 by caller)."""
-        env_path = self.output_files["standard"]["environment"]
-        with open(env_path, "w", encoding="utf-8") as f:
-            json.dump(self.environment_info, f, indent=4)

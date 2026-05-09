@@ -44,15 +44,15 @@ class DomainProcessingContext:
     def create_resolver(self):
         """Create and configure a DNS resolver object."""
         self.resolver = dns.resolver.Resolver()
-        self.resolver.lifetime = self.env_manager.get_timeout()
-        self.resolver.timeout = self.env_manager.get_timeout()
-        nameservers = self.env_manager.get_resolvers()
+        self.resolver.lifetime = self.env_manager.timeout
+        self.resolver.timeout = self.env_manager.timeout
+        nameservers = self.env_manager.nameservers
         if nameservers:
             self.resolver.nameservers = nameservers
 
     def log_info(self, message, *args):
         """Log an info message or print to stdout if logger is not available."""
-        logger = self.env_manager.get_logger()
+        logger = self.env_manager.logger
         if logger:
             logger.info(message, *args)
         else:

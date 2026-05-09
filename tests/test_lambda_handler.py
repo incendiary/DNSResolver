@@ -33,12 +33,11 @@ def mock_s3(tmp_path):
 @pytest.fixture
 def mock_env_manager(tmp_path):
     mgr = MagicMock()
-    mgr.get_output_dir.return_value = str(tmp_path / "output")
+    mgr.output_dir = str(tmp_path / "output")
     mgr.extreme = False
     mgr.max_threads = 50
     mgr.domains = {"example.com"}
-    mgr.get_retries.return_value = 0
-    mgr.get_extreme.return_value = False
+    mgr.retries = 0
     os.makedirs(str(tmp_path / "output"), exist_ok=True)
     return mgr
 
