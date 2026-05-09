@@ -63,14 +63,16 @@ async def handler(mock_env_manager):
     replace the resolvers with controllable AsyncMock / MagicMock objects.
     """
     with (
-        patch("classes.dns_handler.EvidenceCollector"),
         patch("classes.dns_handler.aiodns.DNSResolver"),
+        patch("classes.takeover_detector.EvidenceCollector"),
     ):
         h = DNSHandler(mock_env_manager)
 
-    # Replace with controllable fakes
-    h.aiodns_resolver = AsyncMock()
+    # Replace with controllable fakes; keep takeover_detector in sync
+    mock_aiodns = AsyncMock()
+    h.aiodns_resolver = mock_aiodns
     h.dnspython_resolver = MagicMock()
+    h.takeover_detector.aiodns_resolver = mock_aiodns
     return h
 
 
@@ -106,18 +108,24 @@ def test_is_dns_error_present_no_match(handler):
 
 async def test_is_dangling_record_returns_false_when_record_exists(handler):
     """A successful DNS query means the record exists — not dangling."""
-    handler.aiodns_resolver.query = AsyncMock(return_value=[dns_answer("1.2.3.4")])
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
+        return_value=[dns_answer("1.2.3.4")]
+    )
 
-    result = await handler.is_dangling_record_async("example.com", "A")
+    result = await handler.takeover_detector.is_dangling_record_async("example.com", "A")
 
     assert result is False
 
 
 async def test_is_dangling_record_returns_true_for_nxdomain(handler):
     """NXDOMAIN means the record is gone — dangling."""
-    handler.aiodns_resolver.query = AsyncMock(side_effect=make_nxdomain())
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
+        side_effect=make_nxdomain()
+    )
 
-    result = await handler.is_dangling_record_async("gone.example.com", "A")
+    result = await handler.takeover_detector.is_dangling_record_async(
+        "gone.example.com", "A"
+    )
 
     assert result is True
 
@@ -127,9 +135,13 @@ async def test_is_dangling_record_returns_false_for_timeout(handler):
     A timeout means we can't tell — we conservatively say not dangling
     rather than risk a false positive.
     """
-    handler.aiodns_resolver.query = AsyncMock(side_effect=make_timeout())
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
+        side_effect=make_timeout()
+    )
 
-    result = await handler.is_dangling_record_async("slow.example.com", "A")
+    result = await handler.takeover_detector.is_dangling_record_async(
+        "slow.example.com", "A"
+    )
 
     assert result is False
 
@@ -145,7 +157,7 @@ async def test_resolve_domain_async_success_returns_ips(handler, domain_context)
         return_value=[dns_answer("1.2.3.4"), dns_answer("5.6.7.8")]
     )
     # Stub out takeover checks so this test stays focused on resolution
-    handler.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
 
     success, ips = await handler.resolve_domain_async(domain_context)
 
@@ -204,9 +216,9 @@ async def test_check_dangling_cname_not_dangling_has_a_record(handler, domain_co
             return [dns_answer("1.2.3.4")]
         raise make_nxdomain()
 
-    handler.aiodns_resolver.query = query_side_effect
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
 
-    result = await handler.check_dangling_cname_async(
+    result = await handler.takeover_detector.check_dangling_cname_async(
         domain_context, "target.example.com"
     )
 
@@ -220,9 +232,11 @@ async def test_check_dangling_cname_is_dangling_no_records(
     When A, AAAA, MX, and NS all return NXDOMAIN the domain is dangling.
     The handler should write to the dangling file and return True.
     """
-    handler.aiodns_resolver.query = AsyncMock(side_effect=make_nxdomain())
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
+        side_effect=make_nxdomain()
+    )
 
-    result = await handler.check_dangling_cname_async(
+    result = await handler.takeover_detector.check_dangling_cname_async(
         domain_context, "gone.example.com"
     )
 
@@ -244,9 +258,9 @@ async def test_check_dangling_cname_timeout_is_not_dangling(handler, domain_cont
             raise make_nxdomain()
         raise make_timeout()  # all other record types time out
 
-    handler.aiodns_resolver.query = query_side_effect
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
 
-    result = await handler.check_dangling_cname_async(
+    result = await handler.takeover_detector.check_dangling_cname_async(
         domain_context, "slow.example.com"
     )
 

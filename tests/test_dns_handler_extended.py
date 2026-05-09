@@ -37,12 +37,14 @@ def dns_answer(value, attr="host"):
 @pytest.fixture
 async def handler(mock_env_manager):
     with (
-        patch("classes.dns_handler.EvidenceCollector"),
         patch("classes.dns_handler.aiodns.DNSResolver"),
+        patch("classes.takeover_detector.EvidenceCollector"),
     ):
         h = DNSHandler(mock_env_manager)
-    h.aiodns_resolver = AsyncMock()
+    mock_aiodns = AsyncMock()
+    h.aiodns_resolver = mock_aiodns
     h.dnspython_resolver = MagicMock()
+    h.takeover_detector.aiodns_resolver = mock_aiodns
     return h
 
 
@@ -91,20 +93,20 @@ async def test_collect_evidence_skipped_when_disabled(handler, mock_env_manager)
     mock_env_manager.evidence = False
     output_files = mock_env_manager.output_files
 
-    await handler.collect_evidence("example.com", "dangling", output_files)
+    await handler.takeover_detector.collect_evidence("example.com", "dangling", output_files)
 
-    handler.evidence_collector.perform_dns_evidence.assert_not_called()
+    handler.takeover_detector.evidence_collector.perform_dns_evidence.assert_not_called()
 
 
 async def test_collect_evidence_called_per_nameserver(handler, mock_env_manager):
     mock_env_manager.evidence = True
     mock_env_manager.nameservers = ["8.8.8.8", "1.1.1.1"]
-    handler.evidence_collector.perform_dns_evidence = AsyncMock()
+    handler.takeover_detector.evidence_collector.perform_dns_evidence = AsyncMock()
     output_files = mock_env_manager.output_files
 
-    await handler.collect_evidence("example.com", "dangling", output_files)
+    await handler.takeover_detector.collect_evidence("example.com", "dangling", output_files)
 
-    assert handler.evidence_collector.perform_dns_evidence.call_count == 2
+    assert handler.takeover_detector.evidence_collector.perform_dns_evidence.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -118,9 +120,9 @@ async def test_check_ns_takeover_returns_false_when_ns_resolves(
     """If the NS record for the domain resolves fine there is no takeover risk."""
     ns_record = dns_answer("ns1.example.com", attr="host")
     # NS query succeeds, A query for ns1 also succeeds
-    handler.aiodns_resolver.query = AsyncMock(return_value=[ns_record])
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(return_value=[ns_record])
 
-    result = await handler.check_ns_takeover(domain_context, "example.com")
+    result = await handler.takeover_detector.check_ns_takeover(domain_context, "example.com")
 
     assert result is False
 
@@ -136,9 +138,11 @@ async def test_check_ns_takeover_returns_true_when_ns_is_nxdomain(
             return [ns_record]
         raise make_nxdomain()  # A lookup for the NS host fails
 
-    handler.aiodns_resolver.query = query_side_effect
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
 
-    result = await handler.check_ns_takeover(domain_context, "orphaned.example.com")
+    result = await handler.takeover_detector.check_ns_takeover(
+        domain_context, "orphaned.example.com"
+    )
 
     assert result is True
     mock_env_manager.write_to_file.assert_called_once()
@@ -150,9 +154,11 @@ async def test_check_ns_takeover_returns_false_when_no_ns_records(
     handler, domain_context
 ):
     """NXDOMAIN on the NS query itself means no NS records — no takeover."""
-    handler.aiodns_resolver.query = AsyncMock(side_effect=make_nxdomain())
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
+        side_effect=make_nxdomain()
+    )
 
-    result = await handler.check_ns_takeover(domain_context, "example.com")
+    result = await handler.takeover_detector.check_ns_takeover(domain_context, "example.com")
 
     assert result is False
 
@@ -165,10 +171,12 @@ async def test_check_ns_takeover_returns_false_when_no_ns_records(
 async def test_handle_takeover_checks_adds_dangling_domain_when_dangling(
     handler, domain_context
 ):
-    handler.check_dangling_cname_async = AsyncMock(return_value=True)
-    handler.check_ns_takeover = AsyncMock(return_value=False)
+    handler.takeover_detector.check_dangling_cname_async = AsyncMock(return_value=True)
+    handler.takeover_detector.check_ns_takeover = AsyncMock(return_value=False)
 
-    await handler.handle_takeover_checks(domain_context, "cname-target.example.com")
+    await handler.takeover_detector.handle_takeover_checks(
+        domain_context, "cname-target.example.com"
+    )
 
     assert "cname-target.example.com" in domain_context.dangling_domains
 
@@ -176,10 +184,12 @@ async def test_handle_takeover_checks_adds_dangling_domain_when_dangling(
 async def test_handle_takeover_checks_adds_domain_when_ns_takeover(
     handler, domain_context
 ):
-    handler.check_dangling_cname_async = AsyncMock(return_value=False)
-    handler.check_ns_takeover = AsyncMock(return_value=True)
+    handler.takeover_detector.check_dangling_cname_async = AsyncMock(return_value=False)
+    handler.takeover_detector.check_ns_takeover = AsyncMock(return_value=True)
 
-    await handler.handle_takeover_checks(domain_context, "ns-vuln.example.com")
+    await handler.takeover_detector.handle_takeover_checks(
+        domain_context, "ns-vuln.example.com"
+    )
 
     assert "ns-vuln.example.com" in domain_context.dangling_domains
 
@@ -187,10 +197,12 @@ async def test_handle_takeover_checks_adds_domain_when_ns_takeover(
 async def test_handle_takeover_checks_returns_true_when_either_detected(
     handler, domain_context
 ):
-    handler.check_dangling_cname_async = AsyncMock(return_value=False)
-    handler.check_ns_takeover = AsyncMock(return_value=True)
+    handler.takeover_detector.check_dangling_cname_async = AsyncMock(return_value=False)
+    handler.takeover_detector.check_ns_takeover = AsyncMock(return_value=True)
 
-    result = await handler.handle_takeover_checks(domain_context, "example.com")
+    result = await handler.takeover_detector.handle_takeover_checks(
+        domain_context, "example.com"
+    )
 
     assert result is True
 
@@ -198,10 +210,12 @@ async def test_handle_takeover_checks_returns_true_when_either_detected(
 async def test_handle_takeover_checks_returns_false_when_neither_detected(
     handler, domain_context
 ):
-    handler.check_dangling_cname_async = AsyncMock(return_value=False)
-    handler.check_ns_takeover = AsyncMock(return_value=False)
+    handler.takeover_detector.check_dangling_cname_async = AsyncMock(return_value=False)
+    handler.takeover_detector.check_ns_takeover = AsyncMock(return_value=False)
 
-    result = await handler.handle_takeover_checks(domain_context, "example.com")
+    result = await handler.takeover_detector.handle_takeover_checks(
+        domain_context, "example.com"
+    )
 
     assert result is False
     assert len(domain_context.dangling_domains) == 0
