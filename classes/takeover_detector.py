@@ -92,6 +92,8 @@ class TakeoverDetector:
             if cname_answer:
                 self.env_manager.log_info(f"Domain {current_domain} is a CNAME record.")
                 target = cname_answer.cname
+                if not target.endswith("."):
+                    target += "."
                 self.env_manager.log_info(f"CNAME target: {target}")
                 if await self.check_dangling_cname_async(domain_context, target):
                     return True
