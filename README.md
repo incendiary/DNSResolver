@@ -284,6 +284,37 @@ Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`)
 
 `config.json` sets defaults for timeout, retries, output directory, and domain categorisation patterns used for classifying dangling CNAME targets (e.g. AWS S3, GitHub Pages, Heroku). CLI flags always override config file values.
 
+## Azure IP range fetching
+
+Microsoft publishes Azure IP ranges via a confirmation page that redirects to a weekly-updated JSON file. The download URL changes every week, making a direct scrape fragile. DNSResolver uses a three-stage fallback chain so a broken confirmation page never silently disables Azure matching:
+
+| Stage | Source | Behaviour |
+|-------|--------|-----------|
+| 1 | Microsoft confirmation page (live scrape) | Attempted first on every run. On success the result is written to `.azure_ip_cache.json` for future fallback. |
+| 2 | `.azure_ip_cache.json` (local cache) | Used automatically if the scrape fails. A warning is printed. |
+| 3 | `AZURE_PINNED_URL` (hardcoded fallback) | Used if no cache exists. Points to the latest known-good file at the time of the last release. A warning is printed. |
+| — | Exhausted | If all three sources fail, a clear error is printed and Azure matching is skipped for the run. |
+
+### Keeping the pinned URL current
+
+`AZURE_PINNED_URL` is a module-level constant at the top of `imports/cloud_ip_ranges.py`. When Microsoft rotates the weekly file and the cache ages, update it:
+
+```bash
+# Find the current URL
+python3 -c "
+from urllib.request import urlopen; import re
+with urlopen('https://www.microsoft.com/en-us/download/confirmation.aspx?id=56519') as r:
+    m = re.search(r'https://download\.microsoft\.com/download/[^\"]+\.json', r.read().decode())
+    print(m.group(0) if m else 'not found')
+"
+```
+
+Then update `AZURE_PINNED_URL` in `imports/cloud_ip_ranges.py` and commit.
+
+### Cache file
+
+`.azure_ip_cache.json` is written to the working directory on every successful fetch and is excluded from version control via `.gitignore`. Delete it to force a fresh fetch on the next run.
+
 ## Using with other tools
 
 DNSResolver takes a flat domain list as input. The following external tools are useful for building that list before running a scan.
@@ -357,6 +388,7 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#74](https://github.com/incendiary/DNSResolver/issues/74) | ✅ v1.9.0 | Bug: concurrent write race in `log_and_write` — investigated, not a real bug in asyncio cooperative model |
 | [#75](https://github.com/incendiary/DNSResolver/issues/75) | ✅ v1.9.0 | Bug: `asyncio.get_event_loop()` deprecated in Python 3.10+ — replace with `get_running_loop()` |
 | [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ v1.9.0 | Dead code: `is_dangling_record_async` defined but never called — remove |
+| [#79](https://github.com/incendiary/DNSResolver/issues/79) | ✅ v1.9.1 | Bug: Azure IP range fetch brittle — scrapes HTML confirmation page; add cache + pinned URL fallback chain |
 
 ## Contributing
 
