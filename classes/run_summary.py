@@ -34,19 +34,20 @@ class RunSummary:
         azure_count = sum(1 for ln in csp_lines if "resolved to azure IPs" in ln)
 
         classified = {}
-        unclassified_count = 0
+        unclassified = []
         for line in dangling:
             parts = line.split("|")
             if len(parts) >= 5:
                 _orig, current, category, recommendation, evidence = parts[:5]
                 if category == "unknown":
-                    unclassified_count += 1
+                    unclassified.append((_orig, current))
                 else:
                     classified.setdefault(category, []).append(
                         (current, recommendation, evidence)
                     )
 
         classified_count = sum(len(v) for v in classified.values())
+        unclassified_count = len(unclassified)
         total_candidates = classified_count + unclassified_count + len(ns_takeover)
 
         bar = "=" * 64
@@ -68,7 +69,7 @@ class RunSummary:
         if total_candidates == 0:
             print("  No takeover candidates detected.")
         else:
-            print(f"  [!] {total_candidates} TAKEOVER CANDIDATE(S) DETECTED [!]")
+            print(f"  [!] {total_candidates} TAKEOVER CANDIDATE(S) DETECTED — REVIEW IMMEDIATELY [!]")
 
             if classified_count:
                 print()
@@ -86,17 +87,20 @@ class RunSummary:
                 for line in ns_takeover:
                     parts = line.split("|")
                     if len(parts) >= 2:
-                        print(f"    {parts[0]} -> NS: {parts[1]}")
+                        root, ns_host = parts[0], parts[1]
+                        print(f"    {root} -> NS: {ns_host}")
+                        print(f"          Why    : Nameserver does not resolve — registering it gives")
+                        print(f"                   an attacker DNS control over {root} and all its subdomains")
 
-            if unclassified_count:
+            if unclassified:
                 print()
-                takeover_file = os.path.basename(
-                    self._files.get("takeover", "takeover_candidates.txt")
-                )
-                print(
-                    f"  Unclassified dangling CNAMEs : {unclassified_count}"
-                    f"  (see {takeover_file})"
-                )
+                print(f"  Unclassified dangling CNAMEs ({unclassified_count}) — investigate manually")
+                for root_domain, cname_target in unclassified:
+                    print(f"    [?] {root_domain}")
+                    print(f"          CNAME target : {cname_target}")
+                    print(f"          Risk         : Target does not resolve — if it can be claimed,")
+                    print(f"                         an attacker can serve content from {root_domain}")
+                    print(f"          Action       : Verify this CNAME is intentional; remove it if not")
 
         print(thin)
         print(f"  Output : {self._output_dir}")
