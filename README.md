@@ -389,6 +389,7 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#75](https://github.com/incendiary/DNSResolver/issues/75) | ✅ v1.9.0 | Bug: `asyncio.get_event_loop()` deprecated in Python 3.10+ — replace with `get_running_loop()` |
 | [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ v1.9.0 | Dead code: `is_dangling_record_async` defined but never called — remove |
 | [#79](https://github.com/incendiary/DNSResolver/issues/79) | ✅ v1.9.1 | Bug: Azure IP range fetch brittle — scrapes HTML confirmation page; add cache + pinned URL fallback chain |
+| [#80](https://github.com/incendiary/DNSResolver/issues/80) | ✅ v1.9.2 | Bug: dangling CNAMEs to AWS ELB classified as unknown — add `aws_elb` pattern (`*.elb.amazonaws.com`) |
 
 ## Contributing
 
