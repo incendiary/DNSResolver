@@ -9,7 +9,7 @@ DNSResolver is a Python-based security tool for bulk DNS resolution and cloud in
 
 All domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
 
-> **v1.1.0 scope change:** Service connectivity checks (HTTP probing, TLS/SSL certificate validation, TCP port scanning, and Selenium screenshots) have been removed. These features introduced a heavy browser dependency, made active connections to every resolved domain, and were out of scope for a DNS-focused tool. The core mission is DNS resolution, cloud IP matching, and subdomain takeover detection.
+The tool is intentionally DNS-focused. It does not make active HTTP/HTTPS connections, probe TCP ports, validate TLS certificates, or take screenshots. These were deliberately excluded to keep the tool passive, dependency-light, and scoped to DNS reconnaissance.
 
 ## Demonstration
 
@@ -20,8 +20,8 @@ All domain processing runs concurrently using `asyncio`, making it practical for
 ```bash
 git clone https://github.com/incendiary/DNSResolver.git
 cd DNSResolver
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -46,6 +46,7 @@ python resolver.py <domains_file> [options]
 | `--timeout` | `-t` | DNS query timeout in seconds |
 | `--retries` | | Retry attempts for failed domains (default from config) |
 | `--evidence` | | Save dig/nslookup output for flagged domains |
+| `--version` | | Print version and exit |
 
 ### Example
 
@@ -269,10 +270,12 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 ├── EnvironmentManager       — CLI: argparse, config, logging, local file I/O
 ├── LambdaEnvironmentManager — Lambda: env vars, stdout logging, /tmp file I/O
 ├── DNSHandler               — async DNS resolution (aiodns primary, dnspython fallback)
-│   └── EvidenceCollector     — async subprocess evidence capture (dig/nslookup)
-├── DomainProcessingContext   — per-domain state (domain name, resolver, CSP IPs)
-├── CSPIPAddresses            — value object holding fetched AWS/GCP/Azure IP ranges
-└── domain_processor.py  — orchestrates DNS → CSP checks per domain
+│   ├── TakeoverDetector     — dangling CNAME detection, NS takeover checks, depth-limited CNAME chain following
+│   └── EvidenceCollector    — async subprocess evidence capture (dig/nslookup)
+├── DomainProcessingContext  — per-domain state (domain name, resolver, CSP IPs)
+├── CSPIPAddresses           — value object holding fetched AWS/GCP/Azure IP ranges
+├── DomainCategoriser        — regex-based classification of dangling CNAME targets
+└── domain_processor.py     — orchestrates DNS → CSP checks per domain
 ```
 
 Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`) to run many domains concurrently without exhausting file descriptors or triggering DNS rate limits. Failed domains are collected after each pass and retried up to `--retries` times.
@@ -363,34 +366,34 @@ Once related root domains are identified, enumerate subdomains for each and comb
 
 | Issue | Status | Description |
 |-------|--------|-------------|
-| [#36](https://github.com/incendiary/DNSResolver/issues/36) | ✅ v1.1.1 | Progress bar stability — log output routed through `tqdm.write()` |
-| [#37](https://github.com/incendiary/DNSResolver/issues/37) | ✅ v1.2.0 | AWS Lambda / S3 support — `lambda_handler.py` entrypoint with S3 I/O |
-| [#42](https://github.com/incendiary/DNSResolver/issues/42) | ✅ v1.2.1 | Enforce code style with Black, isort, flake8, and pre-commit hooks |
-| [#41](https://github.com/incendiary/DNSResolver/issues/41) | ✅ v1.3.0 | Refactor `EnvironmentManager` — `ConfigResolver` + `OutputManager` split; trivial getters replaced with direct attribute access |
-| [#43](https://github.com/incendiary/DNSResolver/issues/43) | ✅ v1.3.0 | Refactor `DNSHandler` — split resolution, takeover detection, and categorisation into focused classes |
-| [#48](https://github.com/incendiary/DNSResolver/issues/48) | ✅ v1.4.0 | End-of-run summary — at-a-glance verdict with prominently flagged takeover candidates |
-| [#50](https://github.com/incendiary/DNSResolver/issues/50) | ✅ v1.5.0 | AI-assisted code review and refactoring pass using [andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills) guidelines — surgical changes, simplicity-first, no speculative abstractions |
-| [#52](https://github.com/incendiary/DNSResolver/issues/52) | ✅ v1.6.0 | Refine run summary — elevate classified takeover candidates, collapse unclassified noise to a count |
-| [#54](https://github.com/incendiary/DNSResolver/issues/54) | ✅ v1.7.0 | Expand domain categorisation patterns — fix key mismatch bug, remove proprietary entry, add 11 missing takeover services |
-| [#56](https://github.com/incendiary/DNSResolver/issues/56) | ✅ v1.8.0 | Formal git history secret scan — confirm no credentials, internal hostnames, or tokens in history |
-| [#57](https://github.com/incendiary/DNSResolver/issues/57) | ✅ v1.8.0 | Dependency audit — run pip-audit against all requirements files and resolve any high/critical CVEs |
-| [#60](https://github.com/incendiary/DNSResolver/issues/60) | ✅ v1.8.0 | GitHub Actions CI — flake8 + pytest on Python 3.12 for all PRs and pushes to main |
-| [#61](https://github.com/incendiary/DNSResolver/issues/61) | ✅ v1.8.0 | pre-commit: add gitleaks hook at commit time; sync black rev to CVE-fixed 26.3.1 |
-| [#63](https://github.com/incendiary/DNSResolver/issues/63) | ✅ v1.9.0 | Dead code removal — unreachable guards in `cloud_service_provider_checks` and `config_resolver` |
-| [#64](https://github.com/incendiary/DNSResolver/issues/64) | ✅ v1.9.0 | Deduplicate `fetch_google_cloud_ip_ranges` / `fetch_aws_ip_ranges` into a shared helper |
-| [#65](https://github.com/incendiary/DNSResolver/issues/65) | ✅ v1.9.0 | Strip what-not-why docstrings from `cloud_ip_ranges.py` |
-| [#66](https://github.com/incendiary/DNSResolver/issues/66) | ✅ v1.8.0 | Branch protection — require CI status check to pass before merge |
-| [#72](https://github.com/incendiary/DNSResolver/issues/72) | ✅ v1.9.0 | Bug: double retry loop — domains retried retries² times due to nested loops in `resolve_domain_async` and `run()` |
-| [#73](https://github.com/incendiary/DNSResolver/issues/73) | ✅ v1.9.0 | Bug: unbounded CNAME recursion in `check_dangling_cname_async` — no depth limit, stack overflow on deep/looping chains |
-| [#74](https://github.com/incendiary/DNSResolver/issues/74) | ✅ v1.9.0 | Bug: concurrent write race in `log_and_write` — investigated, not a real bug in asyncio cooperative model |
-| [#75](https://github.com/incendiary/DNSResolver/issues/75) | ✅ v1.9.0 | Bug: `asyncio.get_event_loop()` deprecated in Python 3.10+ — replace with `get_running_loop()` |
-| [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ v1.9.0 | Dead code: `is_dangling_record_async` defined but never called — remove |
-| [#79](https://github.com/incendiary/DNSResolver/issues/79) | ✅ v1.9.1 | Bug: Azure IP range fetch brittle — scrapes HTML confirmation page; add cache + pinned URL fallback chain |
-| [#80](https://github.com/incendiary/DNSResolver/issues/80) | ✅ v1.9.2 | Bug: dangling CNAMEs to AWS ELB classified as unknown — add `aws_elb` pattern (`*.elb.amazonaws.com`) |
-| [#82](https://github.com/incendiary/DNSResolver/issues/82) | ✅ v1.10.0 | Consolidate output files: 7 text files → 4 — merge CSP results into `csp_matches_*.txt`, merge takeover files into `takeover_candidates_*.txt` (breaking change) |
-| [#85](https://github.com/incendiary/DNSResolver/issues/85) | ✅ v1.10.1 | Run summary: show all takeover candidates with actionable context — unclassified CNAMEs listed individually with CNAME target, risk, and recommended action; NS takeover entries include DNS-control risk explanation |
-| [#87](https://github.com/incendiary/DNSResolver/issues/87) | ✅ v1.10.2 | Version string — printed at startup and in run summary footer; `--version` flag added |
-| [#89](https://github.com/incendiary/DNSResolver/issues/89) | ✅ v1.10.3 | Self-referential CNAMEs correctly classified as `self_referential` (misconfiguration) rather than surfaced as takeover candidates |
+| [#36](https://github.com/incendiary/DNSResolver/issues/36) | ✅ | Progress bar stability — log output routed through `tqdm.write()` |
+| [#37](https://github.com/incendiary/DNSResolver/issues/37) | ✅ | AWS Lambda / S3 support — `lambda_handler.py` entrypoint with S3 I/O |
+| [#41](https://github.com/incendiary/DNSResolver/issues/41) | ✅ | Refactor `EnvironmentManager` — `ConfigResolver` + `OutputManager` split; trivial getters replaced with direct attribute access |
+| [#42](https://github.com/incendiary/DNSResolver/issues/42) | ✅ | Enforce code style with Black, isort, flake8, and pre-commit hooks |
+| [#43](https://github.com/incendiary/DNSResolver/issues/43) | ✅ | Refactor `DNSHandler` — split resolution, takeover detection, and categorisation into focused classes |
+| [#48](https://github.com/incendiary/DNSResolver/issues/48) | ✅ | End-of-run summary — at-a-glance verdict with prominently flagged takeover candidates |
+| [#50](https://github.com/incendiary/DNSResolver/issues/50) | ✅ | Code review and refactoring pass — surgical changes, simplicity-first, no speculative abstractions |
+| [#52](https://github.com/incendiary/DNSResolver/issues/52) | ✅ | Refine run summary — elevate classified takeover candidates |
+| [#54](https://github.com/incendiary/DNSResolver/issues/54) | ✅ | Expand domain categorisation patterns — add 11 missing takeover services |
+| [#56](https://github.com/incendiary/DNSResolver/issues/56) | ✅ | Formal git history secret scan |
+| [#57](https://github.com/incendiary/DNSResolver/issues/57) | ✅ | Dependency audit — pip-audit against all requirements files |
+| [#60](https://github.com/incendiary/DNSResolver/issues/60) | ✅ | GitHub Actions CI — flake8 + pytest on Python 3.12 for all PRs and pushes to main |
+| [#61](https://github.com/incendiary/DNSResolver/issues/61) | ✅ | pre-commit: gitleaks hook; CVE-fixed black revision |
+| [#63](https://github.com/incendiary/DNSResolver/issues/63) | ✅ | Dead code removal — unreachable guards in `cloud_service_provider_checks` and `config_resolver` |
+| [#64](https://github.com/incendiary/DNSResolver/issues/64) | ✅ | Deduplicate GCP / AWS IP range fetch into a shared helper |
+| [#65](https://github.com/incendiary/DNSResolver/issues/65) | ✅ | Strip what-not-why docstrings from `cloud_ip_ranges.py` |
+| [#66](https://github.com/incendiary/DNSResolver/issues/66) | ✅ | Branch protection — require CI status check to pass before merge |
+| [#72](https://github.com/incendiary/DNSResolver/issues/72) | ✅ | Bug: double retry loop — domains retried retries² times |
+| [#73](https://github.com/incendiary/DNSResolver/issues/73) | ✅ | Bug: unbounded CNAME recursion — depth limit added |
+| [#74](https://github.com/incendiary/DNSResolver/issues/74) | ✅ | Bug: concurrent write race in `log_and_write` — investigated, not a real bug in asyncio cooperative model |
+| [#75](https://github.com/incendiary/DNSResolver/issues/75) | ✅ | Bug: `asyncio.get_event_loop()` deprecated — replaced with `get_running_loop()` |
+| [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ | Dead code: `is_dangling_record_async` defined but never called — removed |
+| [#79](https://github.com/incendiary/DNSResolver/issues/79) | ✅ | Bug: Azure IP range fetch brittle — three-stage fallback chain added |
+| [#80](https://github.com/incendiary/DNSResolver/issues/80) | ✅ | Bug: dangling CNAMEs to AWS ELB classified as unknown — `aws_elb` pattern added |
+| [#82](https://github.com/incendiary/DNSResolver/issues/82) | ✅ v1.10.0 | Consolidate output files: 7 text files → 4 — `csp_matches_*.txt` and `takeover_candidates_*.txt` |
+| [#85](https://github.com/incendiary/DNSResolver/issues/85) | ✅ v1.10.1 | Run summary: all takeover candidates shown with CNAME target, risk, and recommended action |
+| [#87](https://github.com/incendiary/DNSResolver/issues/87) | ✅ v1.10.2 | Version string — printed at startup and in run summary; `--version` flag added |
+| [#89](https://github.com/incendiary/DNSResolver/issues/89) | ✅ v1.10.3 | Self-referential CNAMEs classified as `self_referential` (misconfiguration) not takeover candidates |
 
 ## Contributing
 
