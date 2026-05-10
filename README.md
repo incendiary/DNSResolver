@@ -352,11 +352,11 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#64](https://github.com/incendiary/DNSResolver/issues/64) | ✅ v1.9.0 | Deduplicate `fetch_google_cloud_ip_ranges` / `fetch_aws_ip_ranges` into a shared helper |
 | [#65](https://github.com/incendiary/DNSResolver/issues/65) | ✅ v1.9.0 | Strip what-not-why docstrings from `cloud_ip_ranges.py` |
 | [#66](https://github.com/incendiary/DNSResolver/issues/66) | ✅ v1.8.0 | Branch protection — require CI status check to pass before merge |
-| [#72](https://github.com/incendiary/DNSResolver/issues/72) | [ ] v1.9.0 | Bug: double retry loop — domains retried retries² times due to nested loops in `resolve_domain_async` and `run()` |
-| [#73](https://github.com/incendiary/DNSResolver/issues/73) | [ ] v1.9.0 | Bug: unbounded CNAME recursion in `check_dangling_cname_async` — no depth limit, stack overflow on deep/looping chains |
-| [#74](https://github.com/incendiary/DNSResolver/issues/74) | [ ] v1.9.0 | Bug: concurrent write race in `log_and_write` — duplicate lines possible under high concurrency |
-| [#75](https://github.com/incendiary/DNSResolver/issues/75) | [ ] v1.9.0 | Bug: `asyncio.get_event_loop()` deprecated in Python 3.10+ — replace with `get_running_loop()` |
-| [#76](https://github.com/incendiary/DNSResolver/issues/76) | [ ] v1.9.0 | Dead code: `is_dangling_record_async` defined but never called — remove |
+| [#72](https://github.com/incendiary/DNSResolver/issues/72) | ✅ v1.9.0 | Bug: double retry loop — domains retried retries² times due to nested loops in `resolve_domain_async` and `run()` |
+| [#73](https://github.com/incendiary/DNSResolver/issues/73) | ✅ v1.9.0 | Bug: unbounded CNAME recursion in `check_dangling_cname_async` — no depth limit, stack overflow on deep/looping chains |
+| [#74](https://github.com/incendiary/DNSResolver/issues/74) | ✅ v1.9.0 | Bug: concurrent write race in `log_and_write` — investigated, not a real bug in asyncio cooperative model |
+| [#75](https://github.com/incendiary/DNSResolver/issues/75) | ✅ v1.9.0 | Bug: `asyncio.get_event_loop()` deprecated in Python 3.10+ — replace with `get_running_loop()` |
+| [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ v1.9.0 | Dead code: `is_dangling_record_async` defined but never called — remove |
 
 ## Contributing
 
