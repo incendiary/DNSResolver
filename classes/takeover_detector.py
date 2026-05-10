@@ -44,8 +44,8 @@ class TakeoverDetector:
                 except aiodns.error.DNSError as e:
                     if is_dns_error_present(e, [NXDOMAIN, SERVFAIL]):
                         await self.env_manager.write_to_file(
-                            output_files["standard"]["ns_takeover"],
-                            f"{original_domain}|{domain}",
+                            output_files["standard"]["takeover"],
+                            f"NS_TAKEOVER|{original_domain}|{domain}",
                         )
                         self.env_manager.log_info(
                             f"NS takeover possible for domain {domain}"
@@ -138,8 +138,8 @@ class TakeoverDetector:
             current_domain, patterns
         )
         await self.env_manager.write_to_file(
-            output_files["standard"]["dangling"],
-            f"{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}",
+            output_files["standard"]["takeover"],
+            f"DANGLING|{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}",
         )
         self.env_manager.log_info(
             f"Domain {current_domain} is a dangling CNAME with category: {category}"

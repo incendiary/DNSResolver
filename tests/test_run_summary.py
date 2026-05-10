@@ -8,11 +8,8 @@ def _make_summary(tmp_path, files=None):
     standard = {
         "resolved": tmp_path / "resolved.txt",
         "unresolved": tmp_path / "unresolved.txt",
-        "dangling": tmp_path / "dangling.txt",
-        "ns_takeover": tmp_path / "ns_takeover.txt",
-        "aws": tmp_path / "aws.txt",
-        "gcp": tmp_path / "gcp.txt",
-        "azure": tmp_path / "azure.txt",
+        "takeover": tmp_path / "takeover.txt",
+        "csp": tmp_path / "csp.txt",
     }
     for key, path in standard.items():
         content = files.get(key, "") if files else ""
@@ -47,8 +44,11 @@ def test_counts_are_accurate(tmp_path, capsys):
         {
             "resolved": "a.com|1.1.1.1\nb.com|2.2.2.2\n",
             "unresolved": "DNS resolution error for c.com: timeout\n",
-            "aws": "a.com|1.1.1.1\n",
-            "gcp": "b.com|2.2.2.2\nb2.com|3.3.3.3\n",
+            "csp": (
+                "a.com resolved to aws IPs: ['1.1.1.1']\n"
+                "b.com resolved to gcp IPs: ['2.2.2.2']\n"
+                "b2.com resolved to gcp IPs: ['3.3.3.3']\n"
+            ),
         },
     )
     summary.display(total_input=5, failed_count=1)
@@ -66,8 +66,8 @@ def test_counts_are_accurate(tmp_path, capsys):
 
 
 def test_classified_dangling_cname_shown_in_full(tmp_path, capsys):
-    dangling = "root.example.com|app.s3.amazonaws.com|aws_s3|Remove the CNAME|https://evidence.link\n"
-    summary = _make_summary(tmp_path, {"dangling": dangling})
+    dangling = "DANGLING|root.example.com|app.s3.amazonaws.com|aws_s3|Remove the CNAME|https://evidence.link\n"
+    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
@@ -82,11 +82,11 @@ def test_classified_dangling_cname_shown_in_full(tmp_path, capsys):
 
 def test_classified_cnames_grouped_by_category(tmp_path, capsys):
     dangling = (
-        "a.com|a.herokudns.com|heroku|Remove it|https://heroku.example\n"
-        "b.com|b.herokudns.com|heroku|Remove it|https://heroku.example\n"
-        "c.com|c.s3.amazonaws.com|aws_s3|Remove the CNAME|https://aws.example\n"
+        "DANGLING|a.com|a.herokudns.com|heroku|Remove it|https://heroku.example\n"
+        "DANGLING|b.com|b.herokudns.com|heroku|Remove it|https://heroku.example\n"
+        "DANGLING|c.com|c.s3.amazonaws.com|aws_s3|Remove the CNAME|https://aws.example\n"
     )
-    summary = _make_summary(tmp_path, {"dangling": dangling})
+    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
@@ -103,10 +103,10 @@ def test_classified_cnames_grouped_by_category(tmp_path, capsys):
 def test_unclassified_cnames_collapsed_to_count(tmp_path, capsys):
     """Unclassified entries must not appear individually — only a count line."""
     dangling = (
-        "a.com|mystery-target.example.com|unknown|Unclassified|N/A\n"
-        "b.com|another-unknown.example.com|unknown|Unclassified|N/A\n"
+        "DANGLING|a.com|mystery-target.example.com|unknown|Unclassified|N/A\n"
+        "DANGLING|b.com|another-unknown.example.com|unknown|Unclassified|N/A\n"
     )
-    summary = _make_summary(tmp_path, {"dangling": dangling})
+    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=2, failed_count=0)
 
     out = capsys.readouterr().out
@@ -120,11 +120,11 @@ def test_unclassified_cnames_collapsed_to_count(tmp_path, capsys):
 def test_unclassified_count_included_in_total_banner(tmp_path, capsys):
     """Unclassified dangles must count toward the [!] total."""
     dangling = (
-        "a.com|known.herokudns.com|heroku|Remove it|https://h.example\n"
-        "b.com|unknown1.example.com|unknown|Unclassified|N/A\n"
-        "c.com|unknown2.example.com|unknown|Unclassified|N/A\n"
+        "DANGLING|a.com|known.herokudns.com|heroku|Remove it|https://h.example\n"
+        "DANGLING|b.com|unknown1.example.com|unknown|Unclassified|N/A\n"
+        "DANGLING|c.com|unknown2.example.com|unknown|Unclassified|N/A\n"
     )
-    summary = _make_summary(tmp_path, {"dangling": dangling})
+    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
@@ -137,10 +137,10 @@ def test_unclassified_count_included_in_total_banner(tmp_path, capsys):
 def test_classified_and_unclassified_split(tmp_path, capsys):
     """Classified entries are shown in full; unclassified collapsed alongside them."""
     dangling = (
-        "a.com|app.herokudns.com|heroku|Remove the app|https://heroku.example\n"
-        "b.com|noise.example.com|unknown|Unclassified|N/A\n"
+        "DANGLING|a.com|app.herokudns.com|heroku|Remove the app|https://heroku.example\n"
+        "DANGLING|b.com|noise.example.com|unknown|Unclassified|N/A\n"
     )
-    summary = _make_summary(tmp_path, {"dangling": dangling})
+    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=2, failed_count=0)
 
     out = capsys.readouterr().out
@@ -156,8 +156,8 @@ def test_classified_and_unclassified_split(tmp_path, capsys):
 
 
 def test_ns_takeover_flagged(tmp_path, capsys):
-    ns = "vuln.example.com|ns1.orphaned-registrar.com\n"
-    summary = _make_summary(tmp_path, {"ns_takeover": ns})
+    ns = "NS_TAKEOVER|vuln.example.com|ns1.orphaned-registrar.com\n"
+    summary = _make_summary(tmp_path, {"takeover": ns})
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
@@ -167,9 +167,12 @@ def test_ns_takeover_flagged(tmp_path, capsys):
 
 
 def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):
-    dangling = "a.com|a.herokudns.com|heroku|Remove|https://h.example\n"
-    ns = "b.com|ns1.dead.example\nc.com|ns2.dead.example\n"
-    summary = _make_summary(tmp_path, {"dangling": dangling, "ns_takeover": ns})
+    takeover = (
+        "DANGLING|a.com|a.herokudns.com|heroku|Remove|https://h.example\n"
+        "NS_TAKEOVER|b.com|ns1.dead.example\n"
+        "NS_TAKEOVER|c.com|ns2.dead.example\n"
+    )
+    summary = _make_summary(tmp_path, {"takeover": takeover})
     summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
@@ -183,7 +186,7 @@ def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):
 
 def test_dangling_line_missing_fields_skipped_gracefully(tmp_path, capsys):
     """A malformed dangling line (< 5 fields) should not crash and is silently ignored."""
-    summary = _make_summary(tmp_path, {"dangling": "only|two\n"})
+    summary = _make_summary(tmp_path, {"takeover": "DANGLING|only|two\n"})
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
@@ -196,11 +199,8 @@ def test_missing_file_treated_as_empty(tmp_path, capsys):
         "standard": {
             "resolved": "/nonexistent/resolved.txt",
             "unresolved": "/nonexistent/unresolved.txt",
-            "dangling": "/nonexistent/dangling.txt",
-            "ns_takeover": "/nonexistent/ns_takeover.txt",
-            "aws": "/nonexistent/aws.txt",
-            "gcp": "/nonexistent/gcp.txt",
-            "azure": "/nonexistent/azure.txt",
+            "takeover": "/nonexistent/takeover.txt",
+            "csp": "/nonexistent/csp.txt",
         }
     }
     summary = RunSummary(output_files, "/tmp/output")

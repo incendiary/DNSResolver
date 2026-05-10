@@ -150,7 +150,7 @@ async def test_check_ns_takeover_returns_true_when_ns_is_nxdomain(
     assert result is True
     mock_env_manager.write_to_file.assert_called_once()
     path, content = mock_env_manager.write_to_file.call_args[0]
-    assert "ns_takeover" in path
+    assert "takeover" in path
 
 
 async def test_check_ns_takeover_returns_false_when_no_ns_records(

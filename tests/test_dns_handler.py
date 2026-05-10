@@ -201,7 +201,7 @@ async def test_check_dangling_cname_is_dangling_no_records(
     # Verify the result was written to the dangling output file
     mock_env_manager.write_to_file.assert_called_once()
     call_args = mock_env_manager.write_to_file.call_args
-    assert "/tmp/test_dangling.txt" in call_args[0]
+    assert "/tmp/test_takeover.txt" in call_args[0]
 
 
 async def test_check_dangling_cname_timeout_is_not_dangling(handler, domain_context):

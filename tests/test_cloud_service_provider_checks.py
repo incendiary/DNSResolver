@@ -160,9 +160,9 @@ def test_get_ip_matches_skips_wrong_ip_version(ctx):
 
 
 def test_log_and_write_creates_entry(tmp_path, ctx):
-    out_file = tmp_path / "gcp.txt"
+    out_file = tmp_path / "csp.txt"
     out_file.touch()
-    output_files = {"standard": {"gcp": str(out_file)}}
+    output_files = {"standard": {"csp": str(out_file)}}
 
     result = log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
 
@@ -172,9 +172,9 @@ def test_log_and_write_creates_entry(tmp_path, ctx):
 
 def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
     """Writing the same match twice should not produce duplicate lines."""
-    out_file = tmp_path / "gcp.txt"
+    out_file = tmp_path / "csp.txt"
     out_file.touch()
-    output_files = {"standard": {"gcp": str(out_file)}}
+    output_files = {"standard": {"csp": str(out_file)}}
 
     log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
     log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
@@ -189,34 +189,26 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
 
 
 def test_perform_csp_checks_matches_gcp_ip(tmp_path, mock_env_manager, ctx):
-    gcp_file = tmp_path / "gcp.txt"
-    gcp_file.touch()
-    aws_file = tmp_path / "aws.txt"
-    aws_file.touch()
-    azure_file = tmp_path / "azure.txt"
-    azure_file.touch()
+    csp_file = tmp_path / "csp.txt"
+    csp_file.touch()
     mock_env_manager.output_files = {
         "standard": {
-            "gcp": str(gcp_file),
-            "aws": str(aws_file),
-            "azure": str(azure_file),
+            "csp": str(csp_file),
         }
     }
 
     result = perform_csp_checks(ctx, mock_env_manager, ["34.1.2.3"])
 
     assert result is True
-    assert "example.com" in gcp_file.read_text()
+    assert "example.com" in csp_file.read_text()
 
 
 def test_perform_csp_checks_no_match_returns_false(tmp_path, mock_env_manager, ctx):
-    for vendor in ("gcp", "aws", "azure"):
-        (tmp_path / f"{vendor}.txt").touch()
+    csp_file = tmp_path / "csp.txt"
+    csp_file.touch()
     mock_env_manager.output_files = {
         "standard": {
-            "gcp": str(tmp_path / "gcp.txt"),
-            "aws": str(tmp_path / "aws.txt"),
-            "azure": str(tmp_path / "azure.txt"),
+            "csp": str(csp_file),
         }
     }
 

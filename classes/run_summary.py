@@ -19,11 +19,19 @@ class RunSummary:
     def display(self, total_input, failed_count):
         resolved_count = len(self._lines("resolved"))
         unresolved_count = len(self._lines("unresolved"))
-        dangling = self._lines("dangling")
-        ns_takeover = self._lines("ns_takeover")
-        aws_count = len(self._lines("aws"))
-        gcp_count = len(self._lines("gcp"))
-        azure_count = len(self._lines("azure"))
+
+        takeover_lines = self._lines("takeover")
+        dangling = [
+            ln[len("DANGLING|"):] for ln in takeover_lines if ln.startswith("DANGLING|")
+        ]
+        ns_takeover = [
+            ln[len("NS_TAKEOVER|"):] for ln in takeover_lines if ln.startswith("NS_TAKEOVER|")
+        ]
+
+        csp_lines = self._lines("csp")
+        aws_count = sum(1 for ln in csp_lines if "resolved to aws IPs" in ln)
+        gcp_count = sum(1 for ln in csp_lines if "resolved to gcp IPs" in ln)
+        azure_count = sum(1 for ln in csp_lines if "resolved to azure IPs" in ln)
 
         classified = {}
         unclassified_count = 0
@@ -82,12 +90,12 @@ class RunSummary:
 
             if unclassified_count:
                 print()
-                dangling_file = os.path.basename(
-                    self._files.get("dangling", "dangling_cname_results.txt")
+                takeover_file = os.path.basename(
+                    self._files.get("takeover", "takeover_candidates.txt")
                 )
                 print(
                     f"  Unclassified dangling CNAMEs : {unclassified_count}"
-                    f"  (see {dangling_file})"
+                    f"  (see {takeover_file})"
                 )
 
         print(thin)
