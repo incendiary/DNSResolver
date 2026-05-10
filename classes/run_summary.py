@@ -1,7 +1,8 @@
 class RunSummary:
-    def __init__(self, output_files, output_dir):
+    def __init__(self, output_files, output_dir, version=None):
         self._files = output_files["standard"]
         self._output_dir = output_dir
+        self._version = version
 
     def _lines(self, key):
         path = self._files.get(key)
@@ -19,10 +20,14 @@ class RunSummary:
 
         takeover_lines = self._lines("takeover")
         dangling = [
-            ln[len("DANGLING|"):] for ln in takeover_lines if ln.startswith("DANGLING|")
+            ln[len("DANGLING|") :]
+            for ln in takeover_lines
+            if ln.startswith("DANGLING|")
         ]
         ns_takeover = [
-            ln[len("NS_TAKEOVER|"):] for ln in takeover_lines if ln.startswith("NS_TAKEOVER|")
+            ln[len("NS_TAKEOVER|") :]
+            for ln in takeover_lines
+            if ln.startswith("NS_TAKEOVER|")
         ]
 
         csp_lines = self._lines("csp")
@@ -50,8 +55,9 @@ class RunSummary:
         bar = "=" * 64
         thin = "-" * 64
 
+        version_str = f" v{self._version}" if self._version else ""
         print(f"\n{bar}")
-        print("  DNSResolver — Run Summary")
+        print(f"  DNSResolver{version_str} — Run Summary")
         print(bar)
         print(f"  Input domains        : {total_input:>6,}")
         print(f"  Resolved             : {resolved_count:>6,}")
@@ -66,7 +72,9 @@ class RunSummary:
         if total_candidates == 0:
             print("  No takeover candidates detected.")
         else:
-            print(f"  [!] {total_candidates} TAKEOVER CANDIDATE(S) DETECTED — REVIEW IMMEDIATELY [!]")
+            print(
+                f"  [!] {total_candidates} TAKEOVER CANDIDATE(S) DETECTED — REVIEW IMMEDIATELY [!]"
+            )
 
             if classified_count:
                 print()
@@ -86,18 +94,30 @@ class RunSummary:
                     if len(parts) >= 2:
                         root, ns_host = parts[0], parts[1]
                         print(f"    {root} -> NS: {ns_host}")
-                        print("          Why    : Nameserver does not resolve — registering it gives")
-                        print(f"                   an attacker DNS control over {root} and all its subdomains")
+                        print(
+                            "          Why    : Nameserver does not resolve — registering it gives"
+                        )
+                        print(
+                            f"                   an attacker DNS control over {root} and all its subdomains"
+                        )
 
             if unclassified:
                 print()
-                print(f"  Unclassified dangling CNAMEs ({unclassified_count}) — investigate manually")
+                print(
+                    f"  Unclassified dangling CNAMEs ({unclassified_count}) — investigate manually"
+                )
                 for root_domain, cname_target in unclassified:
                     print(f"    [?] {root_domain}")
                     print(f"          CNAME target : {cname_target}")
-                    print("          Risk         : Target does not resolve — if it can be claimed,")
-                    print(f"                         an attacker can serve content from {root_domain}")
-                    print("          Action       : Verify this CNAME is intentional; remove it if not")
+                    print(
+                        "          Risk         : Target does not resolve — if it can be claimed,"
+                    )
+                    print(
+                        f"                         an attacker can serve content from {root_domain}"
+                    )
+                    print(
+                        "          Action       : Verify this CNAME is intentional; remove it if not"
+                    )
 
         print(thin)
         print(f"  Output : {self._output_dir}")

@@ -5,13 +5,14 @@ from tqdm import tqdm
 from classes.csp_ip_addresses import CSPIPAddresses
 from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
+from classes.run_summary import RunSummary
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
 )
-from classes.run_summary import RunSummary
 from imports.domain_processor import process_domain_async
+from version import __version__
 
 
 async def run(env_manager):
@@ -84,7 +85,7 @@ async def run(env_manager):
             retries + 1,
         )
 
-    RunSummary(env_manager.output_files, env_manager.output_dir).display(
+    RunSummary(env_manager.output_files, env_manager.output_dir, __version__).display(
         len(env_manager.domains), len(domains_to_process)
     )
 
@@ -102,6 +103,7 @@ async def run(env_manager):
 
 
 async def main_async():
+    print(f"DNSResolver v{__version__}")
     env_manager = EnvironmentManager()
     await run(env_manager)
 

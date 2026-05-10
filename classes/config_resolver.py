@@ -4,6 +4,8 @@ import logging
 import os
 import sys
 
+from version import __version__
+
 
 class ConfigResolver:
     """Parses CLI arguments and merges them with values from config.json."""
@@ -20,6 +22,11 @@ class ConfigResolver:
         parser = argparse.ArgumentParser(
             description="Resolve DNS records for domains and check against "
             "cloud provider IP ranges."
+        )
+        parser.add_argument(
+            "--version",
+            action="version",
+            version=f"DNSResolver {__version__}",
         )
         parser.add_argument(
             "domains_file",
