@@ -87,7 +87,7 @@ def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
 
 def log_and_write(vendor, matched_ips, domain, output_files, domain_context):
     message = f"{domain} resolved to {vendor} IPs: {matched_ips}"
-    file_path = output_files["standard"][vendor]
+    file_path = output_files["standard"]["csp"]
 
     # Deduplicate: skip write if this exact line already exists
     if os.path.exists(file_path):

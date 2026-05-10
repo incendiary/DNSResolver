@@ -58,8 +58,8 @@ def mock_env_manager():
     # Output files the handler writes results to
     env.output_files = {
         "standard": {
-            "dangling": "/tmp/test_dangling.txt",
-            "ns_takeover": "/tmp/test_ns_takeover.txt",
+            "takeover": "/tmp/test_takeover.txt",
+            "csp": "/tmp/test_csp.txt",
             "unresolved": "/tmp/test_unresolved.txt",
             "resolved": "/tmp/test_resolved.txt",
         },

@@ -75,11 +75,8 @@ Each run creates a timestamped subdirectory under the output directory containin
 |------|----------|
 | `resolution_results_*.txt` | Successfully resolved domains and their DNS records |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
-| `dangling_cname_results_*.txt` | Domains with dangling CNAMEs — category, recommendation, and evidence link |
-| `ns_takeover_results_*.txt` | Domains with potentially unresolvable nameservers |
-| `gcp_results_*.txt` | Domains resolving to GCP IP ranges |
-| `aws_results_*.txt` | Domains resolving to AWS IP ranges |
-| `azure_results_*.txt` | Domains resolving to Azure IP ranges |
+| `takeover_candidates_*.txt` | Takeover candidates — `DANGLING\|` lines (dangling CNAMEs with category, recommendation, evidence) and `NS_TAKEOVER\|` lines (unresolvable nameservers) |
+| `csp_matches_*.txt` | Domains resolving to cloud provider IP ranges (AWS, GCP, Azure — one line per match) |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
 
