@@ -4,12 +4,6 @@ import logging
 import os
 import sys
 
-from classes.custom_exceptions import (
-    FileDoesNotExistError,
-    InvalidNameserversError,
-    NotAnIntegerError,
-)
-
 
 class ConfigResolver:
     """Parses CLI arguments and merges them with values from config.json."""
@@ -86,31 +80,10 @@ class ConfigResolver:
         return parser.parse_args()
 
     def _validate_args(self):
-        try:
-            if self.args.domains_file and not os.path.isfile(self.args.domains_file):
-                raise FileDoesNotExistError(
-                    f"Provided domains file does not exist: {self.args.domains_file}"
-                )
-            if self.args.max_threads and not isinstance(self.args.max_threads, int):
-                raise NotAnIntegerError(
-                    f"Provided max threads is not an integer: {self.args.max_threads}"
-                )
-            if self.args.timeout and not isinstance(self.args.timeout, int):
-                raise NotAnIntegerError(
-                    f"Provided timeout is not an integer: {self.args.timeout}"
-                )
-            if self.args.retries and not isinstance(self.args.retries, int):
-                raise NotAnIntegerError(
-                    f"Provided retries is not an integer: {self.args.retries}"
-                )
-            if self.args.nameservers and not all(
-                isinstance(i, str) for i in self.args.nameservers.split(",")
-            ):
-                raise InvalidNameserversError(
-                    f"Provided nameservers are not all strings: {self.args.nameservers}"
-                )
-        except (FileDoesNotExistError, NotAnIntegerError, InvalidNameserversError) as e:
-            self._logger.error(str(e))
+        if self.args.domains_file and not os.path.isfile(self.args.domains_file):
+            self._logger.error(
+                "Provided domains file does not exist: %s", self.args.domains_file
+            )
             sys.exit(1)
 
     def _merge_config(self):
