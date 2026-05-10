@@ -1,0 +1,11 @@
+dnspython>=2.2.1
+requests>=2.28.1
+urllib3>=2.6.3
+tqdm>=4.64.1
+aiodns~=4.0.0
+aiofiles~=24.1.0
+
+# dev / test
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0

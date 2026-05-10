@@ -1,0 +1,10 @@
+# pycares errno values (not DNS RCODEs — see pycares.errno)
+NO_DATA = 1   # ARES_ENODATA
+SERVFAIL = 3  # ARES_ESERVFAIL
+NXDOMAIN = 4  # ARES_ENOTFOUND
+REFUSED = 6   # ARES_EREFUSED
+TIMEOUT = 12  # ARES_ETIMEOUT
+
+
+def is_dns_error_present(error, error_types):
+    return error.args[0] in error_types

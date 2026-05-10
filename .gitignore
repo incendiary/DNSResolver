@@ -1,0 +1,12 @@
+hostnames
+results
+output
+Source/*
+dns_resolver.log
+dnsresolver.log
+.venv/
+__pycache__/
+.pytest_cache/
+.coverage
+.idea/
+.azure_ip_cache.json

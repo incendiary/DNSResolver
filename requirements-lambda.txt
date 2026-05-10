@@ -1,0 +1,5 @@
+# Lambda-specific requirements.
+# boto3 is pre-installed in the Lambda runtime but included here so the
+# container image is self-contained and testable locally.
+-r requirements.txt
+boto3>=1.34.0
