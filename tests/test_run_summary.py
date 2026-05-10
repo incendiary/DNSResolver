@@ -100,8 +100,8 @@ def test_classified_cnames_grouped_by_category(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 
-def test_unclassified_cnames_collapsed_to_count(tmp_path, capsys):
-    """Unclassified entries must not appear individually — only a count line."""
+def test_unclassified_cnames_shown_individually(tmp_path, capsys):
+    """Unclassified entries must appear individually with CNAME target and risk context."""
     dangling = (
         "DANGLING|a.com|mystery-target.example.com|unknown|Unclassified|N/A\n"
         "DANGLING|b.com|another-unknown.example.com|unknown|Unclassified|N/A\n"
@@ -111,9 +111,11 @@ def test_unclassified_cnames_collapsed_to_count(tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "[!]" in out
-    assert "Unclassified dangling CNAMEs : 2" in out
-    assert "mystery-target.example.com" not in out
-    assert "another-unknown.example.com" not in out
+    assert "Unclassified dangling CNAMEs (2)" in out
+    assert "mystery-target.example.com" in out
+    assert "another-unknown.example.com" in out
+    assert "Risk" in out
+    assert "Action" in out
     assert "Classified dangling CNAMEs" not in out
 
 
@@ -131,11 +133,11 @@ def test_unclassified_count_included_in_total_banner(tmp_path, capsys):
     # 1 classified + 2 unclassified = 3
     assert "3 TAKEOVER CANDIDATE(S)" in out
     assert "Classified dangling CNAMEs (1)" in out
-    assert "Unclassified dangling CNAMEs : 2" in out
+    assert "Unclassified dangling CNAMEs (2)" in out
 
 
 def test_classified_and_unclassified_split(tmp_path, capsys):
-    """Classified entries are shown in full; unclassified collapsed alongside them."""
+    """Classified entries are shown in full; unclassified shown individually with context."""
     dangling = (
         "DANGLING|a.com|app.herokudns.com|heroku|Remove the app|https://heroku.example\n"
         "DANGLING|b.com|noise.example.com|unknown|Unclassified|N/A\n"
@@ -146,8 +148,8 @@ def test_classified_and_unclassified_split(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "Classified dangling CNAMEs (1)" in out
     assert "app.herokudns.com" in out
-    assert "Unclassified dangling CNAMEs : 1" in out
-    assert "noise.example.com" not in out
+    assert "Unclassified dangling CNAMEs (1)" in out
+    assert "noise.example.com" in out
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +166,8 @@ def test_ns_takeover_flagged(tmp_path, capsys):
     assert "[!]" in out
     assert "NS Takeover candidates (1)" in out
     assert "vuln.example.com -> NS: ns1.orphaned-registrar.com" in out
+    assert "Why" in out
+    assert "DNS control" in out
 
 
 def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):

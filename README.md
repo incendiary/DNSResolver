@@ -387,7 +387,8 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ v1.9.0 | Dead code: `is_dangling_record_async` defined but never called — remove |
 | [#79](https://github.com/incendiary/DNSResolver/issues/79) | ✅ v1.9.1 | Bug: Azure IP range fetch brittle — scrapes HTML confirmation page; add cache + pinned URL fallback chain |
 | [#80](https://github.com/incendiary/DNSResolver/issues/80) | ✅ v1.9.2 | Bug: dangling CNAMEs to AWS ELB classified as unknown — add `aws_elb` pattern (`*.elb.amazonaws.com`) |
-| [#82](https://github.com/incendiary/DNSResolver/issues/82) | [ ] v1.10.0 | Consolidate output files: 7 text files → 4 — merge CSP results into `csp_matches_*.txt`, merge takeover files into `takeover_candidates_*.txt` (breaking change) |
+| [#82](https://github.com/incendiary/DNSResolver/issues/82) | ✅ v1.10.0 | Consolidate output files: 7 text files → 4 — merge CSP results into `csp_matches_*.txt`, merge takeover files into `takeover_candidates_*.txt` (breaking change) |
+| [#85](https://github.com/incendiary/DNSResolver/issues/85) | ✅ v1.10.1 | Run summary: show all takeover candidates with actionable context — unclassified CNAMEs listed individually with CNAME target, risk, and recommended action; NS takeover entries include DNS-control risk explanation |
 
 ## Contributing
 
