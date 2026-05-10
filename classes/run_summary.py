@@ -1,6 +1,3 @@
-import os
-
-
 class RunSummary:
     def __init__(self, output_files, output_dir):
         self._files = output_files["standard"]
@@ -89,7 +86,7 @@ class RunSummary:
                     if len(parts) >= 2:
                         root, ns_host = parts[0], parts[1]
                         print(f"    {root} -> NS: {ns_host}")
-                        print(f"          Why    : Nameserver does not resolve — registering it gives")
+                        print("          Why    : Nameserver does not resolve — registering it gives")
                         print(f"                   an attacker DNS control over {root} and all its subdomains")
 
             if unclassified:
@@ -98,9 +95,9 @@ class RunSummary:
                 for root_domain, cname_target in unclassified:
                     print(f"    [?] {root_domain}")
                     print(f"          CNAME target : {cname_target}")
-                    print(f"          Risk         : Target does not resolve — if it can be claimed,")
+                    print("          Risk         : Target does not resolve — if it can be claimed,")
                     print(f"                         an attacker can serve content from {root_domain}")
-                    print(f"          Action       : Verify this CNAME is intentional; remove it if not")
+                    print("          Action       : Verify this CNAME is intentional; remove it if not")
 
         print(thin)
         print(f"  Output : {self._output_dir}")
