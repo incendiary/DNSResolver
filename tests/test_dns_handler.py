@@ -16,7 +16,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiodns
 import pytest
 
-from classes.dns_constants import NO_DATA, NXDOMAIN, SERVFAIL, TIMEOUT, is_dns_error_present
+from classes.dns_constants import (
+    NO_DATA,
+    NXDOMAIN,
+    SERVFAIL,
+    TIMEOUT,
+    is_dns_error_present,
+)
 from classes.dns_handler import DNSHandler
 
 # ---------------------------------------------------------------------------
@@ -202,6 +208,36 @@ async def test_check_dangling_cname_is_dangling_no_records(
     mock_env_manager.write_to_file.assert_called_once()
     call_args = mock_env_manager.write_to_file.call_args
     assert "/tmp/test_takeover.txt" in call_args[0]
+
+
+async def test_check_dangling_cname_self_referential_classified_as_misconfiguration(
+    handler, domain_context, mock_env_manager
+):
+    """
+    A CNAME pointing to itself is a misconfiguration, not a takeover risk.
+    It should be written with category 'self_referential', not 'unknown'.
+    """
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "CNAME":
+            cname = MagicMock()
+            # Target resolves back to the original domain (self-referential)
+            cname.cname = "example.com"
+            return cname
+        raise make_nxdomain()
+
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
+    domain_context.set_domain("example.com")
+
+    result = await handler.takeover_detector.check_dangling_cname_async(
+        domain_context, "example.com"
+    )
+
+    assert result is True
+    call_args = mock_env_manager.write_to_file.call_args
+    written_line = call_args[0][1]
+    assert "self_referential" in written_line
+    assert "points to itself" in written_line
 
 
 async def test_check_dangling_cname_timeout_is_not_dangling(handler, domain_context):

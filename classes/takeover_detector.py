@@ -6,7 +6,6 @@ from classes.dns_constants import NO_DATA, NXDOMAIN, SERVFAIL, is_dns_error_pres
 from classes.domain_categoriser import DomainCategoriser
 from classes.evidence_collector import EvidenceCollector
 
-
 MAX_CNAME_DEPTH = 20
 
 
@@ -60,7 +59,9 @@ class TakeoverDetector:
         self.env_manager.log_info(
             f"Running takeover checks for domain: {current_domain}"
         )
-        is_dangling = await self.check_dangling_cname_async(domain_context, current_domain)
+        is_dangling = await self.check_dangling_cname_async(
+            domain_context, current_domain
+        )
         self.env_manager.log_info(
             f"Dangling CNAME check for {current_domain}: {is_dangling}"
         )
@@ -96,7 +97,9 @@ class TakeoverDetector:
                 if not target.endswith("."):
                     target += "."
                 self.env_manager.log_info(f"CNAME target: {target}")
-                if await self.check_dangling_cname_async(domain_context, target, depth + 1):
+                if await self.check_dangling_cname_async(
+                    domain_context, target, depth + 1
+                ):
                     return True
         except aiodns.error.DNSError as e:
             self.env_manager.log_info(f"Error querying CNAME for {current_domain}: {e}")
@@ -123,8 +126,8 @@ class TakeoverDetector:
         try:
             await self.aiodns_resolver.query(current_domain, "NS")
             await self.env_manager.write_to_file(
-                output_files["standard"]["ns_takeover"],
-                f"{original_domain}|{current_domain}",
+                output_files["standard"]["takeover"],
+                f"NS_TAKEOVER|{original_domain}|{current_domain}",
             )
             self.env_manager.log_info(
                 f"NS takeover possible for domain {current_domain}"
@@ -133,10 +136,18 @@ class TakeoverDetector:
         except aiodns.error.DNSError as e:
             self.env_manager.log_info(f"Error querying NS for {current_domain}: {e}")
 
-        patterns = self.env_manager.patterns
-        category, recommendation, evidence_link = DomainCategoriser.categorise_domain(
-            current_domain, patterns
-        )
+        if current_domain.rstrip(".") == original_domain.rstrip("."):
+            category = "self_referential"
+            recommendation = (
+                "Remove or correct the CNAME — the domain points to itself "
+                "and will never resolve"
+            )
+            evidence_link = "N/A"
+        else:
+            patterns = self.env_manager.patterns
+            category, recommendation, evidence_link = (
+                DomainCategoriser.categorise_domain(current_domain, patterns)
+            )
         await self.env_manager.write_to_file(
             output_files["standard"]["takeover"],
             f"DANGLING|{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}",
