@@ -50,6 +50,11 @@
             "recommendation": "Delete the CNAME — the Elastic Beanstalk environment has been terminated; the subdomain may be reclaimable",
             "evidence": "https://github.com/EdOverflow/can-i-take-over-xyz/issues/97"
         },
+        "aws_elb": {
+            "regex": "\\.elb\\.amazonaws\\.com\\.",
+            "recommendation": "Delete the CNAME — the AWS Elastic Load Balancer no longer exists; ELB names are region-scoped and can be claimed by any AWS account in the same region",
+            "evidence": "https://github.com/EdOverflow/can-i-take-over-xyz/issues/137"
+        },
         "aws_s3": {
             "regex": "\\.s3\\.amazonaws\\.com\\.|\\.s3-website[.-][a-z0-9-]+\\.amazonaws\\.com\\.|\\.s3\\.dualstack\\.[a-z0-9-]+\\.amazonaws\\.com\\.",
             "recommendation": "Delete the CNAME or recreate the S3 bucket — unclaimed buckets can be registered by anyone in the same region",
