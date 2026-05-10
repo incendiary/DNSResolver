@@ -159,19 +159,52 @@ def test_fetch_aws_ip_ranges_writes_json(tmp_path):
     assert (tmp_path / "aws_ip_ranges.json").exists()
 
 
-def test_fetch_azure_ip_ranges_writes_json(tmp_path):
-    html = b'<html><a href="https://download.microsoft.com/download/fake.json">link</a></html>'
+def _mock_urlopen(html: bytes):
+    """Return a context-manager mock for urlopen that yields the given HTML."""
     mock_resp = MagicMock()
     mock_resp.read.return_value = html
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
 
+
+AZURE_DOWNLOAD_HTML = (
+    b'<html><a href="https://download.microsoft.com/download/fake.json">link</a></html>'
+)
+
+
+def test_fetch_azure_ip_ranges_scrape_success_writes_json_and_cache(tmp_path):
     with (
-        patch("imports.cloud_ip_ranges.urlopen", return_value=mock_resp),
-        patch(
-            "imports.cloud_ip_ranges.fetch_ip_ranges_for_azure",
-            return_value=(["13.64.0.0/11"], []),
-        ),
+        patch("imports.cloud_ip_ranges.urlopen", return_value=_mock_urlopen(AZURE_DOWNLOAD_HTML)),
+        patch("imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=(["13.64.0.0/11"], [])),
+        patch("imports.cloud_ip_ranges._save_azure_cache") as mock_cache,
+    ):
+        result = fetch_azure_ip_ranges(str(tmp_path))
+
+    assert result == (["13.64.0.0/11"], [])
+    assert (tmp_path / "azure_ip_ranges.json").exists()
+    mock_cache.assert_called_once_with((["13.64.0.0/11"], []))
+
+
+def test_fetch_azure_ip_ranges_scrape_fails_uses_local_cache(tmp_path):
+    """When the confirmation page is unreachable, fall back to the local cache."""
+    with (
+        patch("imports.cloud_ip_ranges.urlopen", side_effect=Exception("timeout")),
+        patch("imports.cloud_ip_ranges.os.path.exists", return_value=True),
+        patch("imports.cloud_ip_ranges._load_azure_cache", return_value=(["13.64.0.0/11"], [])),
+    ):
+        result = fetch_azure_ip_ranges(str(tmp_path))
+
+    assert result == (["13.64.0.0/11"], [])
+
+
+def test_fetch_azure_ip_ranges_scrape_fails_no_cache_uses_pinned(tmp_path):
+    """When scrape fails and there is no cache, the pinned URL is tried."""
+    with (
+        patch("imports.cloud_ip_ranges.urlopen", side_effect=Exception("timeout")),
+        patch("imports.cloud_ip_ranges.os.path.exists", return_value=False),
+        patch("imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=(["13.64.0.0/11"], [])),
+        patch("imports.cloud_ip_ranges._save_azure_cache"),
     ):
         result = fetch_azure_ip_ranges(str(tmp_path))
 
@@ -179,14 +212,13 @@ def test_fetch_azure_ip_ranges_writes_json(tmp_path):
     assert (tmp_path / "azure_ip_ranges.json").exists()
 
 
-def test_fetch_azure_ip_ranges_no_download_link_returns_empty(tmp_path):
-    html = b"<html>no link here</html>"
-    mock_resp = MagicMock()
-    mock_resp.read.return_value = html
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
-
-    with patch("imports.cloud_ip_ranges.urlopen", return_value=mock_resp):
+def test_fetch_azure_ip_ranges_all_sources_fail_returns_empty(tmp_path):
+    """When scrape, cache, and pinned URL all fail, return empty lists."""
+    with (
+        patch("imports.cloud_ip_ranges.urlopen", side_effect=Exception("timeout")),
+        patch("imports.cloud_ip_ranges.os.path.exists", return_value=False),
+        patch("imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=([], [])),
+    ):
         result = fetch_azure_ip_ranges(str(tmp_path))
 
     assert result == ([], [])
