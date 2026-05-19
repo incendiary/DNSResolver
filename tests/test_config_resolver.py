@@ -11,10 +11,7 @@ Only the --resolvers alias is tested here; the broader EnvironmentManager
 integration is covered in test_lambda_environment_manager.py.
 """
 
-import sys
 from unittest.mock import patch
-
-import pytest
 
 from classes.config_resolver import ConfigResolver
 
