@@ -41,11 +41,13 @@ class RunSummary:
             parts = line.split("|")
             if len(parts) >= 5:
                 _orig, current, category, recommendation, evidence = parts[:5]
+                depth = int(parts[5]) if len(parts) > 5 else 0
+                chain = parts[6] if len(parts) > 6 else None
                 if category == "unknown":
-                    unclassified.append((_orig, current))
+                    unclassified.append((_orig, current, depth, chain))
                 else:
                     classified.setdefault(category, []).append(
-                        (current, recommendation, evidence)
+                        (current, recommendation, evidence, depth, chain)
                     )
 
         classified_count = sum(len(v) for v in classified.values())
@@ -81,10 +83,12 @@ class RunSummary:
                 print(f"  Classified dangling CNAMEs ({classified_count})")
                 for category, entries in sorted(classified.items()):
                     print(f"    [{category}]")
-                    for current, rec, evidence in entries:
+                    for current, rec, evidence, depth, chain in entries:
                         print(f"      {current}")
                         print(f"        Recommendation : {rec}")
                         print(f"        Evidence       : {evidence}")
+                        if depth > 0 and chain:
+                            print(f"        Chain ({depth} hop{'s' if depth != 1 else ''})  : {chain}")
 
             if ns_takeover:
                 print()
@@ -106,9 +110,13 @@ class RunSummary:
                 print(
                     f"  Unclassified dangling CNAMEs ({unclassified_count}) — investigate manually"
                 )
-                for root_domain, cname_target in unclassified:
+                for root_domain, cname_target, depth, chain in unclassified:
                     print(f"    [?] {root_domain}")
                     print(f"          CNAME target : {cname_target}")
+                    if depth > 0 and chain:
+                        print(
+                            f"          Chain ({depth} hop{'s' if depth != 1 else ''})  : {chain}"
+                        )
                     print(
                         "          Risk         : Target does not resolve — if it can be claimed,"
                     )

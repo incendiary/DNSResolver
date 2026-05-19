@@ -395,6 +395,7 @@ Once related root domains are identified, enumerate subdomains for each and comb
 | [#87](https://github.com/incendiary/DNSResolver/issues/87) | ✅ v1.10.2 | Version string — printed at startup and in run summary; `--version` flag added |
 | [#89](https://github.com/incendiary/DNSResolver/issues/89) | ✅ v1.10.3 | Self-referential CNAMEs classified as `self_referential` (misconfiguration) not takeover candidates |
 | [#91](https://github.com/incendiary/DNSResolver/issues/91) | ✅ v1.10.4 | README: fix venv path, add `--version` to options table, update architecture diagram, clean roadmap |
+| [#92](https://github.com/incendiary/DNSResolver/issues/92) | ✅ v1.11.0 | CNAME chain depth tracking — dangling output now includes hop count and full chain path (`a -> b -> c`) for faster triage |
 
 ## Contributing
 
