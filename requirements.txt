@@ -3,7 +3,7 @@ requests>=2.34.2
 urllib3>=2.6.3
 tqdm>=4.67.3
 aiodns~=4.0.0
-aiofiles~=24.1.0
+aiofiles~=25.1.0
 
 # dev / test
 pytest>=9.0.3
