@@ -59,8 +59,14 @@ class ConfigResolver:
         )
         parser.add_argument(
             "--nameservers",
+            "--resolvers",
+            dest="nameservers",
             type=str,
-            help="Comma-separated list of custom nameservers. Overrides system resolvers.",
+            help=(
+                "Comma-separated list of custom nameservers to use for all queries. "
+                "Falls back to system resolvers when omitted. "
+                "(--resolvers is an accepted alias)"
+            ),
         )
         parser.add_argument(
             "--max-threads",
