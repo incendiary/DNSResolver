@@ -20,8 +20,9 @@ def _parse(domains_file, extra_argv=None):
     """Run ConfigResolver with a fake sys.argv and return the parsed args."""
     extra_argv = extra_argv or []
     fake_argv = ["resolver.py", str(domains_file)] + extra_argv
-    with patch("sys.argv", fake_argv), patch(
-        "builtins.open", side_effect=IOError("no config")
+    with (
+        patch("sys.argv", fake_argv),
+        patch("builtins.open", side_effect=IOError("no config")),
     ):
         cfg = ConfigResolver()
     return cfg.args

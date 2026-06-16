@@ -175,8 +175,14 @@ AZURE_DOWNLOAD_HTML = (
 
 def test_fetch_azure_ip_ranges_scrape_success_writes_json_and_cache(tmp_path):
     with (
-        patch("imports.cloud_ip_ranges.urlopen", return_value=_mock_urlopen(AZURE_DOWNLOAD_HTML)),
-        patch("imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=(["13.64.0.0/11"], [])),
+        patch(
+            "imports.cloud_ip_ranges.urlopen",
+            return_value=_mock_urlopen(AZURE_DOWNLOAD_HTML),
+        ),
+        patch(
+            "imports.cloud_ip_ranges.fetch_ip_ranges_for_azure",
+            return_value=(["13.64.0.0/11"], []),
+        ),
         patch("imports.cloud_ip_ranges._save_azure_cache") as mock_cache,
     ):
         result = fetch_azure_ip_ranges(str(tmp_path))
@@ -191,7 +197,10 @@ def test_fetch_azure_ip_ranges_scrape_fails_uses_local_cache(tmp_path):
     with (
         patch("imports.cloud_ip_ranges.urlopen", side_effect=Exception("timeout")),
         patch("imports.cloud_ip_ranges.os.path.exists", return_value=True),
-        patch("imports.cloud_ip_ranges._load_azure_cache", return_value=(["13.64.0.0/11"], [])),
+        patch(
+            "imports.cloud_ip_ranges._load_azure_cache",
+            return_value=(["13.64.0.0/11"], []),
+        ),
     ):
         result = fetch_azure_ip_ranges(str(tmp_path))
 
@@ -203,7 +212,10 @@ def test_fetch_azure_ip_ranges_scrape_fails_no_cache_uses_pinned(tmp_path):
     with (
         patch("imports.cloud_ip_ranges.urlopen", side_effect=Exception("timeout")),
         patch("imports.cloud_ip_ranges.os.path.exists", return_value=False),
-        patch("imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=(["13.64.0.0/11"], [])),
+        patch(
+            "imports.cloud_ip_ranges.fetch_ip_ranges_for_azure",
+            return_value=(["13.64.0.0/11"], []),
+        ),
         patch("imports.cloud_ip_ranges._save_azure_cache"),
     ):
         result = fetch_azure_ip_ranges(str(tmp_path))
@@ -217,7 +229,9 @@ def test_fetch_azure_ip_ranges_all_sources_fail_returns_empty(tmp_path):
     with (
         patch("imports.cloud_ip_ranges.urlopen", side_effect=Exception("timeout")),
         patch("imports.cloud_ip_ranges.os.path.exists", return_value=False),
-        patch("imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=([], [])),
+        patch(
+            "imports.cloud_ip_ranges.fetch_ip_ranges_for_azure", return_value=([], [])
+        ),
     ):
         result = fetch_azure_ip_ranges(str(tmp_path))
 

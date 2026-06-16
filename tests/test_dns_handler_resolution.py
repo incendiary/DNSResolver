@@ -162,7 +162,9 @@ async def test_cname_target_without_trailing_dot_is_normalised(handler, domain_c
     so that regex patterns ending with \\. match correctly."""
     received_targets = []
     cname_result = MagicMock()
-    cname_result.cname = "gbe8q5o.impervadns.net"  # no trailing dot — as aiodns returns it
+    cname_result.cname = (
+        "gbe8q5o.impervadns.net"  # no trailing dot — as aiodns returns it
+    )
 
     async def query_side_effect(domain, record_type):
         if record_type == "CNAME" and domain == "example.com":
@@ -173,7 +175,9 @@ async def test_cname_target_without_trailing_dot_is_normalised(handler, domain_c
 
     handler.takeover_detector.aiodns_resolver.query = query_side_effect
 
-    await handler.takeover_detector.check_dangling_cname_async(domain_context, "example.com")
+    await handler.takeover_detector.check_dangling_cname_async(
+        domain_context, "example.com"
+    )
 
     # The recursive call must use the normalised form with trailing dot
     assert any(t == "gbe8q5o.impervadns.net." for t in received_targets)

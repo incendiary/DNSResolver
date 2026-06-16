@@ -1,7 +1,10 @@
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ["py312"]
+target-version = "py312"
 
-[tool.isort]
-profile = "black"
-line_length = 88
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["classes", "imports", "resolver"]

@@ -50,7 +50,6 @@ async def test_handler_downloads_domains_from_s3(tmp_path, mock_s3, mock_env_man
         patch("lambda_handler._upload_results"),
         patch("lambda_handler.TEMP_DIR", str(tmp_path)),
     ):
-
         from lambda_handler import _main
 
         await _main(S3_EVENT)
@@ -70,7 +69,6 @@ async def test_handler_uploads_results_after_run(tmp_path, mock_s3, mock_env_man
         patch("lambda_handler._upload_results") as mock_upload,
         patch("lambda_handler.TEMP_DIR", str(tmp_path)),
     ):
-
         from lambda_handler import _main
 
         await _main(S3_EVENT)
@@ -88,7 +86,6 @@ async def test_handler_uses_output_bucket_env_var(tmp_path, mock_s3, mock_env_ma
         patch("lambda_handler._upload_results") as mock_upload,
         patch("lambda_handler.TEMP_DIR", str(tmp_path)),
     ):
-
         from lambda_handler import _main
 
         await _main(S3_EVENT)
@@ -108,7 +105,6 @@ async def test_handler_defaults_output_to_input_bucket(
         patch("lambda_handler._upload_results") as mock_upload,
         patch("lambda_handler.TEMP_DIR", str(tmp_path)),
     ):
-
         from lambda_handler import _main
 
         await _main(S3_EVENT)
@@ -128,7 +124,6 @@ async def test_handler_parses_nameservers_env_var(tmp_path, mock_s3, mock_env_ma
         patch("lambda_handler._upload_results"),
         patch("lambda_handler.TEMP_DIR", str(tmp_path)),
     ):
-
         from lambda_handler import _main
 
         await _main(S3_EVENT)
@@ -148,7 +143,6 @@ async def test_handler_passes_max_threads_env_var(tmp_path, mock_s3, mock_env_ma
         patch("lambda_handler._upload_results"),
         patch("lambda_handler.TEMP_DIR", str(tmp_path)),
     ):
-
         from lambda_handler import _main
 
         await _main(S3_EVENT)
