@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"  # Every Monday 06:00 UTC — catches env drift
 
 jobs:
   test:
@@ -27,6 +29,9 @@ jobs:
 
       - name: Format check (ruff)
         run: ruff format --check .
+
+      - name: Baseline tests
+        run: pytest tests/baseline/ -v
 
       - name: Test (pytest)
         run: pytest --cov=. --cov-report=term-missing
