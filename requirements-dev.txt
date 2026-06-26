@@ -1,4 +1,4 @@
 # Development tooling — not needed at runtime or in Lambda
 -r requirements.txt
-ruff>=0.11.0
+ruff>=0.15.20
 pre-commit~=4.6
