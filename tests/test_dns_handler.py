@@ -146,7 +146,7 @@ async def test_resolve_domain_async_makes_single_attempt(
     handler, domain_context, mock_env_manager
 ):
     """
-    resolve_domain_async makes exactly one DNS query per call.
+    resolve_domain_async makes exactly one DNS query per record type per call.
     Retry orchestration is the responsibility of the outer run() loop,
     not the handler itself.
     """
@@ -155,7 +155,98 @@ async def test_resolve_domain_async_makes_single_attempt(
 
     await handler.resolve_domain_async(domain_context)
 
-    assert handler.aiodns_resolver.query.call_count == 1
+    # A and AAAA are each queried exactly once — no retry loop in the handler.
+    record_types = [c.args[1] for c in handler.aiodns_resolver.query.call_args_list]
+    assert sorted(record_types) == ["A", "AAAA"]
+
+
+# ---------------------------------------------------------------------------
+# resolve_domain_async — AAAA / IPv6
+# ---------------------------------------------------------------------------
+
+
+async def test_resolve_domain_async_aaaa_only_host_is_resolved(handler, domain_context):
+    """
+    A host with only AAAA records must be reported as resolved with its IPv6
+    addresses — previously the A-record NODATA alone marked it unresolved.
+    """
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "AAAA":
+            return [dns_answer("2606:4700::1111")]
+        raise make_nodata()  # no A record
+
+    handler.aiodns_resolver.query = AsyncMock(side_effect=query_side_effect)
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+
+    success, ips = await handler.resolve_domain_async(domain_context)
+
+    assert success is True
+    assert ips == ["2606:4700::1111"]
+
+
+async def test_resolve_domain_async_mixed_a_and_aaaa_captures_both(
+    handler, domain_context
+):
+    """A dual-stack host yields IPv4 first, then IPv6, in one flat list."""
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "A":
+            return [dns_answer("1.2.3.4")]
+        return [dns_answer("2606:4700::1111"), dns_answer("2606:4700::2222")]
+
+    handler.aiodns_resolver.query = AsyncMock(side_effect=query_side_effect)
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+
+    success, ips = await handler.resolve_domain_async(domain_context)
+
+    assert success is True
+    assert ips == ["1.2.3.4", "2606:4700::1111", "2606:4700::2222"]
+
+
+async def test_resolve_domain_async_a_only_host_unaffected_by_aaaa_failure(
+    handler, domain_context
+):
+    """An IPv4-only host stays resolved even though the AAAA query fails."""
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "A":
+            return [dns_answer("1.2.3.4")]
+        raise make_nodata()  # no AAAA record
+
+    handler.aiodns_resolver.query = AsyncMock(side_effect=query_side_effect)
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+
+    success, ips = await handler.resolve_domain_async(domain_context)
+
+    assert success is True
+    assert ips == ["1.2.3.4"]
+
+
+async def test_resolve_domain_async_both_families_failing_uses_a_error(
+    handler, domain_context
+):
+    """
+    When both A and AAAA fail the domain is unresolved, and the A error is the
+    one handed to the error path so NXDOMAIN takeover handling is preserved.
+    """
+    handler.aiodns_resolver.query = AsyncMock(side_effect=make_nxdomain())
+    handler.handle_domain_resolution_errors = AsyncMock(return_value=(False, []))
+
+    success, ips = await handler.resolve_domain_async(domain_context)
+
+    assert success is False
+    assert ips == []
+    passed_error = handler.handle_domain_resolution_errors.call_args.args[2]
+    assert is_dns_error_present(passed_error, [NXDOMAIN])
+
+
+async def test_resolve_domain_async_non_dns_error_propagates(handler, domain_context):
+    """A non-DNS fault must not be swallowed by the gather()."""
+    handler.aiodns_resolver.query = AsyncMock(side_effect=RuntimeError("boom"))
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await handler.resolve_domain_async(domain_context)
 
 
 # ---------------------------------------------------------------------------
