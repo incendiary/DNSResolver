@@ -24,6 +24,14 @@ class TqdmLoggingHandler(logging.StreamHandler):
             self.handleError(record)
 
 
+def fetch_external_ip(timeout=10):
+    try:
+        response = requests.get("https://ifconfig.io/ip", timeout=timeout)
+        return response.text.strip()
+    except RequestException as error:
+        return f"An error occurred while trying to retrieve the external ip: {error}"
+
+
 def setup_logger(log_file="dnsresolver.log", verbose=False):
     logger = logging.getLogger("DNSResolver")
     logger.setLevel(logging.INFO)
@@ -114,13 +122,7 @@ class EnvironmentManager:
             print(f"{key:20}: {value}")
 
     def _populate_environment_info(self):
-        try:
-            response = requests.get("https://ifconfig.io/ip", timeout=10)
-            external_ip = response.text.strip()
-        except RequestException as error:
-            external_ip = (
-                f"An error occurred while trying to retrieve the external ip: {error}"
-            )
+        external_ip = fetch_external_ip()
         self.environment_info = {
             "command_executed": " ".join(sys.argv),
             "external_ip": external_ip,
