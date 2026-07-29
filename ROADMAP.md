@@ -74,21 +74,22 @@ Ship in this order. Each group is one point release (patch unless noted).
   - [x] E1: Lambda walkthrough moved README → `docs/LAMBDA.md` (README 406 → 232 lines, content byte-identical)
   - [x] E2: Scope-boundary note added — **no URL/placeholder** (no companion project exists yet)
   - [x] E3: **Resolved** — maintainer chose the middle path: deployment machinery (`Dockerfile`, `ecr-build.yml`) removed in PR 142; `lambda_handler.py` and its tests kept as a reference entry point. Coverage and test count unaffected.
-- [ ] **PR-F: New DNS features** — plan: [`docs/roadmap/PR-F-dns-features.md`](docs/roadmap/PR-F-dns-features.md) — *partially done, branch `feat/dns-capabilities`*
-  - [ ] F1: Wildcard-DNS detection (suppress false-positive subdomains) — **NOT STARTED**
+- [x] **PR-F: New DNS features** — plan: [`docs/roadmap/PR-F-dns-features.md`](docs/roadmap/PR-F-dns-features.md) — *complete*
+  - [x] F1: Wildcard-DNS detection — per-zone cached probes, `WILDCARD|` prefix, counted in the summary. Verified live against `github.io`. A live test caught that A-only probing missed dual-stack catch-alls; probes now cover A and AAAA
   - [x] F2: Record AAAA (IPv6) resolutions — concurrent A+AAAA query; unresolved only when **both** fail. **Verified on live DNS:** `ipv6.google.com` (AAAA-only) previously reported unresolved, now resolves to 4 IPv6 addresses; dual-stack hosts capture both families
-  - [ ] F3: Add takeover signatures beyond the 60-pattern set — **NOT STARTED**
+  - [x] F3: 30 fingerprints added (60 → 90), plus the pattern set's first tests
 
 ### 🟢 LOW
-- [ ] **PR-G: Docs & release polish** → folded into the next release — plan: [`docs/roadmap/PR-G-docs.md`](docs/roadmap/PR-G-docs.md)
-  - [ ] G1: README `## Roadmap` → brief summary + link to this file (stop duplicating the table)
-  - [ ] G2: Add the crt.sh domain-list helper as `helper/crtsh_domains.sh`
-  - [ ] G3: Document the A-record-only limitation and pattern-order rule
-- [ ] **PR-H: Dependency batch** — plan: [`docs/roadmap/PR-H-dependencies.md`](docs/roadmap/PR-H-dependencies.md) — *in progress*
+- [x] **PR-G: Docs & release polish** — plan: [`docs/roadmap/PR-G-docs.md`](docs/roadmap/PR-G-docs.md) — *complete*
+  - [x] G1: README roadmap table replaced with a link to this file
+  - [x] G2: `helper/crtsh_domains.sh` added — retries, fails loudly, filters to valid hostnames
+  - [x] G3: Known limitations section added to the README
+- [x] **PR-H: Dependency batch** — plan: [`docs/roadmap/PR-H-dependencies.md`](docs/roadmap/PR-H-dependencies.md) — *complete*
   - [x] **Root cause found and fixed:** branch protection required status checks named `CI` and `Secret Scan` (the *workflow* names). GitHub reports *job* names (`test`, `gitleaks`, `trufflehog`), so those contexts could never appear and **every** PR was permanently BLOCKED — the real reason the backlog accumulated. Contexts corrected.
   - [x] PR 116 (`aws-actions/configure-aws-credentials`) closed as moot — its only consumer, `ecr-build.yml`, was removed by E3
-  - [ ] H1: Merge the remaining dependabot PRs (batch, verify each)
-  - [ ] H2: Prune the 6 stale non-dependabot remote branches (`change_threading`, `oopify`, `pylint_pep8`, `media`, `add-claude-github-actions-*`, `feature/*` if merged)
+  - [x] H1: All dependency PRs merged. Two needed recreating — their branches were pinned to a base predating the CI fix, so `update-branch` could not move them
+  - [x] H2: No stale branches remained to prune; every remaining branch backs an open PR
+  - [x] H2: No pruning needed — the stale branches listed here (`change_threading`, `oopify`, `pylint_pep8`, `media`, `add-claude-github-actions-*`) were already gone. Every remaining branch backs an open PR
 
 ---
 
@@ -98,3 +99,18 @@ The full historical changelog lives in the README roadmap table and GitHub Relea
 v1.10.0 output consolidation, v1.10.1 actionable run summary, v1.10.2 version string, v1.10.3
 self-referential CNAME classification, v1.10.4 README corrections, plus the tooling modernisation
 (ruff, dependabot, secret scan, ECR build) at `a2d06fb`.
+
+---
+
+## Outstanding
+
+Every item above has shipped. What remains is not roadmap work:
+
+- **PR 104 — `feat: CNAME chain depth tracking in dangling output`.** An open feature PR, authored
+  separately. Needs review on its merits; not part of this roadmap.
+- **Performance at true scale is unmeasured.** PR-C removed the known cliffs (per-IP CIDR parsing,
+  O(n²) dedupe) but no benchmark has been run against a 10k+ domain list. The improvement is
+  reasoned, not demonstrated.
+- **Wildcard detection is DNS-only by design.** It cannot separate a real host from a catch-all when
+  the host genuinely shares the wildcard's addresses. Resolving that needs active probing, which is
+  deliberately out of scope for this tool.
