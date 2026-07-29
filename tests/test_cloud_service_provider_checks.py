@@ -18,6 +18,7 @@ from imports.cloud_service_provider_checks import (
     log_and_write,
     match_ip_with_vendors,
     merge_matches,
+    parse_network,
     perform_csp_checks,
 )
 
@@ -164,7 +165,7 @@ def test_log_and_write_creates_entry(tmp_path, ctx):
     out_file.touch()
     output_files = {"standard": {"csp": str(out_file)}}
 
-    result = log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
+    result = log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx, set())
 
     assert result is True
     assert "example.com resolved to gcp IPs" in out_file.read_text()
@@ -175,12 +176,65 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
     out_file = tmp_path / "csp.txt"
     out_file.touch()
     output_files = {"standard": {"csp": str(out_file)}}
+    written_lines = set()
 
-    log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
-    log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx)
+    first = log_and_write(
+        "gcp", ["34.1.2.3"], "example.com", output_files, ctx, written_lines
+    )
+    second = log_and_write(
+        "gcp", ["34.1.2.3"], "example.com", output_files, ctx, written_lines
+    )
 
+    assert first is True
+    assert second is False
     lines = [ln for ln in out_file.read_text().splitlines() if ln]
     assert len(lines) == 1
+
+
+def test_log_and_write_no_full_file_read(tmp_path, ctx, monkeypatch):
+    """log_and_write must not open the output file for reading — only append."""
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    output_files = {"standard": {"csp": str(out_file)}}
+    written_lines = set()
+
+    real_open = open
+
+    def guarded_open(file, mode="r", *args, **kwargs):
+        if "r" in mode and "a" not in mode and "w" not in mode:
+            raise AssertionError("log_and_write must not read the output file")
+        return real_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", guarded_open)
+
+    log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx, written_lines)
+
+    assert "example.com resolved to gcp IPs" in out_file.read_text()
+
+
+def test_log_and_write_substring_line_not_suppressed(tmp_path, ctx):
+    """A different line that happens to be a substring of an existing line
+    must NOT be treated as a duplicate (the old file.read()-substring check
+    would have falsely deduped this)."""
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    output_files = {"standard": {"csp": str(out_file)}}
+    written_lines = set()
+
+    # "example.com resolved to gcp IPs: ['1.1.1.1']" contains
+    # "ple.com resolved to gcp IPs: ['1.1.1.1']" as a substring
+    # (example.com = exam + ple.com), but they are different domains/lines.
+    first = log_and_write(
+        "gcp", ["1.1.1.1"], "example.com", output_files, ctx, written_lines
+    )
+    second = log_and_write(
+        "gcp", ["1.1.1.1"], "ple.com", output_files, ctx, written_lines
+    )
+
+    assert first is True
+    assert second is True
+    lines = [ln for ln in out_file.read_text().splitlines() if ln]
+    assert len(lines) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -217,3 +271,91 @@ def test_perform_csp_checks_no_match_returns_false(tmp_path, mock_env_manager, c
     )  # TEST-NET, no match
 
     assert result is False
+
+
+def test_perform_csp_checks_dedupes_across_calls_on_same_env_manager(tmp_path, ctx):
+    """The run-scoped written-lines set must live on env_manager and persist
+    across multiple perform_csp_checks calls (one per domain in a real run),
+    so the same match for the same domain is only written once."""
+
+    class RealishEnvManager:
+        """A plain object (not a MagicMock) so hasattr() behaves normally —
+        MagicMock auto-creates attributes, which would hide a missing
+        lazy-init of _csp_written_lines."""
+
+        def __init__(self, output_files):
+            self.output_files = output_files
+
+    csp_file = tmp_path / "csp.txt"
+    csp_file.touch()
+    env_manager = RealishEnvManager({"standard": {"csp": str(csp_file)}})
+
+    assert not hasattr(env_manager, "_csp_written_lines")
+
+    first = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
+    assert hasattr(env_manager, "_csp_written_lines")
+    second = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
+
+    assert first is True
+    assert second is False  # same domain + same match already logged
+    lines = [ln for ln in csp_file.read_text().splitlines() if ln]
+    assert len(lines) == 1
+
+
+# ---------------------------------------------------------------------------
+# parse_network — CIDR parsed once and reused (C1)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_network_equivalence_ip_inside_and_outside_range(ctx):
+    """A known IP INSIDE a known vendor CIDR, and a known IP outside all
+    ranges, must produce the exact same match result as naive per-IP
+    ipaddress.ip_network() parsing would."""
+    vendor_ips = {"gcp": ["34.0.0.0/8"], "aws": ["10.0.0.0/8"], "azure": []}
+
+    inside_ip = ipaddress.IPv4Address("34.1.2.3")
+    outside_ip = ipaddress.IPv4Address("8.8.8.8")
+
+    matches = {"gcp": set(), "aws": set(), "azure": set()}
+    match_ip_with_vendors(inside_ip, vendor_ips, ctx, matches)
+    match_ip_with_vendors(outside_ip, vendor_ips, ctx, matches)
+
+    assert matches == {"gcp": {"34.1.2.3"}, "aws": set(), "azure": set()}
+
+
+def test_parse_network_is_memoised_across_calls():
+    """Each distinct CIDR string should only be parsed once, no matter how
+    many times match_ip_with_vendors/get_ip_matches is invoked against it."""
+    parse_network.cache_clear()
+    cidr = "203.0.113.0/24"
+
+    parse_network(cidr)
+    hits_before = parse_network.cache_info().hits
+    misses_before = parse_network.cache_info().misses
+
+    # Call it many more times, as would happen across many resolved IPs.
+    for _ in range(50):
+        parse_network(cidr)
+
+    info = parse_network.cache_info()
+    assert misses_before == 1
+    assert info.misses == 1  # never re-parsed
+    assert info.hits == hits_before + 50
+
+
+def test_match_ip_with_vendors_reuses_cached_network(ctx):
+    """Matching several IPs against the same vendor CIDR list should not
+    re-parse the CIDR strings for each IP."""
+    parse_network.cache_clear()
+    vendor_ips = {"gcp": ["34.0.0.0/8", "35.0.0.0/8"], "aws": [], "azure": []}
+    matches = {"gcp": set(), "aws": set(), "azure": set()}
+
+    ips = [ipaddress.IPv4Address(f"34.1.2.{i}") for i in range(10)]
+    for ip in ips:
+        match_ip_with_vendors(ip, vendor_ips, ctx, matches)
+
+    info = parse_network.cache_info()
+    # Only the 2 distinct CIDR strings should ever be parsed (misses == 2),
+    # regardless of how many IPs (10) were checked against them.
+    assert info.misses == 2
+    assert info.hits == 10 * 2 - 2
