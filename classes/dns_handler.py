@@ -6,6 +6,7 @@ import dns.resolver
 
 from classes.dns_constants import NXDOMAIN, SERVFAIL, is_dns_error_present
 from classes.takeover_detector import TakeoverDetector
+from classes.wildcard_detector import WildcardDetector
 
 
 class DNSHandler:
@@ -20,6 +21,7 @@ class DNSHandler:
             self.dnspython_resolver.nameservers = [random_nameserver]
 
         self.takeover_detector = TakeoverDetector(self.aiodns_resolver, env_manager)
+        self.wildcard_detector = WildcardDetector(self.aiodns_resolver, env_manager)
 
     async def log_and_write_dns_error(self, domain, error, additional_message=""):
         message = f"DNS resolution error for {domain}: {error}"
