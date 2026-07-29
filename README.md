@@ -5,6 +5,7 @@ DNSResolver is a Python-based security tool for bulk DNS resolution and cloud in
 - Resolves DNS records and matches resolved IPs against known IP ranges for **AWS, GCP, and Azure**
 - Detects **dangling CNAME** records pointing to unclaimed cloud resources (potential subdomain takeover)
 - Detects **NS takeover** opportunities where nameservers are unresolvable
+- Flags **wildcard DNS** zones so catch-all answers are not mistaken for real hosts
 - Collects forensic evidence (dig/nslookup output) for flagged domains
 
 All domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
@@ -76,7 +77,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 
 | File | Contents |
 |------|----------|
-| `resolution_results_*.txt` | Successfully resolved domains and their DNS records |
+| `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Lines prefixed `WILDCARD\|` resolved only via a zone wildcard — see [Wildcard DNS detection](#wildcard-dns-detection) |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
 | `takeover_candidates_*.txt` | Takeover candidates — `DANGLING\|` lines (dangling CNAMEs with category, recommendation, evidence) and `NS_TAKEOVER\|` lines (unresolvable nameservers) |
 | `csp_matches_*.txt` | Domains resolving to cloud provider IP ranges (AWS, GCP, Azure — one line per match) |
@@ -97,6 +98,7 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 ├── LambdaEnvironmentManager — Lambda: env vars, stdout logging, /tmp file I/O
 ├── DNSHandler               — async DNS resolution (aiodns primary, dnspython fallback)
 │   ├── TakeoverDetector     — dangling CNAME detection, NS takeover checks, depth-limited CNAME chain following
+│   ├── WildcardDetector     — per-zone wildcard DNS detection, cached probe results
 │   └── EvidenceCollector    — async subprocess evidence capture (dig/nslookup)
 ├── DomainProcessingContext  — per-domain state (domain name, resolver, CSP IPs)
 ├── CSPIPAddresses           — value object holding fetched AWS/GCP/Azure IP ranges
@@ -105,6 +107,40 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 ```
 
 Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`) to run many domains concurrently without exhausting file descriptors or triggering DNS rate limits. Failed domains are collected after each pass and retried up to `--retries` times.
+
+## Wildcard DNS detection
+
+A zone serving a wildcard record (`*.example.com`) answers for **every** name beneath it. Against an
+enumerated subdomain list that means thousands of "resolved" domains that are not real hosts, burying
+the findings that matter.
+
+DNSResolver detects this automatically. For each zone it queries a couple of random labels that are
+almost certainly not real (`<random-hex>.example.com`). If they resolve, the zone answers for
+anything, and the addresses returned are recorded as the zone's wildcard set. Any domain resolving
+*only* to addresses in that set is written with a `WILDCARD|` prefix:
+
+```
+WILDCARD|nonexistent-zz9x7q.github.io|185.199.108.153|185.199.109.153|...
+www.example.com|203.0.113.10
+```
+
+The end-of-run summary reports the count separately:
+
+```
+  Resolved             :      4
+    of which wildcard  :      2  (catch-all DNS — not real hosts)
+```
+
+Notes:
+
+- A host resolving to any address **outside** the wildcard set is treated as real and is not flagged,
+  even if it also shares one with the wildcard.
+- Results are cached per zone, so a scan costs one probe round per zone, not one per domain. Zones
+  with no wildcard are probed once and then left completely untouched.
+- Both IPv4 and IPv6 are probed, so a dual-stack catch-all is matched correctly.
+- Detection is DNS-only and cannot distinguish a real host from a wildcard when the host genuinely
+  shares the wildcard's addresses — GitHub Pages sites are a common example, as they all resolve to
+  the same set. Confirming those requires active probing, which is deliberately out of scope.
 
 ## Configuration
 

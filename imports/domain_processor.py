@@ -18,9 +18,16 @@ async def process_domain_async(
 
     if success and final_ips:
         output_files = env_manager.output_files
+        # A domain resolving only to its zone's wildcard addresses is a catch-all
+        # answer, not a real host. Marking it keeps enumerated lists readable
+        # without discarding the result.
+        is_wildcard = await dns_handler.wildcard_detector.is_wildcard_resolution(
+            domain, final_ips
+        )
+        prefix = "WILDCARD|" if is_wildcard else ""
         await env_manager.write_to_file(
             output_files["standard"]["resolved"],
-            f"{domain}|{'|'.join(final_ips)}",
+            f"{prefix}{domain}|{'|'.join(final_ips)}",
         )
         perform_csp_checks(domain_context, env_manager, final_ips)
         env_manager.log_info(f"Performing CSP Checks for: {domain} and {final_ips}")
