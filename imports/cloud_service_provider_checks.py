@@ -1,10 +1,28 @@
+import functools
 import ipaddress
-import os
+
+
+@functools.lru_cache(maxsize=None)
+def parse_network(cidr):
+    """Parse a CIDR string into an ip_network object, memoised for the run.
+
+    The vendor CIDR lists are fixed for the whole run, so each distinct
+    string only needs to be parsed once regardless of how many IPs/domains
+    are checked against it.
+    """
+    return ipaddress.ip_network(cidr)
 
 
 def perform_csp_checks(domain_context, env_manager, final_ips):
     domain = domain_context.get_domain()
     output_files = env_manager.output_files
+
+    # Run-scoped set of CSP lines already written, to dedupe without
+    # re-reading the output file. Owned on env_manager so it persists
+    # across the many perform_csp_checks calls (one per domain) in a run.
+    if not hasattr(env_manager, "_csp_written_lines"):
+        env_manager._csp_written_lines = set()
+    written_lines = env_manager._csp_written_lines
 
     vendor_ips_context_ipv4 = get_vendor_ips(domain_context, ip_version=4)
     vendor_ips_context_ipv6 = get_vendor_ips(domain_context, ip_version=6)
@@ -23,7 +41,14 @@ def perform_csp_checks(domain_context, env_manager, final_ips):
     for vendor, matched_ips in matches.items():
         if matched_ips:
             success = (
-                log_and_write(vendor, matched_ips, domain, output_files, domain_context)
+                log_and_write(
+                    vendor,
+                    matched_ips,
+                    domain,
+                    output_files,
+                    domain_context,
+                    written_lines,
+                )
                 or success
             )
         else:
@@ -69,13 +94,15 @@ def match_ip_with_vendors(ip_obj, vendor_ips_context, domain_context, matches):
     for vendor, ips in vendor_ips_context.items():
         for ip_range in ips:
             try:
-                if ip_obj in ipaddress.ip_network(ip_range):
-                    domain_context.log_info(
-                        f"IP {ip_obj} is in range {ip_range} for vendor {vendor}"
-                    )
-                    matches[vendor].add(str(ip_obj))
+                network = parse_network(ip_range)
             except ValueError as e:
                 domain_context.log_info(f"Error processing IP range {ip_range}: {e}")
+                continue
+            if ip_obj in network:
+                domain_context.log_info(
+                    f"IP {ip_obj} is in range {ip_range} for vendor {vendor}"
+                )
+                matches[vendor].add(str(ip_obj))
 
 
 def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
@@ -85,18 +112,20 @@ def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
     }
 
 
-def log_and_write(vendor, matched_ips, domain, output_files, domain_context):
+def log_and_write(
+    vendor, matched_ips, domain, output_files, domain_context, written_lines
+):
     message = f"{domain} resolved to {vendor} IPs: {matched_ips}"
+
+    # Deduplicate against an in-memory, run-scoped set of lines already
+    # written — avoids re-reading the whole output file on every call.
+    if message in written_lines:
+        return False
+
     file_path = output_files["standard"]["csp"]
-
-    # Deduplicate: skip write if this exact line already exists
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as file:
-            if message in file.read():
-                return False
-
     with open(file_path, "a", encoding="utf-8") as file:
         file.write(message + "\n")
+    written_lines.add(message)
 
     domain_context.log_info(message)
 
