@@ -123,6 +123,17 @@ def test_fetch_ip_ranges_for_azure_non_200_returns_empty():
     assert v6 == []
 
 
+def test_fetch_ip_ranges_for_azure_request_exception_returns_empty():
+    with patch(
+        "imports.cloud_ip_ranges.requests.get",
+        side_effect=requests.exceptions.RequestException("timeout"),
+    ):
+        v4, v6 = fetch_ip_ranges_for_azure("http://fake-azure-url", extreme=False)
+
+    assert v4 == []
+    assert v6 == []
+
+
 def test_fetch_ip_ranges_for_azure_extreme_does_not_raise():
     with patch(
         "imports.cloud_ip_ranges.requests.get",
