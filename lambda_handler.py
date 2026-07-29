@@ -18,8 +18,9 @@ IAM permissions required:
   s3:PutObject  on the output bucket
 
 Deployment: container image recommended — pycares bundles a native extension
-that must match the Lambda execution environment architecture.
-See Dockerfile for the reference image definition.
+that must match the Lambda execution environment architecture. The container
+image and its build pipeline are maintained in a separate deployment project;
+this module is the reference entry point only. See docs/LAMBDA.md.
 """
 
 import asyncio

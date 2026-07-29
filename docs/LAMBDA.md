@@ -4,12 +4,17 @@ This document covers the full Lambda deployment walkthrough for DNSResolver, mov
 
 DNSResolver can run as a Lambda function triggered by an S3 PutObject event. Upload a domains file to the input bucket to start a run; results are written back to S3 when it completes.
 
+> **Where the deployment machinery lives.** This repository keeps `lambda_handler.py` as the
+> **reference entry point** only. The container image (`Dockerfile`) and the build-and-push pipeline
+> are maintained in a **separate deployment project**, so this repo stays a clean CLI tool. The steps
+> below are the reference procedure — run them from that project, which supplies the image definition.
+
 ### Design decisions
 
 | Decision | Choice | Reason |
 |----------|--------|--------|
 | Packaging | Container image | `pycares` bundles a native C extension — container images avoid the manylinux wheel compatibility issues that affect Lambda layers |
-| Architecture | arm64 (Graviton) | ~20% cheaper than x86_64 for equivalent workloads; change `FROM` line in Dockerfile for x86_64 |
+| Architecture | arm64 (Graviton) | ~20% cheaper than x86_64 for equivalent workloads; change the `FROM` line in the deployment project's Dockerfile for x86_64 |
 | Runtime | Python 3.12 | Latest Lambda-supported version |
 | Logging | stdout only | Lambda captures stdout to CloudWatch automatically; no log file is written |
 | Evidence collection | Disabled | `dig` and `nslookup` are not available in the Lambda runtime |
@@ -45,6 +50,8 @@ aws ecr create-repository \
 ```
 
 **2. Build and push the container image**
+
+> Run from the deployment project, which holds the Dockerfile.
 ```bash
 # Build for arm64 (cross-compile if you're on an x86 machine)
 docker build --platform linux/arm64 -t dnsresolver-lambda .
@@ -157,6 +164,8 @@ aws s3 cp domains.txt s3://<input-bucket>/domains/domains.txt
 ```
 
 **7. Updating the function after a code change**
+
+> Run from the deployment project, which holds the Dockerfile.
 ```bash
 docker build --platform linux/arm64 -t dnsresolver-lambda . && \
 docker push <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest && \
