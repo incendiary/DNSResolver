@@ -283,12 +283,21 @@ async def test_check_dangling_cname_is_dangling_no_records(
     handler, domain_context, mock_env_manager
 ):
     """
-    When A, AAAA, MX, and NS all return NXDOMAIN the domain is dangling.
-    The handler should write to the dangling file and return True.
+    A domain with a CNAME whose target has no A, AAAA, MX or NS record is
+    dangling. The handler should write to the takeover file and return True.
+
+    The CNAME is required: without one there is nothing to dangle, which is
+    covered by test_check_dangling_cname_nxdomain_without_cname_is_not_a_candidate.
     """
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        side_effect=make_nxdomain()
-    )
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "CNAME" and domain == "gone.example.com":
+            cname = MagicMock()
+            cname.cname = "unclaimed.example.net"
+            return cname
+        raise make_nxdomain()
+
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
 
     result = await handler.takeover_detector.check_dangling_cname_async(
         domain_context, "gone.example.com"
@@ -331,18 +340,16 @@ async def test_check_dangling_cname_self_referential_classified_as_misconfigurat
     assert "points to itself" in written_line
 
 
-async def test_check_dangling_cname_depth_zero_nxdomain_not_self_referential(
+async def test_check_dangling_cname_nxdomain_without_cname_is_not_a_candidate(
     handler, domain_context, mock_env_manager
 ):
     """
-    Regression test for issue #89.
+    A name that does not exist and has no CNAME is not a takeover candidate.
 
-    A plain NXDOMAIN domain (no CNAME, no A/AAAA/MX, no NS) is checked at
-    depth 0 with current_domain == original_domain — because
-    handle_takeover_checks always calls in with current_domain equal to the
-    domain being checked. This must NOT be classified as 'self_referential'
-    (there was no CNAME loop at all); it should fall through to the normal
-    DomainCategoriser result instead.
+    Nothing is dangling: there is no CNAME pointing at an unclaimed resource,
+    the name is simply absent from DNS. Reporting it as a candidate is a false
+    positive that buries real findings, so no takeover line may be written.
+    The caller still records the domain as unresolved.
     """
     handler.takeover_detector.aiodns_resolver.query = AsyncMock(
         side_effect=make_nxdomain()
@@ -353,10 +360,37 @@ async def test_check_dangling_cname_depth_zero_nxdomain_not_self_referential(
         domain_context, "dead.example.com"
     )
 
+    assert result is False
+    mock_env_manager.write_to_file.assert_not_called()
+
+
+async def test_check_dangling_cname_real_dangling_cname_still_flagged(
+    handler, domain_context, mock_env_manager
+):
+    """
+    The complement of the test above: a domain whose CNAME target does not
+    resolve is still reported as a takeover candidate. This guards against the
+    no-CNAME fix suppressing genuine findings.
+    """
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "CNAME" and domain == "live.example.com":
+            cname = MagicMock()
+            cname.cname = "gone.cloudapp.net"
+            return cname
+        raise make_nxdomain()
+
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
+    domain_context.set_domain("live.example.com")
+
+    result = await handler.takeover_detector.check_dangling_cname_async(
+        domain_context, "live.example.com"
+    )
+
     assert result is True
-    call_args = mock_env_manager.write_to_file.call_args
-    written_line = call_args[0][1]
-    assert "self_referential" not in written_line
+    written_line = mock_env_manager.write_to_file.call_args[0][1]
+    assert written_line.startswith("DANGLING|")
+    assert "gone.cloudapp.net" in written_line
 
 
 async def test_check_dangling_cname_timeout_is_not_dangling(handler, domain_context):
