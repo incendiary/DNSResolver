@@ -58,3 +58,74 @@ def test_nameservers_default_is_none(tmp_path):
     f.write_text("")
     args = _parse(f)
     assert args.nameservers is None
+
+
+def _parse_with_real_config(domains_file, config, extra_argv=None):
+    """Run ConfigResolver against a real config.json written to disk."""
+    import json
+
+    config_path = domains_file.parent / "config.json"
+    config_path.write_text(json.dumps({"config": config}))
+    extra_argv = extra_argv or []
+    fake_argv = [
+        "resolver.py",
+        str(domains_file),
+        "--config-file",
+        str(config_path),
+    ] + extra_argv
+    with patch("sys.argv", fake_argv):
+        cfg = ConfigResolver()
+    return cfg.args
+
+
+def test_cli_value_overrides_config_value(tmp_path):
+    """A CLI-provided value must win over the config file's value."""
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    args = _parse_with_real_config(f, {"max_threads": 5}, ["--max-threads", "50"])
+    assert args.max_threads == 50
+
+
+def test_config_value_fills_unset_cli_arg(tmp_path):
+    """When a CLI arg is not provided, the config file's value should be used."""
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    args = _parse_with_real_config(f, {"max_threads": 5})
+    assert args.max_threads == 5
+
+
+def test_bad_config_file_is_tolerated(tmp_path):
+    """A malformed config.json must not crash ConfigResolver; args fall back to None."""
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{not valid json")
+    fake_argv = ["resolver.py", str(f), "--config-file", str(config_path)]
+    with patch("sys.argv", fake_argv):
+        cfg = ConfigResolver()
+    assert cfg.args.max_threads is None
+
+
+def test_missing_config_file_is_tolerated(tmp_path):
+    """A config file path that doesn't exist must not crash ConfigResolver."""
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    fake_argv = [
+        "resolver.py",
+        str(f),
+        "--config-file",
+        str(tmp_path / "nonexistent.json"),
+    ]
+    with patch("sys.argv", fake_argv):
+        cfg = ConfigResolver()
+    assert cfg.args.max_threads is None
+
+
+def test_resolvers_alias_maps_to_nameservers_with_config_fallback(tmp_path):
+    """--resolvers alias must populate args.nameservers, overriding the config value."""
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    args = _parse_with_real_config(
+        f, {"nameservers": "9.9.9.9"}, ["--resolvers", "8.8.8.8"]
+    )
+    assert args.nameservers == "8.8.8.8"
