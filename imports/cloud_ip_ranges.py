@@ -4,7 +4,6 @@ checking if an IP address is in given IP ranges."""
 import json
 import os
 import re
-import sys
 from typing import List, Tuple
 from urllib.request import urlopen
 
@@ -45,7 +44,7 @@ def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List]:
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred while fetching the IP ranges: {e}")
-        sys.exit(1)
+        return [], []
 
 
 def fetch_ip_ranges(url: str, extreme: bool = False) -> Tuple[List, List]:
