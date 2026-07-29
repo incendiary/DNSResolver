@@ -59,17 +59,26 @@ python resolver.py domains.txt -o results --evidence -v --nameservers 8.8.8.8,1.
 
 ### Building a domain list from certificate transparency
 
-DNSResolver takes a flat list of domains as input — it does not enumerate subdomains itself. A quick way to build one passively is to query certificate transparency logs via [crt.sh](https://crt.sh):
+DNSResolver takes a flat list of domains as input — it does not enumerate subdomains itself. A quick
+way to build one passively is from certificate transparency logs, using the bundled helper:
 
 ```bash
-curl -s "https://crt.sh/?q=%25.example.com&output=json" \
-  | python3 -c "import json,sys; names=set(); [names.update(e['name_value'].split('\n')) for e in json.load(sys.stdin)]; [print(n.lstrip('*.')) for n in sorted(names)]" \
-  | sort -u > domains.txt
-
+helper/crtsh_domains.sh example.com > domains.txt
 python resolver.py domains.txt -o results --evidence -v --nameservers 8.8.8.8,1.1.1.1 --timeout 5 --retries 2
 ```
 
-Replace `example.com` with the root domain you are assessing. For more comprehensive subdomain discovery, tools such as `subfinder` or `amass` can be used to generate the input list.
+The helper queries [crt.sh](https://crt.sh), keeps only valid hostnames (certificate common names are
+also returned and are not always hostnames), strips wildcard prefixes, and de-duplicates. crt.sh is
+frequently slow or briefly unavailable, so it retries and fails with a clear message rather than
+emitting a partial list.
+
+For broader coverage, combine it with active enumeration and de-duplicate:
+
+```bash
+helper/crtsh_domains.sh example.com >  domains.txt
+subfinder -d example.com -silent    >> domains.txt
+sort -u -o domains.txt domains.txt
+```
 
 ## Output
 
@@ -226,37 +235,24 @@ Once related root domains are identified, enumerate subdomains for each and comb
 
 ## Roadmap
 
-| Issue | Status | Description |
-|-------|--------|-------------|
-| [#36](https://github.com/incendiary/DNSResolver/issues/36) | ✅ | Progress bar stability — log output routed through `tqdm.write()` |
-| [#37](https://github.com/incendiary/DNSResolver/issues/37) | ✅ | AWS Lambda / S3 support — `lambda_handler.py` entrypoint with S3 I/O |
-| [#41](https://github.com/incendiary/DNSResolver/issues/41) | ✅ | Refactor `EnvironmentManager` — `ConfigResolver` + `OutputManager` split; trivial getters replaced with direct attribute access |
-| [#42](https://github.com/incendiary/DNSResolver/issues/42) | ✅ | Enforce code style with Black, isort, flake8, and pre-commit hooks |
-| [#43](https://github.com/incendiary/DNSResolver/issues/43) | ✅ | Refactor `DNSHandler` — split resolution, takeover detection, and categorisation into focused classes |
-| [#48](https://github.com/incendiary/DNSResolver/issues/48) | ✅ | End-of-run summary — at-a-glance verdict with prominently flagged takeover candidates |
-| [#50](https://github.com/incendiary/DNSResolver/issues/50) | ✅ | Code review and refactoring pass — surgical changes, simplicity-first, no speculative abstractions |
-| [#52](https://github.com/incendiary/DNSResolver/issues/52) | ✅ | Refine run summary — elevate classified takeover candidates |
-| [#54](https://github.com/incendiary/DNSResolver/issues/54) | ✅ | Expand domain categorisation patterns — add 11 missing takeover services |
-| [#56](https://github.com/incendiary/DNSResolver/issues/56) | ✅ | Formal git history secret scan |
-| [#57](https://github.com/incendiary/DNSResolver/issues/57) | ✅ | Dependency audit — pip-audit against all requirements files |
-| [#60](https://github.com/incendiary/DNSResolver/issues/60) | ✅ | GitHub Actions CI — flake8 + pytest on Python 3.12 for all PRs and pushes to main |
-| [#61](https://github.com/incendiary/DNSResolver/issues/61) | ✅ | pre-commit: gitleaks hook; CVE-fixed black revision |
-| [#63](https://github.com/incendiary/DNSResolver/issues/63) | ✅ | Dead code removal — unreachable guards in `cloud_service_provider_checks` and `config_resolver` |
-| [#64](https://github.com/incendiary/DNSResolver/issues/64) | ✅ | Deduplicate GCP / AWS IP range fetch into a shared helper |
-| [#65](https://github.com/incendiary/DNSResolver/issues/65) | ✅ | Strip what-not-why docstrings from `cloud_ip_ranges.py` |
-| [#66](https://github.com/incendiary/DNSResolver/issues/66) | ✅ | Branch protection — require CI status check to pass before merge |
-| [#72](https://github.com/incendiary/DNSResolver/issues/72) | ✅ | Bug: double retry loop — domains retried retries² times |
-| [#73](https://github.com/incendiary/DNSResolver/issues/73) | ✅ | Bug: unbounded CNAME recursion — depth limit added |
-| [#74](https://github.com/incendiary/DNSResolver/issues/74) | ✅ | Bug: concurrent write race in `log_and_write` — investigated, not a real bug in asyncio cooperative model |
-| [#75](https://github.com/incendiary/DNSResolver/issues/75) | ✅ | Bug: `asyncio.get_event_loop()` deprecated — replaced with `get_running_loop()` |
-| [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ | Dead code: `is_dangling_record_async` defined but never called — removed |
-| [#79](https://github.com/incendiary/DNSResolver/issues/79) | ✅ | Bug: Azure IP range fetch brittle — three-stage fallback chain added |
-| [#80](https://github.com/incendiary/DNSResolver/issues/80) | ✅ | Bug: dangling CNAMEs to AWS ELB classified as unknown — `aws_elb` pattern added |
-| [#82](https://github.com/incendiary/DNSResolver/issues/82) | ✅ v1.10.0 | Consolidate output files: 7 text files → 4 — `csp_matches_*.txt` and `takeover_candidates_*.txt` |
-| [#85](https://github.com/incendiary/DNSResolver/issues/85) | ✅ v1.10.1 | Run summary: all takeover candidates shown with CNAME target, risk, and recommended action |
-| [#87](https://github.com/incendiary/DNSResolver/issues/87) | ✅ v1.10.2 | Version string — printed at startup and in run summary; `--version` flag added |
-| [#89](https://github.com/incendiary/DNSResolver/issues/89) | ✅ v1.10.3 | Self-referential CNAMEs classified as `self_referential` (misconfiguration) not takeover candidates |
-| [#91](https://github.com/incendiary/DNSResolver/issues/91) | ✅ v1.10.4 | README: fix venv path, add `--version` to options table, update architecture diagram, clean roadmap |
+Active and completed work is tracked in **[ROADMAP.md](ROADMAP.md)**, with the findings that drive it
+in [REVIEW.md](REVIEW.md) and per-item execution plans under [`docs/roadmap/`](docs/roadmap/).
+
+Recent releases: consolidated output files, an actionable end-of-run summary, correct handling of
+self-referential and non-existent CNAMEs, IPv6 (AAAA) resolution, and wildcard DNS detection.
+
+## Known limitations
+
+- **Resolution covers A and AAAA records.** Hosts reachable only via other record types are reported
+  as unresolved.
+- **Dangling-CNAME classification is first-match-wins** over the patterns in `config.json`, which are
+  ordered specific to general. A target matching no pattern is reported as `unknown` rather than
+  guessed at.
+- **Wildcard detection cannot separate a real host from a catch-all** when the host genuinely shares
+  the wildcard's addresses (GitHub Pages is the common case). Confirming those requires active
+  probing, which is out of scope.
+- **A takeover candidate is only recorded when a CNAME actually exists.** A name that simply does not
+  resolve is reported as unresolved, not as a candidate — there is nothing to claim.
 
 ## Contributing
 
