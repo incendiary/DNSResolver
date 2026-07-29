@@ -240,6 +240,34 @@ async def test_check_dangling_cname_self_referential_classified_as_misconfigurat
     assert "points to itself" in written_line
 
 
+async def test_check_dangling_cname_depth_zero_nxdomain_not_self_referential(
+    handler, domain_context, mock_env_manager
+):
+    """
+    Regression test for issue #89.
+
+    A plain NXDOMAIN domain (no CNAME, no A/AAAA/MX, no NS) is checked at
+    depth 0 with current_domain == original_domain — because
+    handle_takeover_checks always calls in with current_domain equal to the
+    domain being checked. This must NOT be classified as 'self_referential'
+    (there was no CNAME loop at all); it should fall through to the normal
+    DomainCategoriser result instead.
+    """
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
+        side_effect=make_nxdomain()
+    )
+    domain_context.set_domain("dead.example.com")
+
+    result = await handler.takeover_detector.check_dangling_cname_async(
+        domain_context, "dead.example.com"
+    )
+
+    assert result is True
+    call_args = mock_env_manager.write_to_file.call_args
+    written_line = call_args[0][1]
+    assert "self_referential" not in written_line
+
+
 async def test_check_dangling_cname_timeout_is_not_dangling(handler, domain_context):
     """
     A timeout on A/AAAA/MX means we can't confirm the domain is gone.

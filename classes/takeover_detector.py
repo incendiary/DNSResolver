@@ -136,7 +136,7 @@ class TakeoverDetector:
         except aiodns.error.DNSError as e:
             self.env_manager.log_info(f"Error querying NS for {current_domain}: {e}")
 
-        if current_domain.rstrip(".") == original_domain.rstrip("."):
+        if depth > 0 and current_domain.rstrip(".") == original_domain.rstrip("."):
             category = "self_referential"
             recommendation = (
                 "Remove or correct the CNAME — the domain points to itself "
