@@ -18,6 +18,8 @@ def dns_handler():
     """A mock DNSHandler with a controllable resolve_domain_async."""
     handler = MagicMock()
     handler.resolve_domain_async = AsyncMock(return_value=(True, ["1.2.3.4"]))
+    # Default to "no wildcard" so these tests exercise the ordinary path.
+    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
     return handler
 
 
@@ -71,6 +73,7 @@ async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
     third return value so main_async can aggregate them.
     """
     handler = MagicMock()
+    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
     handler.resolve_domain_async = AsyncMock(return_value=(True, ["1.2.3.4"]))
 
     with patch("imports.domain_processor.perform_csp_checks"):
@@ -95,6 +98,7 @@ async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
 
 async def test_csp_checks_not_called_on_failure(mock_env_manager, csp_ips, pbar):
     handler = MagicMock()
+    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
     handler.resolve_domain_async = AsyncMock(return_value=(False, []))
 
     with patch("imports.domain_processor.perform_csp_checks") as mock_csp:
@@ -109,6 +113,7 @@ async def test_returns_failure_and_empty_ips_on_failure(
     mock_env_manager, csp_ips, pbar
 ):
     handler = MagicMock()
+    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
     handler.resolve_domain_async = AsyncMock(return_value=(False, []))
 
     with patch("imports.domain_processor.perform_csp_checks"):
@@ -118,3 +123,35 @@ async def test_returns_failure_and_empty_ips_on_failure(
 
     assert success is False
     assert ips == []
+
+
+async def test_wildcard_resolution_is_marked_in_output(
+    mock_env_manager, csp_ips, dns_handler, pbar
+):
+    """
+    A domain resolving only to its zone's wildcard addresses is written with a
+    WILDCARD| prefix, so a catch-all answer can be told from a real host.
+    """
+    dns_handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=True)
+
+    with patch("imports.domain_processor.perform_csp_checks"):
+        await process_domain_async(
+            "ghost.example.com", mock_env_manager, pbar, csp_ips, dns_handler
+        )
+
+    written = [c[0][1] for c in mock_env_manager.write_to_file.call_args_list]
+    assert any(ln.startswith("WILDCARD|ghost.example.com|") for ln in written)
+
+
+async def test_ordinary_resolution_is_not_prefixed(
+    mock_env_manager, csp_ips, dns_handler, pbar
+):
+    """Non-wildcard output keeps its original format — no regression for parsers."""
+    with patch("imports.domain_processor.perform_csp_checks"):
+        await process_domain_async(
+            "real.example.com", mock_env_manager, pbar, csp_ips, dns_handler
+        )
+
+    written = [c[0][1] for c in mock_env_manager.write_to_file.call_args_list]
+    assert any(ln == "real.example.com|1.2.3.4" for ln in written)
+    assert not any(ln.startswith("WILDCARD|") for ln in written)

@@ -15,7 +15,9 @@ class RunSummary:
             return []
 
     def display(self, total_input, failed_count):
-        resolved_count = len(self._lines("resolved"))
+        resolved_lines = self._lines("resolved")
+        resolved_count = len(resolved_lines)
+        wildcard_count = sum(1 for ln in resolved_lines if ln.startswith("WILDCARD|"))
         unresolved_count = len(self._lines("unresolved"))
 
         takeover_lines = self._lines("takeover")
@@ -61,6 +63,11 @@ class RunSummary:
         print(bar)
         print(f"  Input domains        : {total_input:>6,}")
         print(f"  Resolved             : {resolved_count:>6,}")
+        if wildcard_count:
+            print(
+                f"    of which wildcard  : {wildcard_count:>6,}"
+                "  (catch-all DNS — not real hosts)"
+            )
         print(f"  Unresolved errors    : {unresolved_count:>6,}")
         print(f"  Failed (all retries) : {failed_count:>6,}")
         print()
