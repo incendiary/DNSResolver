@@ -273,3 +273,61 @@ release grouping. Summary of groups:
   takeover signatures — all within the DNS-only boundary.
 - **PR-G — Docs & release polish (LOW):** README roadmap → link ROADMAP.md; crt.sh helper; limitation notes.
 - **PR-H — Dependency batch (LOW):** merge the 10 dependabot PRs once CI is green; prune stale branches.
+
+---
+
+## Verification (karpathy Layer 2) — 2026-07-29
+
+Layer 1 fixed the goal and the evidence bar before work began. This section records the
+verification of what was actually delivered, against those criteria. Written after the work
+shipped, judged against criteria set before it started.
+
+### Against the agreed evidence bar
+
+| Criterion (set in Layer 1) | Result | Evidence |
+|---|---|---|
+| **Measured coverage %** | ✅ Met | 85% → **95%**; 144 → 186 tests. `environment_manager.py` 35% → 86%, `output_manager.py` → 100% |
+| **Clean authorised live run** | ✅ Met, and it earned its keep | Ran three times. Found **two** real defects that tests had not: the self-referential mislabel (B3) and the no-CNAME false candidates (B4). Both fixed and re-verified live |
+| **Honest feature-vs-goals gap analysis** | ✅ Met | Phase 7 above; gaps restated below |
+| **Field-ready bar** | ✅ Substantially met | Correctness defects closed; CI green; false-positive noise eliminated |
+| **DNS-only scope firm** | ✅ Held | No HTTP/TLS/port features added. Boundary now stated explicitly in the README |
+| **Docs consumable by a weaker agent** | ✅ Met | `docs/roadmap/` per-PR plans + `AGENT-GUIDE.md`; six of them were executed by sub-agents without further context |
+
+### What verification actually caught
+
+The live-run criterion proved the most valuable, and vindicates setting it in Layer 1:
+
+1. **B3 — self-referential mislabel.** Every dead subdomain was reported as "the domain points to
+   itself". Unit tests passed throughout; only a live run against real DNS exposed it.
+2. **B4 — false takeover candidates.** After B3, the same hosts were *still* announced as
+   `TAKEOVER CANDIDATE(S) DETECTED — REVIEW IMMEDIATELY` despite having no CNAME. A second live run
+   caught it. Candidates went 9 → 0 on the same input.
+3. **Branch protection misconfiguration.** Required contexts named the *workflows* (`CI`,
+   `Secret Scan`) while GitHub reports *job* names. Every PR was permanently unmergeable — the true
+   cause of the dependabot backlog, which the red CI had masked. Neither tests nor local CI could
+   surface this; it only appeared on a real merge attempt.
+
+The pattern is consistent: **the defects that mattered were invisible to the test suite.** Coverage
+rose 10 points without catching any of them. Coverage measures exercise, not correctness.
+
+### Honest gaps remaining
+
+- **F1 wildcard detection — not built.** The largest outstanding feature. Without it, a wildcard zone
+  makes every enumerated subdomain "resolve", flooding output. This remains the biggest gap against
+  the "practical for large domain lists" claim.
+- **F3 signatures — not extended.** 60 patterns; unclassified targets still surface as `unknown`.
+- **Perf at true scale (C) — improved, not proven.** CIDR parsing and dedupe are fixed, but no
+  benchmark at 10k+ domains has been run. The cliff is removed in principle, unmeasured in practice.
+- **`local-ci` cannot classify one CI-only step.** `ecr-build.yml`'s docker step read as a genuine
+  failure locally because its `${{ }}` context sits in `env:` rather than `run:`. Moot here — that
+  workflow was removed — but the limitation is real for other repos.
+
+### Verdict
+
+Within its declared DNS-only scope, the tool **meets its goals and clears the field-ready bar it was
+held to**. The work delivered was corrective rather than additive: the codebase was already sound,
+and what it lacked was a green pipeline, three correctness fixes, and evidence. It now has all three.
+
+It is **not** finished — F1 is a genuine capability gap, and scale performance is unproven. Neither
+is a gap between promise and delivery: the README claims neither wildcard handling nor benchmarked
+throughput.

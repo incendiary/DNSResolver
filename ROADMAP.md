@@ -56,7 +56,7 @@ Ship in this order. Each group is one point release (patch unless noted).
   - [x] B3: **Fix self-referential misclassification** — dead NXDOMAIN/no-CNAME domains wrongly labelled `self_referential` (found by the live run; gated the check on `depth > 0`)
   - [x] B1: Replace `sys.exit(1)` in `fetch_ip_ranges_for_azure` with graceful `([], [])` return
   - [x] B2: Remove the orphan `timeout` output file from `OutputManager`
-- [ ] **B4: Don't report no-CNAME dead domains as dangling-CNAME takeover candidates** (NEW — found by the live re-run after B3) — model: **Opus** (classification semantics, low verifiability)
+- [x] **B4: Don't report no-CNAME dead domains as dangling-CNAME takeover candidates** — *shipped, PR 143. Verified live: takeover candidates 9 → 0, dead hosts now reported as unresolved*
   - **Evidence:** after B3, the 9 dead hosts from the authorised live run correctly stopped being labelled `self_referential`, but they are *still* written as `DANGLING|<domain>|<domain>|unknown|Unclassified|N/A` and the run summary announces them under "TAKEOVER CANDIDATE(S) DETECTED — REVIEW IMMEDIATELY", rendering each domain as its own `CNAME target`. `dig +short @8.8.8.8 <host> A` and `... CNAME` return **nothing** for all of them — they have no CNAME at all.
   - **Why it matters:** a name that doesn't exist and has no CNAME is not a takeover candidate — there is nothing dangling to claim. `check_dangling_cname_async` writes a DANGLING record for *any* domain lacking A/AAAA/MX/NS, whether or not a CNAME exists. This inflates the candidate list with noise and buries real findings — a false-positive problem for a field tool.
   - **Fix direction:** only record a DANGLING candidate when an actual CNAME was observed. A bare NXDOMAIN with no CNAME should be reported as non-existent/unresolved, not as a takeover candidate. Also stop the summary presenting a domain as its own "CNAME target".
@@ -73,19 +73,21 @@ Ship in this order. Each group is one point release (patch unless noted).
 - [x] **PR-E: Lambda/scope cleanup** → plan: [`docs/roadmap/PR-E-scope-cleanup.md`](docs/roadmap/PR-E-scope-cleanup.md) — *done, branch `docs/scope-cleanup`*
   - [x] E1: Lambda walkthrough moved README → `docs/LAMBDA.md` (README 406 → 232 lines, content byte-identical)
   - [x] E2: Scope-boundary note added — **no URL/placeholder** (no companion project exists yet)
-  - [x] E3: Option 1 implemented — **no Lambda code touched**. *Keep-vs-extract decision still open for the maintainer.*
+  - [x] E3: **Resolved** — maintainer chose the middle path: deployment machinery (`Dockerfile`, `ecr-build.yml`) removed in PR 142; `lambda_handler.py` and its tests kept as a reference entry point. Coverage and test count unaffected.
 - [ ] **PR-F: New DNS features** — plan: [`docs/roadmap/PR-F-dns-features.md`](docs/roadmap/PR-F-dns-features.md) — *partially done, branch `feat/dns-capabilities`*
-  - [ ] F1: Wildcard-DNS detection (suppress false-positive subdomains) — **NOT STARTED** (agent hit a billing spend limit)
+  - [ ] F1: Wildcard-DNS detection (suppress false-positive subdomains) — **NOT STARTED**
   - [x] F2: Record AAAA (IPv6) resolutions — concurrent A+AAAA query; unresolved only when **both** fail. **Verified on live DNS:** `ipv6.google.com` (AAAA-only) previously reported unresolved, now resolves to 4 IPv6 addresses; dual-stack hosts capture both families
-  - [ ] F3: Add takeover signatures beyond the 60-pattern set — **NOT STARTED** (same billing stop)
+  - [ ] F3: Add takeover signatures beyond the 60-pattern set — **NOT STARTED**
 
 ### 🟢 LOW
 - [ ] **PR-G: Docs & release polish** → folded into the next release — plan: [`docs/roadmap/PR-G-docs.md`](docs/roadmap/PR-G-docs.md)
   - [ ] G1: README `## Roadmap` → brief summary + link to this file (stop duplicating the table)
   - [ ] G2: Add the crt.sh domain-list helper as `helper/crtsh_domains.sh`
   - [ ] G3: Document the A-record-only limitation and pattern-order rule
-- [ ] **PR-H: Dependency batch** → **v1.11.x** — plan: [`docs/roadmap/PR-H-dependencies.md`](docs/roadmap/PR-H-dependencies.md)
-  - [ ] H1: After PR-A greens CI, merge the 10 open dependabot PRs (batch, verify each)
+- [ ] **PR-H: Dependency batch** — plan: [`docs/roadmap/PR-H-dependencies.md`](docs/roadmap/PR-H-dependencies.md) — *in progress*
+  - [x] **Root cause found and fixed:** branch protection required status checks named `CI` and `Secret Scan` (the *workflow* names). GitHub reports *job* names (`test`, `gitleaks`, `trufflehog`), so those contexts could never appear and **every** PR was permanently BLOCKED — the real reason the backlog accumulated. Contexts corrected.
+  - [x] PR 116 (`aws-actions/configure-aws-credentials`) closed as moot — its only consumer, `ecr-build.yml`, was removed by E3
+  - [ ] H1: Merge the remaining dependabot PRs (batch, verify each)
   - [ ] H2: Prune the 6 stale non-dependabot remote branches (`change_threading`, `oopify`, `pylint_pep8`, `media`, `add-claude-github-actions-*`, `feature/*` if merged)
 
 ---
