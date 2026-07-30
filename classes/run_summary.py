@@ -88,11 +88,19 @@ class RunSummary:
         if wildcard_count:
             print(
                 f"    of which wildcard  : {wildcard_count:>6,}"
-                "  (catch-all DNS — not real hosts)"
+                "  (catch-all zone — resolution proves nothing)"
             )
         print(f"  Unresolved errors    : {unresolved_count:>6,}")
         print(f"  Failed (all retries) : {failed_count:>6,}")
         print()
+        csp_target_count = aws_count + gcp_count + azure_count
+        if csp_target_count == 0:
+            print("  No cloud-hosted addresses found.")
+        else:
+            print(
+                f"  [>] {csp_target_count} CLOUD-HOSTED ADDRESS(ES) — "
+                "candidate reclaim targets"
+            )
         print(
             f"  CSP matches — AWS: {aws_count}  GCP: {gcp_count}  Azure: {azure_count}"
         )

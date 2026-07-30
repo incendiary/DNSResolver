@@ -1,14 +1,33 @@
 # DNSResolver
 
-DNSResolver is a Python-based security tool for bulk DNS resolution and cloud infrastructure analysis. Given a list of domains it:
+DNSResolver is a passive DNS reconnaissance tool for offensive security. Given a flat list of
+candidate domains it **produces targets**, doing two jobs of equal weight:
 
-- Resolves DNS records and matches resolved IPs against known IP ranges for **AWS, GCP, and Azure**
-- Detects **dangling CNAME** records pointing to unclaimed cloud resources (potential subdomain takeover)
-- Detects **NS takeover** opportunities where nameservers are unresolvable
-- Flags **wildcard DNS** zones so catch-all answers are not mistaken for real hosts
+**1. Dangling CNAME and NS takeover candidates.** CNAMEs pointing at service names nobody owns
+any more, and domains whose nameservers no longer resolve.
+
+**2. A records resolving into cloud IP space.** The less obvious half, and the reason this tool
+exists alongside the many that do job 1.
+
+A dangling CNAME names a service, so its intent can be read straight from DNS. A bare A record
+cannot. If that address is a cloud IP the owner released, whoever allocates it next controls what
+is served for that hostname — and **DNS gives no signal that this is the case**. Finding out means
+churning allocation in that provider and region until the address comes back to you.
+
+So DNSResolver answers: *which A records land in cloud ranges worth pursuing, and where?* Each
+match carries the provider's own published region, service and network border group, because an
+address is only actionable if you know where it is allocated from and what it belongs to.
+
+It also:
+
+- Flags **wildcard DNS** zones, so catch-all answers are not mistaken for real hosts
 - Collects forensic evidence (dig/nslookup output) for flagged domains
 
-All domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
+Domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
+
+**This tool identifies targets — it does not claim them.** Acting on a finding is a separate
+tool's job. That is why the output files are machine-readable records rather than prose reports,
+and why DNSResolver reports what each provider publishes without judging what is worth pursuing.
 
 The tool is intentionally DNS-focused. It does not make active HTTP/HTTPS connections, probe TCP ports, validate TLS certificates, or take screenshots. These were deliberately excluded to keep the tool passive, dependency-light, and scoped to DNS reconnaissance.
 
@@ -165,8 +184,8 @@ it reports what the provider states and leaves that decision to the operator.
 ## Wildcard DNS detection
 
 A zone serving a wildcard record (`*.example.com`) answers for **every** name beneath it. Against an
-enumerated subdomain list that means thousands of "resolved" domains that are not real hosts, burying
-the findings that matter.
+enumerated subdomain list that means thousands of "resolved" domains whose resolution proves
+nothing, burying the findings that matter.
 
 DNSResolver detects this automatically. For each zone it queries a couple of random labels that are
 almost certainly not real (`<random-hex>.example.com`). If they resolve, the zone answers for
@@ -182,7 +201,7 @@ The end-of-run summary reports the count separately:
 
 ```
   Resolved             :      4
-    of which wildcard  :      2  (catch-all DNS — not real hosts)
+    of which wildcard  :      2  (catch-all zone — resolution proves nothing)
 ```
 
 Notes:

@@ -261,3 +261,26 @@ def test_wildcard_cloud_records_are_excluded_from_targets(tmp_path, capsys):
     assert "AWS: 1" in out
     assert "GCP: 0" in out, "wildcard records must not count as GCP targets"
     assert "excluded (wildcard) :    2" in out
+
+
+def test_cloud_targets_get_headline_billing(tmp_path, capsys):
+    """
+    Cloud reclaim targets are one of the tool's two jobs, so they are announced
+    rather than reported as a footnote under the takeover banner.
+    """
+    summary = _make_summary(
+        tmp_path,
+        {"csp": "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16|eu-west-2\n"},
+    )
+    summary.display(total_input=1, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "1 CLOUD-HOSTED ADDRESS(ES)" in out
+
+
+def test_no_cloud_addresses_says_so_explicitly(tmp_path, capsys):
+    """Silence would read as 'not checked'; say the check ran and found nothing."""
+    summary = _make_summary(tmp_path, {"csp": ""})
+    summary.display(total_input=1, failed_count=0)
+
+    assert "No cloud-hosted addresses found." in capsys.readouterr().out
