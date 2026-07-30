@@ -237,3 +237,27 @@ def test_csp_breakdown_shows_region_and_service(tmp_path, capsys):
     assert "aws  us-east-1  AMAZON" in out
     # The busiest grouping is listed first.
     assert out.index("eu-west-2") < out.index("us-east-1")
+
+
+def test_wildcard_cloud_records_are_excluded_from_targets(tmp_path, capsys):
+    """
+    Wildcard cloud records are the hosting platform's own addresses. They are
+    reported for transparency but must not inflate the target counts, or a
+    single wildcarded zone would dominate the summary.
+    """
+    summary = _make_summary(
+        tmp_path,
+        {
+            "csp": (
+                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16|eu-west-2\n"
+                "WILDCARD|b.com|2.2.2.2|gcp|europe-west2|Google Cloud|2.2.0.0/16|unknown\n"
+                "WILDCARD|c.com|2.2.2.2|gcp|europe-west2|Google Cloud|2.2.0.0/16|unknown\n"
+            ),
+        },
+    )
+    summary.display(total_input=3, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "AWS: 1" in out
+    assert "GCP: 0" in out, "wildcard records must not count as GCP targets"
+    assert "excluded (wildcard) :    2" in out

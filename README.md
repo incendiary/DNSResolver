@@ -89,7 +89,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Lines prefixed `WILDCARD\|` resolved only via a zone wildcard — see [Wildcard DNS detection](#wildcard-dns-detection) |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
 | `takeover_candidates_*.txt` | Takeover candidates — `DANGLING\|` lines (dangling CNAMEs with category, recommendation, evidence) and `NS_TAKEOVER\|` lines (unresolvable nameservers) |
-| `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix`. Region and service come from the provider's own published ranges — see [Cloud IP attribution](#cloud-ip-attribution) |
+| `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
 
@@ -128,13 +128,22 @@ Each match is therefore written as a record carrying the provider's published re
 service:
 
 ```
-domain|ip|provider|region|service|prefix
+domain|ip|provider|region|service|prefix|border_group
 ```
 
 ```
-example.com|13.35.163.22|aws|GLOBAL|CLOUDFRONT|13.35.0.0/16
-example.com|3.11.53.7|aws|eu-west-2|EC2|3.8.0.0/14
+example.com|13.35.163.22|aws|GLOBAL|CLOUDFRONT|13.35.0.0/16|GLOBAL
+example.com|3.11.53.7|aws|eu-west-2|EC2|3.8.0.0/14|eu-west-2
 ```
+
+`border_group` is AWS's network border group: the boundary an Elastic IP is actually allocated
+and advertised from. It usually mirrors the region, but differs for Local Zones and Wavelength —
+which is precisely where the distinction matters. GCP and Azure publish no equivalent and it
+reads `unknown` for them.
+
+Records for a resolution that came from a zone wildcard are prefixed `WILDCARD|`. Those addresses
+belong to the hosting platform and are in active use, so they are not targets; they are reported
+for completeness and excluded from the summary's counts.
 
 The difference is the point: the first is a CDN edge address, the second an EC2 address in a
 specific region. Both are "AWS"; only one is a meaningful target.
@@ -287,6 +296,11 @@ self-referential and non-existent CNAMEs, IPv6 (AAAA) resolution, and wildcard D
 - **Wildcard detection cannot separate a real host from a catch-all** when the host genuinely shares
   the wildcard's addresses (GitHub Pages is the common case). Confirming those requires active
   probing, which is out of scope.
+- **Wildcard detection is unreliable against large rotating address pools.** Where a catch-all is
+  served by a big load-balanced fleet (Heroku, for example), two probes capture only part of the
+  rotation, so a later name resolving to different addresses in the same fleet is not recognised as
+  a wildcard answer. Detection is best-effort: a match is good evidence, a miss is not evidence of
+  absence.
 - **A takeover candidate is only recorded when a CNAME actually exists.** A name that simply does not
   resolve is reported as unresolved, not as a candidate — there is nothing to claim.
 

@@ -177,7 +177,7 @@ def test_log_and_write_creates_entry(tmp_path, ctx):
     # Region and service are what make the match actionable downstream.
     assert (
         out_file.read_text().strip()
-        == "example.com|34.1.2.3|gcp|europe-west2|Google Cloud|34.0.0.0/8"
+        == "example.com|34.1.2.3|gcp|europe-west2|Google Cloud|34.0.0.0/8|unknown"
     )
 
 
@@ -408,10 +408,12 @@ def test_handoff_record_carries_region_and_service_end_to_end(
     perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"])
 
     line = out_file.read_text().strip()
-    assert line == "example.com|3.1.2.3|aws|eu-west-2|EC2|3.0.0.0/8"
+    assert line == "example.com|3.1.2.3|aws|eu-west-2|EC2|3.0.0.0/8|eu-west-2"
 
-    domain, ip, provider, region, service, prefix = line.split("|")
+    domain, ip, provider, region, service, prefix, border = line.split("|")
     assert (provider, region, service) == ("aws", "eu-west-2", "EC2")
+    # The border group is the boundary an Elastic IP is allocated from.
+    assert border == "eu-west-2"
 
 
 def test_each_matched_address_gets_its_own_record(tmp_path, mock_env_manager, ctx):
@@ -428,6 +430,52 @@ def test_each_matched_address_gets_its_own_record(tmp_path, mock_env_manager, ct
 
     lines = sorted(ln for ln in out_file.read_text().splitlines() if ln)
     assert lines == [
-        "example.com|3.1.2.3|aws|eu-west-2|EC2|3.0.0.0/8",
-        "example.com|52.1.2.3|aws|us-east-1|AMAZON|52.0.0.0/8",
+        "example.com|3.1.2.3|aws|eu-west-2|EC2|3.0.0.0/8|eu-west-2",
+        "example.com|52.1.2.3|aws|us-east-1|AMAZON|52.0.0.0/8|us-east-1",
     ]
+
+
+# ---------------------------------------------------------------------------
+# Wildcard resolutions in cloud space
+#
+# A catch-all address belongs to the hosting platform and is in active use, so
+# it is the opposite of a claimable target. Unmarked, a single wildcarded zone
+# emits one cloud record per enumerated subdomain and buries the real findings.
+# ---------------------------------------------------------------------------
+
+
+def test_wildcard_cloud_match_is_marked(tmp_path, mock_env_manager, ctx):
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
+
+    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"], is_wildcard=True)
+
+    line = out_file.read_text().strip()
+    assert line.startswith("WILDCARD|")
+    # The record is still complete — marked, not degraded.
+    assert line == "WILDCARD|example.com|3.1.2.3|aws|eu-west-2|EC2|3.0.0.0/8|eu-west-2"
+
+
+def test_ordinary_cloud_match_is_not_marked(tmp_path, mock_env_manager, ctx):
+    """A real host's cloud match must keep its existing shape."""
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
+
+    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"], is_wildcard=False)
+
+    assert not out_file.read_text().startswith("WILDCARD|")
+
+
+def test_wildcard_defaults_to_false_for_existing_callers(
+    tmp_path, mock_env_manager, ctx
+):
+    """Omitting the flag must not silently mark everything as a wildcard."""
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
+
+    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"])
+
+    assert not out_file.read_text().startswith("WILDCARD|")

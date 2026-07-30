@@ -32,9 +32,20 @@ class RunSummary:
             if ln.startswith("NS_TAKEOVER|")
         ]
 
-        # Handoff records: domain|ip|provider|region|service|prefix
+        # Handoff records: [WILDCARD|]domain|ip|provider|region|service|prefix|border
         csp_lines = self._lines("csp")
-        csp_records = [ln.split("|") for ln in csp_lines if ln.count("|") >= 5]
+        csp_records = []
+        csp_wildcard_count = 0
+        for line in csp_lines:
+            if line.startswith("WILDCARD|"):
+                csp_wildcard_count += 1
+                # Counted, but kept out of the target breakdown below: these are
+                # the hosting platform's addresses, not claimable targets.
+                continue
+            fields = line.split("|")
+            if len(fields) >= 6:
+                csp_records.append(fields)
+
         aws_count = sum(1 for r in csp_records if r[2] == "aws")
         gcp_count = sum(1 for r in csp_records if r[2] == "gcp")
         azure_count = sum(1 for r in csp_records if r[2] == "azure")
@@ -85,6 +96,11 @@ class RunSummary:
         print(
             f"  CSP matches — AWS: {aws_count}  GCP: {gcp_count}  Azure: {azure_count}"
         )
+        if csp_wildcard_count:
+            print(
+                f"    excluded (wildcard) : {csp_wildcard_count:>4}"
+                "  (hosting platform addresses, not targets)"
+            )
         if csp_breakdown:
             print("    by region and service:")
             for (provider, region, service), count in sorted(

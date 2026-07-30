@@ -21,8 +21,13 @@ class CSPIPAddresses:
         self.metadata = metadata or {}
 
     def describe(self, cidr):
-        """Region and service for a matched prefix, or unknowns if unpublished."""
-        return self.metadata.get(cidr, ("unknown", "unknown"))
+        """
+        Region, service and network border group for a matched prefix.
+
+        Unpublished fields read 'unknown' rather than being inferred — only AWS
+        publishes a border group, and not every prefix carries a region.
+        """
+        return self.metadata.get(cidr, ("unknown", "unknown", "unknown"))
 
     def get_gcp_ipv4(self):
         return self.gcp_ipv4

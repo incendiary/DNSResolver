@@ -29,7 +29,11 @@ async def process_domain_async(
             output_files["standard"]["resolved"],
             f"{prefix}{domain}|{'|'.join(final_ips)}",
         )
-        perform_csp_checks(domain_context, env_manager, final_ips)
+        # The wildcard verdict travels with the cloud match too. A catch-all
+        # address belongs to the hosting platform and is in active use, so it is
+        # not a claimable target — but without the marker a single wildcarded
+        # zone emits one cloud record per enumerated subdomain.
+        perform_csp_checks(domain_context, env_manager, final_ips, is_wildcard)
         env_manager.log_info(f"Performing CSP Checks for: {domain} and {final_ips}")
 
     pbar.update(1)

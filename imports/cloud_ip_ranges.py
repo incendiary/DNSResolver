@@ -38,7 +38,7 @@ def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List, Dict
                     ipv6_ranges.append(item)
                 else:
                     ipv4_ranges.append(item)
-                metadata[item] = (region, service)
+                metadata[item] = (region, service, "unknown")
 
         if extreme:
             print("IPv4 Ranges:", ipv4_ranges)
@@ -74,17 +74,22 @@ def fetch_ip_ranges(url: str, extreme: bool = False) -> Tuple[List, List, Dict]:
             # to act on a match.
             region = prefix.get("region") or prefix.get("scope") or "unknown"
             service = prefix.get("service") or "unknown"
+            # AWS publishes the network border group: the boundary an Elastic IP
+            # is actually allocated and advertised from. It usually mirrors the
+            # region but differs for Local Zones and Wavelength, which is exactly
+            # where the distinction matters. GCP and Azure publish no equivalent.
+            border_group = prefix.get("network_border_group") or "unknown"
 
             for keyword in IPV4_KEYWORDS:
                 if keyword in prefix:
                     cidr = prefix[keyword]
                     ipv4_ranges.append(cidr)
-                    metadata[cidr] = (region, service)
+                    metadata[cidr] = (region, service, border_group)
             for keyword in IPV6_KEYWORDS:
                 if keyword in prefix:
                     cidr = prefix[keyword]
                     ipv6_ranges.append(cidr)
-                    metadata[cidr] = (region, service)
+                    metadata[cidr] = (region, service, border_group)
 
         if extreme:
             print("IPv4 Ranges:", ipv4_ranges)
