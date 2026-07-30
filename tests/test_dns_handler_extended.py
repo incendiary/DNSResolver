@@ -96,7 +96,9 @@ async def test_collect_evidence_skipped_when_disabled(handler, mock_env_manager)
     mock_env_manager.evidence = False
     output_files = mock_env_manager.output_files
 
-    await handler.takeover_detector.collect_evidence("example.com", "dangling", output_files)
+    await handler.takeover_detector.collect_evidence(
+        "example.com", "dangling", output_files
+    )
 
     handler.takeover_detector.evidence_collector.perform_dns_evidence.assert_not_called()
 
@@ -107,9 +109,14 @@ async def test_collect_evidence_called_per_nameserver(handler, mock_env_manager)
     handler.takeover_detector.evidence_collector.perform_dns_evidence = AsyncMock()
     output_files = mock_env_manager.output_files
 
-    await handler.takeover_detector.collect_evidence("example.com", "dangling", output_files)
+    await handler.takeover_detector.collect_evidence(
+        "example.com", "dangling", output_files
+    )
 
-    assert handler.takeover_detector.evidence_collector.perform_dns_evidence.call_count == 2
+    assert (
+        handler.takeover_detector.evidence_collector.perform_dns_evidence.call_count
+        == 2
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -123,9 +130,13 @@ async def test_check_ns_takeover_returns_false_when_ns_resolves(
     """If the NS record for the domain resolves fine there is no takeover risk."""
     ns_record = dns_answer("ns1.example.com", attr="host")
     # NS query succeeds, A query for ns1 also succeeds
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(return_value=[ns_record])
+    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
+        return_value=[ns_record]
+    )
 
-    result = await handler.takeover_detector.check_ns_takeover(domain_context, "example.com")
+    result = await handler.takeover_detector.check_ns_takeover(
+        domain_context, "example.com"
+    )
 
     assert result is False
 
@@ -161,7 +172,9 @@ async def test_check_ns_takeover_returns_false_when_no_ns_records(
         side_effect=make_nxdomain()
     )
 
-    result = await handler.takeover_detector.check_ns_takeover(domain_context, "example.com")
+    result = await handler.takeover_detector.check_ns_takeover(
+        domain_context, "example.com"
+    )
 
     assert result is False
 

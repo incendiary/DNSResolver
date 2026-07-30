@@ -10,3 +10,4 @@ __pycache__/
 .coverage
 .idea/
 .azure_ip_cache.json
+.serena/

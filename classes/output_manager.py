@@ -23,7 +23,6 @@ class OutputManager:
                 "csp": os.path.join(d, f"csp_matches_{timestamp}.txt"),
                 "takeover": os.path.join(d, f"takeover_candidates_{timestamp}.txt"),
                 "environment": os.path.join(d, f"environment_results_{timestamp}.json"),
-                "timeout": os.path.join(d, f"timeout_results_{timestamp}.txt"),
             }
         }
         if evidence:

@@ -15,7 +15,9 @@ class RunSummary:
             return []
 
     def display(self, total_input, failed_count):
-        resolved_count = len(self._lines("resolved"))
+        resolved_lines = self._lines("resolved")
+        resolved_count = len(resolved_lines)
+        wildcard_count = sum(1 for ln in resolved_lines if ln.startswith("WILDCARD|"))
         unresolved_count = len(self._lines("unresolved"))
 
         takeover_lines = self._lines("takeover")
@@ -30,10 +32,32 @@ class RunSummary:
             if ln.startswith("NS_TAKEOVER|")
         ]
 
+        # Handoff records: [WILDCARD|]domain|ip|provider|region|service|prefix|border
         csp_lines = self._lines("csp")
-        aws_count = sum(1 for ln in csp_lines if "resolved to aws IPs" in ln)
-        gcp_count = sum(1 for ln in csp_lines if "resolved to gcp IPs" in ln)
-        azure_count = sum(1 for ln in csp_lines if "resolved to azure IPs" in ln)
+        csp_records = []
+        csp_wildcard_count = 0
+        for line in csp_lines:
+            if line.startswith("WILDCARD|"):
+                csp_wildcard_count += 1
+                # Counted, but kept out of the target breakdown below: these are
+                # the hosting platform's addresses, not claimable targets.
+                continue
+            fields = line.split("|")
+            if len(fields) >= 6:
+                csp_records.append(fields)
+
+        aws_count = sum(1 for r in csp_records if r[2] == "aws")
+        gcp_count = sum(1 for r in csp_records if r[2] == "gcp")
+        azure_count = sum(1 for r in csp_records if r[2] == "azure")
+
+        # Region and service are what an operator acts on, so surface the
+        # breakdown rather than a bare provider tally.
+        csp_breakdown = {}
+        for record in csp_records:
+            provider, region, service = record[2], record[3], record[4]
+            csp_breakdown[(provider, region, service)] = (
+                csp_breakdown.get((provider, region, service), 0) + 1
+            )
 
         classified = {}
         unclassified = []
@@ -63,12 +87,36 @@ class RunSummary:
         print(bar)
         print(f"  Input domains        : {total_input:>6,}")
         print(f"  Resolved             : {resolved_count:>6,}")
+        if wildcard_count:
+            print(
+                f"    of which wildcard  : {wildcard_count:>6,}"
+                "  (catch-all zone — resolution proves nothing)"
+            )
         print(f"  Unresolved errors    : {unresolved_count:>6,}")
         print(f"  Failed (all retries) : {failed_count:>6,}")
         print()
+        csp_target_count = aws_count + gcp_count + azure_count
+        if csp_target_count == 0:
+            print("  No cloud-hosted addresses found.")
+        else:
+            print(
+                f"  [>] {csp_target_count} CLOUD-HOSTED ADDRESS(ES) — "
+                "candidate reclaim targets"
+            )
         print(
             f"  CSP matches — AWS: {aws_count}  GCP: {gcp_count}  Azure: {azure_count}"
         )
+        if csp_wildcard_count:
+            print(
+                f"    excluded (wildcard) : {csp_wildcard_count:>4}"
+                "  (hosting platform addresses, not targets)"
+            )
+        if csp_breakdown:
+            print("    by region and service:")
+            for (provider, region, service), count in sorted(
+                csp_breakdown.items(), key=lambda kv: (-kv[1], kv[0])
+            ):
+                print(f"      {count:>4}  {provider}  {region}  {service}")
         print(thin)
 
         if total_candidates == 0:
@@ -88,7 +136,9 @@ class RunSummary:
                         print(f"        Recommendation : {rec}")
                         print(f"        Evidence       : {evidence}")
                         if depth > 0 and chain:
-                            print(f"        Chain ({depth} hop{'s' if depth != 1 else ''})  : {chain}")
+                            print(
+                                f"        Chain ({depth} hop{'s' if depth != 1 else ''})  : {chain}"
+                            )
 
             if ns_takeover:
                 print()

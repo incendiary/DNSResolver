@@ -1,5 +1,5 @@
 # Lambda-specific requirements.
 # boto3 is pre-installed in the Lambda runtime but included here so the
-# container image is self-contained and testable locally.
+# handler is testable locally and in CI.
 -r requirements.txt
-boto3>=1.34.0
+boto3>=1.43.58

@@ -91,12 +91,14 @@ class TakeoverDetector:
         self.env_manager.log_info(
             f"Checking for dangling CNAME for domain: {current_domain}"
         )
+        cname_found = False
         try:
             cname_answer = await self.aiodns_resolver.query(current_domain, "CNAME")
             self.env_manager.log_info(
                 f"CNAME query response for {current_domain}: {cname_answer}"
             )
             if cname_answer:
+                cname_found = True
                 self.env_manager.log_info(f"Domain {current_domain} is a CNAME record.")
                 target = cname_answer.cname
                 if not target.endswith("."):
@@ -141,7 +143,19 @@ class TakeoverDetector:
         except aiodns.error.DNSError as e:
             self.env_manager.log_info(f"Error querying NS for {current_domain}: {e}")
 
-        if current_domain.rstrip(".") == original_domain.rstrip("."):
+        # A takeover candidate requires a CNAME that points somewhere unclaimable.
+        # At depth 0 with no CNAME the name simply does not exist (plain NXDOMAIN) —
+        # there is nothing dangling to claim, so recording it as a candidate is a
+        # false positive that buries real findings. It is still reported as
+        # unresolved by the caller.
+        if depth == 0 and not cname_found:
+            self.env_manager.log_info(
+                f"Domain {current_domain} does not resolve and has no CNAME — "
+                "not a takeover candidate"
+            )
+            return False
+
+        if depth > 0 and current_domain.rstrip(".") == original_domain.rstrip("."):
             category = "self_referential"
             recommendation = (
                 "Remove or correct the CNAME — the domain points to itself "

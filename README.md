@@ -1,15 +1,37 @@
 # DNSResolver
 
-DNSResolver is a Python-based security tool for bulk DNS resolution and cloud infrastructure analysis. Given a list of domains it:
+DNSResolver is a passive DNS reconnaissance tool for offensive security. Given a flat list of
+candidate domains it **produces targets**, doing two jobs of equal weight:
 
-- Resolves DNS records and matches resolved IPs against known IP ranges for **AWS, GCP, and Azure**
-- Detects **dangling CNAME** records pointing to unclaimed cloud resources (potential subdomain takeover)
-- Detects **NS takeover** opportunities where nameservers are unresolvable
+**1. Dangling CNAME and NS takeover candidates.** CNAMEs pointing at service names nobody owns
+any more, and domains whose nameservers no longer resolve.
+
+**2. A records resolving into cloud IP space.** The less obvious half, and the reason this tool
+exists alongside the many that do job 1.
+
+A dangling CNAME names a service, so its intent can be read straight from DNS. A bare A record
+cannot. If that address is a cloud IP the owner released, whoever allocates it next controls what
+is served for that hostname — and **DNS gives no signal that this is the case**. Finding out means
+churning allocation in that provider and region until the address comes back to you.
+
+So DNSResolver answers: *which A records land in cloud ranges worth pursuing, and where?* Each
+match carries the provider's own published region, service and network border group, because an
+address is only actionable if you know where it is allocated from and what it belongs to.
+
+It also:
+
+- Flags **wildcard DNS** zones, so catch-all answers are not mistaken for real hosts
 - Collects forensic evidence (dig/nslookup output) for flagged domains
 
-All domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
+Domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
+
+**This tool identifies targets — it does not claim them.** Acting on a finding is a separate
+tool's job. That is why the output files are machine-readable records rather than prose reports,
+and why DNSResolver reports what each provider publishes without judging what is worth pursuing.
 
 The tool is intentionally DNS-focused. It does not make active HTTP/HTTPS connections, probe TCP ports, validate TLS certificates, or take screenshots. These were deliberately excluded to keep the tool passive, dependency-light, and scoped to DNS reconnaissance.
+
+**Scope boundary.** DNSResolver is deliberately passive and DNS-only. Confirming a takeover (HTTP/HTTPS fingerprinting, TLS inspection, port probing, screenshots) is **out of scope by design** — if that capability is needed it belongs in a separate tool, not here. Keeping this project DNS-only keeps it dependency-light, fast, and safe to run broadly.
 
 ## Demonstration
 
@@ -56,17 +78,26 @@ python resolver.py domains.txt -o results --evidence -v --nameservers 8.8.8.8,1.
 
 ### Building a domain list from certificate transparency
 
-DNSResolver takes a flat list of domains as input — it does not enumerate subdomains itself. A quick way to build one passively is to query certificate transparency logs via [crt.sh](https://crt.sh):
+DNSResolver takes a flat list of domains as input — it does not enumerate subdomains itself. A quick
+way to build one passively is from certificate transparency logs, using the bundled helper:
 
 ```bash
-curl -s "https://crt.sh/?q=%25.example.com&output=json" \
-  | python3 -c "import json,sys; names=set(); [names.update(e['name_value'].split('\n')) for e in json.load(sys.stdin)]; [print(n.lstrip('*.')) for n in sorted(names)]" \
-  | sort -u > domains.txt
-
+helper/crtsh_domains.sh example.com > domains.txt
 python resolver.py domains.txt -o results --evidence -v --nameservers 8.8.8.8,1.1.1.1 --timeout 5 --retries 2
 ```
 
-Replace `example.com` with the root domain you are assessing. For more comprehensive subdomain discovery, tools such as `subfinder` or `amass` can be used to generate the input list.
+The helper queries [crt.sh](https://crt.sh), keeps only valid hostnames (certificate common names are
+also returned and are not always hostnames), strips wildcard prefixes, and de-duplicates. crt.sh is
+frequently slow or briefly unavailable, so it retries and fails with a clear message rather than
+emitting a partial list.
+
+For broader coverage, combine it with active enumeration and de-duplicate:
+
+```bash
+helper/crtsh_domains.sh example.com >  domains.txt
+subfinder -d example.com -silent    >> domains.txt
+sort -u -o domains.txt domains.txt
+```
 
 ## Output
 
@@ -74,192 +105,16 @@ Each run creates a timestamped subdirectory under the output directory containin
 
 | File | Contents |
 |------|----------|
-| `resolution_results_*.txt` | Successfully resolved domains and their DNS records |
+| `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Lines prefixed `WILDCARD\|` resolved only via a zone wildcard — see [Wildcard DNS detection](#wildcard-dns-detection) |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
-| `takeover_candidates_*.txt` | Takeover candidates — `DANGLING\|` lines (dangling CNAMEs with category, recommendation, evidence) and `NS_TAKEOVER\|` lines (unresolvable nameservers) |
-| `csp_matches_*.txt` | Domains resolving to cloud provider IP ranges (AWS, GCP, Azure — one line per match) |
+| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|` lines for unresolvable nameservers |
+| `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
 
 ## AWS Lambda deployment
 
-DNSResolver can run as a Lambda function triggered by an S3 PutObject event. Upload a domains file to the input bucket to start a run; results are written back to S3 when it completes.
-
-### Design decisions
-
-| Decision | Choice | Reason |
-|----------|--------|--------|
-| Packaging | Container image | `pycares` bundles a native C extension — container images avoid the manylinux wheel compatibility issues that affect Lambda layers |
-| Architecture | arm64 (Graviton) | ~20% cheaper than x86_64 for equivalent workloads; change `FROM` line in Dockerfile for x86_64 |
-| Runtime | Python 3.12 | Latest Lambda-supported version |
-| Logging | stdout only | Lambda captures stdout to CloudWatch automatically; no log file is written |
-| Evidence collection | Disabled | `dig` and `nslookup` are not available in the Lambda runtime |
-| Intermediate storage | `/tmp` | Lambda provides up to 10 GB of ephemeral storage; results are uploaded to S3 at the end of the run |
-
-### Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OUTPUT_BUCKET` | input bucket | S3 bucket for results |
-| `OUTPUT_PREFIX` | `results/` | S3 key prefix for results |
-| `NAMESERVERS` | system resolvers | Comma-separated custom resolvers, e.g. `8.8.8.8,1.1.1.1` |
-| `MAX_THREADS` | `50` | Concurrent domain tasks |
-| `TIMEOUT` | from `config.json` | DNS query timeout in seconds |
-| `RETRIES` | from `config.json` | Retry attempts for failed domains |
-| `VERBOSE` | `false` | Set to `true` for verbose CloudWatch logging |
-
-### IAM permissions
-
-The Lambda execution role needs:
-- `s3:GetObject` on the input bucket
-- `s3:PutObject` on the output bucket
-
-### Step-by-step setup
-
-Replace `<account>`, `<region>`, `<input-bucket>`, and `<output-bucket>` throughout.
-
-**1. Create the ECR repository**
-```bash
-aws ecr create-repository \
-  --repository-name dnsresolver-lambda \
-  --region <region>
-```
-
-**2. Build and push the container image**
-```bash
-# Build for arm64 (cross-compile if you're on an x86 machine)
-docker build --platform linux/arm64 -t dnsresolver-lambda .
-
-# Authenticate and push
-aws ecr get-login-password --region <region> \
-  | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com
-
-docker tag dnsresolver-lambda \
-  <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
-
-docker push \
-  <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
-```
-
-**3. Create the IAM execution role**
-```bash
-# Create role
-aws iam create-role \
-  --role-name dnsresolver-lambda-role \
-  --assume-role-policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Effect": "Allow",
-      "Principal": {"Service": "lambda.amazonaws.com"},
-      "Action": "sts:AssumeRole"
-    }]
-  }'
-
-# Attach basic Lambda execution policy (CloudWatch Logs)
-aws iam attach-role-policy \
-  --role-name dnsresolver-lambda-role \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-
-# Allow S3 access (adjust bucket ARNs as needed)
-aws iam put-role-policy \
-  --role-name dnsresolver-lambda-role \
-  --policy-name dnsresolver-s3 \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Effect": "Allow",
-        "Action": "s3:GetObject",
-        "Resource": "arn:aws:s3:::<input-bucket>/*"
-      },
-      {
-        "Effect": "Allow",
-        "Action": "s3:PutObject",
-        "Resource": "arn:aws:s3:::<output-bucket>/*"
-      }
-    ]
-  }'
-```
-
-**4. Create the Lambda function**
-```bash
-aws lambda create-function \
-  --function-name dnsresolver \
-  --package-type Image \
-  --code ImageUri=<account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest \
-  --role arn:aws:iam::<account>:role/dnsresolver-lambda-role \
-  --architectures arm64 \
-  --memory-size 512 \
-  --timeout 900 \
-  --environment 'Variables={
-    OUTPUT_BUCKET=<output-bucket>,
-    OUTPUT_PREFIX=results,
-    NAMESERVERS=8.8.8.8,1.1.1.1,
-    MAX_THREADS=50,
-    RETRIES=2
-  }'
-```
-
-> **Memory and timeout:** 512 MB is sufficient for most domain lists up to a few thousand entries. Increase memory for larger lists. Timeout is set to 900 seconds (Lambda maximum).
-
-**5. Add the S3 trigger**
-
-First, grant S3 permission to invoke the function:
-```bash
-aws lambda add-permission \
-  --function-name dnsresolver \
-  --statement-id s3-invoke \
-  --action lambda:InvokeFunction \
-  --principal s3.amazonaws.com \
-  --source-arn arn:aws:s3:::<input-bucket>
-```
-
-Then configure the bucket notification (replace `<input-bucket>`):
-```bash
-aws s3api put-bucket-notification-configuration \
-  --bucket <input-bucket> \
-  --notification-configuration '{
-    "LambdaFunctionConfigurations": [{
-      "LambdaFunctionArn": "arn:aws:lambda:<region>:<account>:function:dnsresolver",
-      "Events": ["s3:ObjectCreated:*"],
-      "Filter": {
-        "Key": {"FilterRules": [{"Name": "prefix", "Value": "domains/"}]}
-      }
-    }]
-  }'
-```
-
-Any file uploaded to `s3://<input-bucket>/domains/` will now trigger a run automatically.
-
-**6. Run a scan**
-```bash
-aws s3 cp domains.txt s3://<input-bucket>/domains/domains.txt
-# Results appear in s3://<output-bucket>/results/<timestamp>/ when complete
-```
-
-**7. Updating the function after a code change**
-```bash
-docker build --platform linux/arm64 -t dnsresolver-lambda . && \
-docker push <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest && \
-aws lambda update-function-code \
-  --function-name dnsresolver \
-  --image-uri <account>.dkr.ecr.<region>.amazonaws.com/dnsresolver-lambda:latest
-```
-
-### Trigger configuration
-
-Configure an S3 event notification on the input bucket for `s3:ObjectCreated:*` events, filtered to the prefix where you drop domain files (e.g. `domains/`). The Lambda handler reads the bucket and key from the event record automatically.
-
-### Pipeline integration
-
-```
-EventBridge (daily cron)
-    → ECS Fargate task (subfinder/amass enumeration)
-        → S3: domains/domains.txt          ← triggers Lambda
-            → Lambda (DNSResolver)
-                → S3: results/<timestamp>/
-                    → downstream Lambda (claim dangling resources)
-```
+DNSResolver can run as an S3-triggered Lambda. The full deployment walkthrough (ECR image, IAM, triggers) lives in [`docs/LAMBDA.md`](docs/LAMBDA.md). Note: the maintained Lambda packaging is produced in a separate project; the handler here is the reference entry point.
 
 ## Architecture
 
@@ -271,6 +126,7 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 ├── LambdaEnvironmentManager — Lambda: env vars, stdout logging, /tmp file I/O
 ├── DNSHandler               — async DNS resolution (aiodns primary, dnspython fallback)
 │   ├── TakeoverDetector     — dangling CNAME detection, NS takeover checks, depth-limited CNAME chain following
+│   ├── WildcardDetector     — per-zone wildcard DNS detection, cached probe results
 │   └── EvidenceCollector    — async subprocess evidence capture (dig/nslookup)
 ├── DomainProcessingContext  — per-domain state (domain name, resolver, CSP IPs)
 ├── CSPIPAddresses           — value object holding fetched AWS/GCP/Azure IP ranges
@@ -279,6 +135,85 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 ```
 
 Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`) to run many domains concurrently without exhausting file descriptors or triggering DNS rate limits. Failed domains are collected after each pass and retried up to `--retries` times.
+
+## Cloud IP attribution
+
+Matching a resolved address to a cloud provider is only half an answer. `AWS` alone says
+little: of roughly 10,500 published AWS prefixes, over half carry the generic `AMAZON` tag,
+and the ones that matter operationally — `EC2` in a named region — look identical unless the
+provider's own metadata is kept.
+
+Each match is therefore written as a record carrying the provider's published region and
+service:
+
+```
+domain|ip|provider|region|service|prefix|border_group
+```
+
+```
+example.com|13.35.163.22|aws|GLOBAL|CLOUDFRONT|13.35.0.0/16|GLOBAL
+example.com|3.11.53.7|aws|eu-west-2|EC2|3.8.0.0/14|eu-west-2
+```
+
+`border_group` is AWS's network border group: the boundary an Elastic IP is actually allocated
+and advertised from. It usually mirrors the region, but differs for Local Zones and Wavelength —
+which is precisely where the distinction matters. GCP and Azure publish no equivalent and it
+reads `unknown` for them.
+
+Records for a resolution that came from a zone wildcard are prefixed `WILDCARD|`. Those addresses
+belong to the hosting platform and are in active use, so they are not targets; they are reported
+for completeness and excluded from the summary's counts.
+
+The difference is the point: the first is a CDN edge address, the second an EC2 address in a
+specific region. Both are "AWS"; only one is a meaningful target.
+
+The end-of-run summary groups matches the same way:
+
+```
+  CSP matches — AWS: 6  GCP: 0  Azure: 0
+    by region and service:
+         4  aws  GLOBAL  CLOUDFRONT
+         2  aws  GLOBAL  GLOBALACCELERATOR
+```
+
+Metadata is taken verbatim from each provider (AWS `region`/`service`, GCP `scope`/`service`,
+Azure `region`/`systemService`). Where a provider publishes none, the fields read `unknown`
+rather than being inferred. DNSResolver does not judge which addresses are worth pursuing —
+it reports what the provider states and leaves that decision to the operator.
+
+## Wildcard DNS detection
+
+A zone serving a wildcard record (`*.example.com`) answers for **every** name beneath it. Against an
+enumerated subdomain list that means thousands of "resolved" domains whose resolution proves
+nothing, burying the findings that matter.
+
+DNSResolver detects this automatically. For each zone it queries a couple of random labels that are
+almost certainly not real (`<random-hex>.example.com`). If they resolve, the zone answers for
+anything, and the addresses returned are recorded as the zone's wildcard set. Any domain resolving
+*only* to addresses in that set is written with a `WILDCARD|` prefix:
+
+```
+WILDCARD|nonexistent-zz9x7q.github.io|185.199.108.153|185.199.109.153|...
+www.example.com|203.0.113.10
+```
+
+The end-of-run summary reports the count separately:
+
+```
+  Resolved             :      4
+    of which wildcard  :      2  (catch-all zone — resolution proves nothing)
+```
+
+Notes:
+
+- A host resolving to any address **outside** the wildcard set is treated as real and is not flagged,
+  even if it also shares one with the wildcard.
+- Results are cached per zone, so a scan costs one probe round per zone, not one per domain. Zones
+  with no wildcard are probed once and then left completely untouched.
+- Both IPv4 and IPv6 are probed, so a dual-stack catch-all is matched correctly.
+- Detection is DNS-only and cannot distinguish a real host from a wildcard when the host genuinely
+  shares the wildcard's addresses — GitHub Pages sites are a common example, as they all resolve to
+  the same set. Confirming those requires active probing, which is deliberately out of scope.
 
 ## Configuration
 
@@ -364,38 +299,29 @@ Once related root domains are identified, enumerate subdomains for each and comb
 
 ## Roadmap
 
-| Issue | Status | Description |
-|-------|--------|-------------|
-| [#36](https://github.com/incendiary/DNSResolver/issues/36) | ✅ | Progress bar stability — log output routed through `tqdm.write()` |
-| [#37](https://github.com/incendiary/DNSResolver/issues/37) | ✅ | AWS Lambda / S3 support — `lambda_handler.py` entrypoint with S3 I/O |
-| [#41](https://github.com/incendiary/DNSResolver/issues/41) | ✅ | Refactor `EnvironmentManager` — `ConfigResolver` + `OutputManager` split; trivial getters replaced with direct attribute access |
-| [#42](https://github.com/incendiary/DNSResolver/issues/42) | ✅ | Enforce code style with Black, isort, flake8, and pre-commit hooks |
-| [#43](https://github.com/incendiary/DNSResolver/issues/43) | ✅ | Refactor `DNSHandler` — split resolution, takeover detection, and categorisation into focused classes |
-| [#48](https://github.com/incendiary/DNSResolver/issues/48) | ✅ | End-of-run summary — at-a-glance verdict with prominently flagged takeover candidates |
-| [#50](https://github.com/incendiary/DNSResolver/issues/50) | ✅ | Code review and refactoring pass — surgical changes, simplicity-first, no speculative abstractions |
-| [#52](https://github.com/incendiary/DNSResolver/issues/52) | ✅ | Refine run summary — elevate classified takeover candidates |
-| [#54](https://github.com/incendiary/DNSResolver/issues/54) | ✅ | Expand domain categorisation patterns — add 11 missing takeover services |
-| [#56](https://github.com/incendiary/DNSResolver/issues/56) | ✅ | Formal git history secret scan |
-| [#57](https://github.com/incendiary/DNSResolver/issues/57) | ✅ | Dependency audit — pip-audit against all requirements files |
-| [#60](https://github.com/incendiary/DNSResolver/issues/60) | ✅ | GitHub Actions CI — flake8 + pytest on Python 3.12 for all PRs and pushes to main |
-| [#61](https://github.com/incendiary/DNSResolver/issues/61) | ✅ | pre-commit: gitleaks hook; CVE-fixed black revision |
-| [#63](https://github.com/incendiary/DNSResolver/issues/63) | ✅ | Dead code removal — unreachable guards in `cloud_service_provider_checks` and `config_resolver` |
-| [#64](https://github.com/incendiary/DNSResolver/issues/64) | ✅ | Deduplicate GCP / AWS IP range fetch into a shared helper |
-| [#65](https://github.com/incendiary/DNSResolver/issues/65) | ✅ | Strip what-not-why docstrings from `cloud_ip_ranges.py` |
-| [#66](https://github.com/incendiary/DNSResolver/issues/66) | ✅ | Branch protection — require CI status check to pass before merge |
-| [#72](https://github.com/incendiary/DNSResolver/issues/72) | ✅ | Bug: double retry loop — domains retried retries² times |
-| [#73](https://github.com/incendiary/DNSResolver/issues/73) | ✅ | Bug: unbounded CNAME recursion — depth limit added |
-| [#74](https://github.com/incendiary/DNSResolver/issues/74) | ✅ | Bug: concurrent write race in `log_and_write` — investigated, not a real bug in asyncio cooperative model |
-| [#75](https://github.com/incendiary/DNSResolver/issues/75) | ✅ | Bug: `asyncio.get_event_loop()` deprecated — replaced with `get_running_loop()` |
-| [#76](https://github.com/incendiary/DNSResolver/issues/76) | ✅ | Dead code: `is_dangling_record_async` defined but never called — removed |
-| [#79](https://github.com/incendiary/DNSResolver/issues/79) | ✅ | Bug: Azure IP range fetch brittle — three-stage fallback chain added |
-| [#80](https://github.com/incendiary/DNSResolver/issues/80) | ✅ | Bug: dangling CNAMEs to AWS ELB classified as unknown — `aws_elb` pattern added |
-| [#82](https://github.com/incendiary/DNSResolver/issues/82) | ✅ v1.10.0 | Consolidate output files: 7 text files → 4 — `csp_matches_*.txt` and `takeover_candidates_*.txt` |
-| [#85](https://github.com/incendiary/DNSResolver/issues/85) | ✅ v1.10.1 | Run summary: all takeover candidates shown with CNAME target, risk, and recommended action |
-| [#87](https://github.com/incendiary/DNSResolver/issues/87) | ✅ v1.10.2 | Version string — printed at startup and in run summary; `--version` flag added |
-| [#89](https://github.com/incendiary/DNSResolver/issues/89) | ✅ v1.10.3 | Self-referential CNAMEs classified as `self_referential` (misconfiguration) not takeover candidates |
-| [#91](https://github.com/incendiary/DNSResolver/issues/91) | ✅ v1.10.4 | README: fix venv path, add `--version` to options table, update architecture diagram, clean roadmap |
-| [#92](https://github.com/incendiary/DNSResolver/issues/92) | ✅ v1.11.0 | CNAME chain depth tracking — dangling output now includes hop count and full chain path (`a -> b -> c`) for faster triage |
+Active and completed work is tracked in **[ROADMAP.md](ROADMAP.md)**, with the findings that drive it
+in [REVIEW.md](REVIEW.md) and per-item execution plans under [`docs/roadmap/`](docs/roadmap/).
+
+Recent releases: consolidated output files, an actionable end-of-run summary, correct handling of
+self-referential and non-existent CNAMEs, IPv6 (AAAA) resolution, and wildcard DNS detection.
+
+## Known limitations
+
+- **Resolution covers A and AAAA records.** Hosts reachable only via other record types are reported
+  as unresolved.
+- **Dangling-CNAME classification is first-match-wins** over the patterns in `config.json`, which are
+  ordered specific to general. A target matching no pattern is reported as `unknown` rather than
+  guessed at.
+- **Wildcard detection cannot separate a real host from a catch-all** when the host genuinely shares
+  the wildcard's addresses (GitHub Pages is the common case). Confirming those requires active
+  probing, which is out of scope.
+- **Wildcard detection is unreliable against large rotating address pools.** Where a catch-all is
+  served by a big load-balanced fleet (Heroku, for example), two probes capture only part of the
+  rotation, so a later name resolving to different addresses in the same fleet is not recognised as
+  a wildcard answer. Detection is best-effort: a match is good evidence, a miss is not evidence of
+  absence.
+- **A takeover candidate is only recorded when a CNAME actually exists.** A name that simply does not
+  resolve is reported as unresolved, not as a candidate — there is nothing to claim.
 
 ## Contributing
 

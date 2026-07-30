@@ -1,6 +1,4 @@
 # Development tooling — not needed at runtime or in Lambda
 -r requirements.txt
-black>=26.3.1
-isort~=5.13
-flake8~=7.3
+ruff==0.16.0  # pinned exact — bump deliberately, not via range
 pre-commit~=4.6

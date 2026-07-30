@@ -6,6 +6,7 @@ import dns.resolver
 
 from classes.dns_constants import NXDOMAIN, SERVFAIL, is_dns_error_present
 from classes.takeover_detector import TakeoverDetector
+from classes.wildcard_detector import WildcardDetector
 
 
 class DNSHandler:
@@ -20,6 +21,7 @@ class DNSHandler:
             self.dnspython_resolver.nameservers = [random_nameserver]
 
         self.takeover_detector = TakeoverDetector(self.aiodns_resolver, env_manager)
+        self.wildcard_detector = WildcardDetector(self.aiodns_resolver, env_manager)
 
     async def log_and_write_dns_error(self, domain, error, additional_message=""):
         message = f"DNS resolution error for {domain}: {error}"
@@ -91,18 +93,47 @@ class DNSHandler:
     async def resolve_domain_async(self, domain_context):
         current_domain = domain_context.get_domain()
         self.env_manager.log_info(f"Resolving {current_domain}")
-        try:
-            answers = await self.aiodns_resolver.query(current_domain, "A")
-            final_ips = [answer.host for answer in answers]
+
+        # Query A and AAAA concurrently. A host with only AAAA records is still
+        # resolvable, so treating an A-record failure as "unresolved" would be
+        # wrong for IPv6-only hosts.
+        a_result, aaaa_result = await asyncio.gather(
+            self.aiodns_resolver.query(current_domain, "A"),
+            self.aiodns_resolver.query(current_domain, "AAAA"),
+            return_exceptions=True,
+        )
+
+        # Anything that is not a DNSError is a genuine fault (not a DNS answer
+        # about the domain) — propagate it as the un-gathered code used to.
+        for result in (a_result, aaaa_result):
+            if isinstance(result, BaseException) and not isinstance(
+                result, aiodns.error.DNSError
+            ):
+                raise result
+
+        a_error = a_result if isinstance(a_result, BaseException) else None
+        aaaa_error = aaaa_result if isinstance(aaaa_result, BaseException) else None
+
+        # Only when BOTH record types fail is the domain unresolved. The A error
+        # is passed on so the existing NXDOMAIN/SERVFAIL handling is unchanged.
+        if a_error is not None and aaaa_error is not None:
             self.env_manager.log_info(
-                f"Successfully resolved {current_domain} to {final_ips}"
+                f"DNS error for {current_domain}: A={a_error} | AAAA={aaaa_error}"
             )
-            await self.takeover_detector.handle_takeover_checks(
-                domain_context, current_domain
-            )
-            return True, final_ips
-        except aiodns.error.DNSError as e:
-            self.env_manager.log_info(f"DNS error for {current_domain}: {e}")
             return await self.handle_domain_resolution_errors(
-                domain_context, current_domain, e, final_retry=True
+                domain_context, current_domain, a_error, final_retry=True
             )
+
+        # IPv4 first, then IPv6 — stable ordering for the pipe-delimited output.
+        final_ips = []
+        for result in (a_result, aaaa_result):
+            if not isinstance(result, BaseException):
+                final_ips.extend(answer.host for answer in result)
+
+        self.env_manager.log_info(
+            f"Successfully resolved {current_domain} to {final_ips}"
+        )
+        await self.takeover_detector.handle_takeover_checks(
+            domain_context, current_domain
+        )
+        return True, final_ips
