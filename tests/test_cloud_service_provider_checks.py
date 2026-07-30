@@ -449,7 +449,7 @@ def test_wildcard_cloud_match_is_marked(tmp_path, mock_env_manager, ctx):
     out_file.touch()
     mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
 
-    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"], is_wildcard=True)
+    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"], wildcard_verdict="WILDCARD")
 
     line = out_file.read_text().strip()
     assert line.startswith("WILDCARD|")
@@ -463,7 +463,7 @@ def test_ordinary_cloud_match_is_not_marked(tmp_path, mock_env_manager, ctx):
     out_file.touch()
     mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
 
-    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"], is_wildcard=False)
+    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"], wildcard_verdict=None)
 
     assert not out_file.read_text().startswith("WILDCARD|")
 
@@ -479,3 +479,22 @@ def test_wildcard_defaults_to_false_for_existing_callers(
     perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"])
 
     assert not out_file.read_text().startswith("WILDCARD|")
+
+
+def test_catch_all_zone_cloud_match_is_marked_distinctly(
+    tmp_path, mock_env_manager, ctx
+):
+    """
+    An address in a zone that answers for anything cannot be attributed to the
+    domain rather than the platform, even when the probe did not sample it. It
+    is marked so a consumer can tell it apart from a confirmed catch-all.
+    """
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
+
+    perform_csp_checks(
+        ctx, mock_env_manager, ["3.1.2.3"], wildcard_verdict="WILDCARD_ZONE"
+    )
+
+    assert out_file.read_text().startswith("WILDCARD_ZONE|example.com|3.1.2.3|aws|")

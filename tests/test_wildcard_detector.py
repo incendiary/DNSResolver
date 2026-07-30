@@ -222,3 +222,64 @@ async def test_zone_without_aaaa_still_detected(env_manager):
     detector = WildcardDetector(resolver, env_manager, probe_count=1)
 
     assert await detector.is_wildcard_resolution("ghost.example.com", ["192.0.2.1"])
+
+
+# ---------------------------------------------------------------------------
+# classify — the two-tier verdict
+#
+# Testing addresses against a sampled set silently misses catch-alls behind
+# large rotating fleets. The zone-level fact is always reliable; the
+# address-level one is precise but incomplete. Both are reported.
+# ---------------------------------------------------------------------------
+
+
+async def test_classify_returns_none_outside_a_wildcard_zone(env_manager):
+    """An ordinary zone must be left entirely alone."""
+    resolver = MagicMock()
+    resolver.query = AsyncMock(side_effect=make_nxdomain())
+    detector = WildcardDetector(resolver, env_manager)
+
+    assert await detector.classify("real.example.com", ["192.0.2.1"]) is None
+
+
+async def test_classify_confirms_catch_all_on_exact_match(env_manager):
+    resolver = MagicMock()
+    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
+    detector = WildcardDetector(resolver, env_manager)
+
+    assert await detector.classify("ghost.example.com", ["192.0.2.1"]) == "WILDCARD"
+
+
+async def test_classify_reports_zone_when_addresses_were_not_sampled(env_manager):
+    """
+    The rotating-pool case. The zone answers for anything, but this name landed
+    on addresses the probe never saw. Previously that returned a flat False and
+    the catch-all was reported as a real target.
+    """
+    resolver = MagicMock()
+    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
+    detector = WildcardDetector(resolver, env_manager)
+
+    verdict = await detector.classify("elsewhere.example.com", ["203.0.113.9"])
+
+    assert verdict == "WILDCARD_ZONE"
+
+
+async def test_classify_reports_zone_for_empty_resolution_in_wildcard_zone(env_manager):
+    resolver = MagicMock()
+    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
+    detector = WildcardDetector(resolver, env_manager)
+
+    assert await detector.classify("ghost.example.com", []) == "WILDCARD_ZONE"
+
+
+async def test_is_wildcard_resolution_still_means_confirmed_only(env_manager):
+    """The narrower helper must not start reporting the weaker verdict."""
+    resolver = MagicMock()
+    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
+    detector = WildcardDetector(resolver, env_manager)
+
+    assert await detector.is_wildcard_resolution("g.example.com", ["192.0.2.1"]) is True
+    assert (
+        await detector.is_wildcard_resolution("g.example.com", ["203.0.113.9"]) is False
+    )

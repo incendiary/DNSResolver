@@ -18,6 +18,9 @@ class RunSummary:
         resolved_lines = self._lines("resolved")
         resolved_count = len(resolved_lines)
         wildcard_count = sum(1 for ln in resolved_lines if ln.startswith("WILDCARD|"))
+        wildcard_zone_count = sum(
+            1 for ln in resolved_lines if ln.startswith("WILDCARD_ZONE|")
+        )
         unresolved_count = len(self._lines("unresolved"))
 
         takeover_lines = self._lines("takeover")
@@ -37,10 +40,12 @@ class RunSummary:
         csp_records = []
         csp_wildcard_count = 0
         for line in csp_lines:
-            if line.startswith("WILDCARD|"):
+            if line.startswith(("WILDCARD|", "WILDCARD_ZONE|")):
                 csp_wildcard_count += 1
-                # Counted, but kept out of the target breakdown below: these are
-                # the hosting platform's addresses, not claimable targets.
+                # Counted, but kept out of the target breakdown below. In a zone
+                # that answers for anything, an address cannot be attributed to
+                # the domain rather than the platform — including where the probe
+                # simply did not sample that part of a rotating pool.
                 continue
             fields = line.split("|")
             if len(fields) >= 6:
@@ -89,8 +94,13 @@ class RunSummary:
         print(f"  Resolved             : {resolved_count:>6,}")
         if wildcard_count:
             print(
-                f"    of which wildcard  : {wildcard_count:>6,}"
-                "  (catch-all zone — resolution proves nothing)"
+                f"    confirmed catch-all: {wildcard_count:>6,}"
+                "  (matched the zone's wildcard answer)"
+            )
+        if wildcard_zone_count:
+            print(
+                f"    in catch-all zone  : {wildcard_zone_count:>6,}"
+                "  (zone answers for anything — unverifiable)"
             )
         print(f"  Unresolved errors    : {unresolved_count:>6,}")
         print(f"  Failed (all retries) : {failed_count:>6,}")
@@ -109,7 +119,7 @@ class RunSummary:
         if csp_wildcard_count:
             print(
                 f"    excluded (wildcard) : {csp_wildcard_count:>4}"
-                "  (hosting platform addresses, not targets)"
+                "  (catch-all zones — cannot attribute to the domain)"
             )
         if csp_breakdown:
             print("    by region and service:")

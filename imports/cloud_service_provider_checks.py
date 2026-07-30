@@ -13,7 +13,7 @@ def parse_network(cidr):
     return ipaddress.ip_network(cidr)
 
 
-def perform_csp_checks(domain_context, env_manager, final_ips, is_wildcard=False):
+def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=None):
     domain = domain_context.get_domain()
     output_files = env_manager.output_files
 
@@ -48,7 +48,7 @@ def perform_csp_checks(domain_context, env_manager, final_ips, is_wildcard=False
                     output_files,
                     domain_context,
                     written_lines,
-                    is_wildcard,
+                    wildcard_verdict,
                 )
                 or success
             )
@@ -122,7 +122,7 @@ def log_and_write(
     output_files,
     domain_context,
     written_lines,
-    is_wildcard=False,
+    wildcard_verdict=None,
 ):
     """
     Write one line per matched address, as a handoff record for downstream
@@ -136,14 +136,16 @@ def log_and_write(
     actionable — an address is only worth pursuing if you know where it is
     allocated from and what it belongs to.
 
-    Records for a wildcard resolution are prefixed `WILDCARD|`. Those addresses
-    belong to the hosting platform and are in active use, so they are the
-    opposite of a claimable target; without the marker a single wildcarded zone
-    emits one record per enumerated subdomain and buries the real findings.
+    Records from a zone that answers for anything are prefixed with the verdict
+    — `WILDCARD|` for a confirmed catch-all, `WILDCARD_ZONE|` where the zone is
+    wildcarded but these addresses were not among those sampled. In both cases
+    the address cannot be attributed to this domain rather than to the platform,
+    so neither is a dependable target; without the marker a single wildcarded
+    zone emits one record per enumerated subdomain and buries real findings.
     """
     csp_ip_addresses = domain_context.get_csp_ip_addresses()
     file_path = output_files["standard"]["csp"]
-    line_prefix = "WILDCARD|" if is_wildcard else ""
+    line_prefix = f"{wildcard_verdict}|" if wildcard_verdict else ""
     wrote_any = False
 
     for ip, prefix in sorted(matched_ips.items()):
