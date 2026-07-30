@@ -268,7 +268,12 @@ def test_aws_region_and_service_are_captured(monkeypatch):
     """AWS publishes region and service per prefix; both must be retained."""
     payload = {
         "prefixes": [
-            {"ip_prefix": "3.5.140.0/22", "region": "eu-west-2", "service": "EC2"},
+            {
+                "ip_prefix": "3.5.140.0/22",
+                "region": "eu-west-2",
+                "service": "EC2",
+                "network_border_group": "eu-west-2",
+            },
             {"ip_prefix": "52.94.0.0/22", "region": "us-east-1", "service": "AMAZON"},
         ]
     }
@@ -280,8 +285,8 @@ def test_aws_region_and_service_are_captured(monkeypatch):
     ipv4, _ipv6, meta = fetch_ip_ranges("http://example.invalid/aws.json")
 
     assert "3.5.140.0/22" in ipv4
-    assert meta["3.5.140.0/22"] == ("eu-west-2", "EC2")
-    assert meta["52.94.0.0/22"] == ("us-east-1", "AMAZON")
+    assert meta["3.5.140.0/22"] == ("eu-west-2", "EC2", "eu-west-2")
+    assert meta["52.94.0.0/22"] == ("us-east-1", "AMAZON", "unknown")
 
 
 def test_gcp_scope_is_captured_as_region(monkeypatch):
@@ -302,7 +307,7 @@ def test_gcp_scope_is_captured_as_region(monkeypatch):
 
     _ipv4, _ipv6, meta = fetch_ip_ranges("http://example.invalid/gcp.json")
 
-    assert meta["34.1.208.0/20"] == ("europe-west2", "Google Cloud")
+    assert meta["34.1.208.0/20"] == ("europe-west2", "Google Cloud", "unknown")
 
 
 def test_missing_metadata_is_reported_as_unknown_not_invented(monkeypatch):
@@ -315,7 +320,7 @@ def test_missing_metadata_is_reported_as_unknown_not_invented(monkeypatch):
 
     _ipv4, _ipv6, meta = fetch_ip_ranges("http://example.invalid/x.json")
 
-    assert meta["198.51.100.0/24"] == ("unknown", "unknown")
+    assert meta["198.51.100.0/24"] == ("unknown", "unknown", "unknown")
 
 
 def test_azure_region_and_system_service_are_captured(monkeypatch):
@@ -343,8 +348,8 @@ def test_azure_region_and_system_service_are_captured(monkeypatch):
 
     assert ipv4 == ["20.26.0.0/16"]
     assert ipv6 == ["2603:1000::/24"]
-    assert meta["20.26.0.0/16"] == ("uksouth", "AzureCloud")
-    assert meta["2603:1000::/24"] == ("uksouth", "AzureCloud")
+    assert meta["20.26.0.0/16"] == ("uksouth", "AzureCloud", "unknown")
+    assert meta["2603:1000::/24"] == ("uksouth", "AzureCloud", "unknown")
 
 
 def test_azure_global_tag_region_is_labelled_global(monkeypatch):
@@ -370,4 +375,4 @@ def test_azure_global_tag_region_is_labelled_global(monkeypatch):
         "http://example.invalid/az.json", False
     )
 
-    assert meta["13.64.0.0/16"] == ("global", "AzureCloud")
+    assert meta["13.64.0.0/16"] == ("global", "AzureCloud", "unknown")

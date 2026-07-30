@@ -171,6 +171,17 @@ bash ~/.claude/skills/local-ci/local-ci.sh --workflow ci.yml
   name under the same platform return byte-identical DNS. Distinguishing them needs an HTTP
   request, which §1 rules out. The flag means *"resolution proves nothing in this zone"*,
   not *"this host does not exist"*.
+- **Wildcard detection is best-effort against rotating pools.** The check asks whether a
+  resolution falls entirely inside the addresses a random-label probe returned. Where the
+  catch-all is a large load-balanced fleet, two probes see only part of the rotation and a
+  later name lands outside the observed set, so it is not recognised. Verified live against
+  a platform whose wildcard rotates across regions: of two fabricated names, one was marked
+  and one was not. A match is good evidence; a miss is not evidence of absence.
+
+  A zone-level semantic (mark every resolution in a zone known to answer for anything, rather
+  than testing each address against a sampled set) would be more robust and is arguably more
+  honest, since DNS cannot discriminate within such a zone anyway. That is an open design
+  decision, not an oversight.
 - **Performance at scale is reasoned, not measured.** Known cliffs were removed (per-IP CIDR
   parsing, O(n²) dedupe) but no benchmark has been run against a large list.
 

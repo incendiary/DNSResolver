@@ -13,7 +13,7 @@ def parse_network(cidr):
     return ipaddress.ip_network(cidr)
 
 
-def perform_csp_checks(domain_context, env_manager, final_ips):
+def perform_csp_checks(domain_context, env_manager, final_ips, is_wildcard=False):
     domain = domain_context.get_domain()
     output_files = env_manager.output_files
 
@@ -48,6 +48,7 @@ def perform_csp_checks(domain_context, env_manager, final_ips):
                     output_files,
                     domain_context,
                     written_lines,
+                    is_wildcard,
                 )
                 or success
             )
@@ -115,25 +116,42 @@ def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
 
 
 def log_and_write(
-    vendor, matched_ips, domain, output_files, domain_context, written_lines
+    vendor,
+    matched_ips,
+    domain,
+    output_files,
+    domain_context,
+    written_lines,
+    is_wildcard=False,
 ):
     """
     Write one line per matched address, as a handoff record for downstream
-    tooling: domain|ip|provider|region|service|prefix
+    tooling:
+
+        domain|ip|provider|region|service|prefix|border_group
 
     One address per line, pipe-delimited, because this file is consumed by
-    another tool rather than read as prose. Region and service come from the
-    provider's own published ranges and are what make a match actionable — an
-    address is only worth pursuing if you know where it is allocated from and
-    what it belongs to.
+    another tool rather than read as prose. Region, service and border group
+    come from the provider's own published ranges and are what make a match
+    actionable — an address is only worth pursuing if you know where it is
+    allocated from and what it belongs to.
+
+    Records for a wildcard resolution are prefixed `WILDCARD|`. Those addresses
+    belong to the hosting platform and are in active use, so they are the
+    opposite of a claimable target; without the marker a single wildcarded zone
+    emits one record per enumerated subdomain and buries the real findings.
     """
     csp_ip_addresses = domain_context.get_csp_ip_addresses()
     file_path = output_files["standard"]["csp"]
+    line_prefix = "WILDCARD|" if is_wildcard else ""
     wrote_any = False
 
     for ip, prefix in sorted(matched_ips.items()):
-        region, service = csp_ip_addresses.describe(prefix)
-        message = f"{domain}|{ip}|{vendor}|{region}|{service}|{prefix}"
+        region, service, border_group = csp_ip_addresses.describe(prefix)
+        message = (
+            f"{line_prefix}{domain}|{ip}|{vendor}|{region}|{service}"
+            f"|{prefix}|{border_group}"
+        )
 
         # Deduplicate against an in-memory, run-scoped set of lines already
         # written — avoids re-reading the whole output file on every call.
