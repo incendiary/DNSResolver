@@ -73,7 +73,12 @@ class TakeoverDetector:
             domain_context.add_dangling_domain_to_domains(current_domain)
         return is_dangling or is_nstakeover
 
-    async def check_dangling_cname_async(self, domain_context, current_domain, depth=0):
+    async def check_dangling_cname_async(
+        self, domain_context, current_domain, depth=0, chain=None
+    ):
+        if chain is None:
+            chain = [current_domain]
+
         if depth >= MAX_CNAME_DEPTH:
             self.env_manager.log_info(
                 f"CNAME chain depth limit ({MAX_CNAME_DEPTH}) reached for "
@@ -100,7 +105,7 @@ class TakeoverDetector:
                     target += "."
                 self.env_manager.log_info(f"CNAME target: {target}")
                 if await self.check_dangling_cname_async(
-                    domain_context, target, depth + 1
+                    domain_context, target, depth + 1, chain + [target]
                 ):
                     return True
         except aiodns.error.DNSError as e:
@@ -162,9 +167,10 @@ class TakeoverDetector:
             category, recommendation, evidence_link = (
                 DomainCategoriser.categorise_domain(current_domain, patterns)
             )
+        chain_str = " -> ".join(h.rstrip(".") for h in chain)
         await self.env_manager.write_to_file(
             output_files["standard"]["takeover"],
-            f"DANGLING|{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}",
+            f"DANGLING|{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}|{depth}|{chain_str}",
         )
         self.env_manager.log_info(
             f"Domain {current_domain} is a dangling CNAME with category: {category}"

@@ -184,6 +184,51 @@ def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
+# CNAME chain depth tracking
+# ---------------------------------------------------------------------------
+
+
+def test_classified_cname_chain_shown_when_depth_gt_zero(tmp_path, capsys):
+    """A classified dangling CNAME with depth > 0 must show the full hop chain."""
+    dangling = (
+        "DANGLING|sub.victim.com|c.cdn.com|aws_s3|Remove CNAME|https://evidence.link|2"
+        "|sub.victim.com -> b.cdn.com -> c.cdn.com\n"
+    )
+    summary = _make_summary(tmp_path, {"takeover": dangling})
+    summary.display(total_input=1, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "Chain (2 hops)" in out
+    assert "sub.victim.com -> b.cdn.com -> c.cdn.com" in out
+
+
+def test_unclassified_cname_chain_shown_when_depth_gt_zero(tmp_path, capsys):
+    """An unclassified dangling CNAME with depth > 0 must show the full hop chain."""
+    dangling = (
+        "DANGLING|sub.victim.com|mystery.example.com|unknown|Unclassified|N/A|1"
+        "|sub.victim.com -> mystery.example.com\n"
+    )
+    summary = _make_summary(tmp_path, {"takeover": dangling})
+    summary.display(total_input=1, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "Chain (1 hop)" in out
+    assert "sub.victim.com -> mystery.example.com" in out
+
+
+def test_legacy_dangling_line_no_depth_still_parses(tmp_path, capsys):
+    """A DANGLING line without depth/chain fields (pre-v1.11 format) parses without error."""
+    dangling = "DANGLING|root.example.com|app.s3.amazonaws.com|aws_s3|Remove the CNAME|https://evidence.link\n"
+    summary = _make_summary(tmp_path, {"takeover": dangling})
+    summary.display(total_input=1, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "Classified dangling CNAMEs (1)" in out
+    assert "app.s3.amazonaws.com" in out
+    assert "Chain" not in out  # no chain line for depth=0 / missing fields
+
+
+# ---------------------------------------------------------------------------
 # Resilience
 # ---------------------------------------------------------------------------
 

@@ -107,7 +107,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 |------|----------|
 | `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Lines prefixed `WILDCARD\|` resolved only via a zone wildcard — see [Wildcard DNS detection](#wildcard-dns-detection) |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
-| `takeover_candidates_*.txt` | Takeover candidates — `DANGLING\|` lines (dangling CNAMEs with category, recommendation, evidence) and `NS_TAKEOVER\|` lines (unresolvable nameservers) |
+| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|` lines for unresolvable nameservers |
 | `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
