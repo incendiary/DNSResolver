@@ -89,7 +89,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Lines prefixed `WILDCARD\|` resolved only via a zone wildcard — see [Wildcard DNS detection](#wildcard-dns-detection) |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
 | `takeover_candidates_*.txt` | Takeover candidates — `DANGLING\|` lines (dangling CNAMEs with category, recommendation, evidence) and `NS_TAKEOVER\|` lines (unresolvable nameservers) |
-| `csp_matches_*.txt` | Domains resolving to cloud provider IP ranges (AWS, GCP, Azure — one line per match) |
+| `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix`. Region and service come from the provider's own published ranges — see [Cloud IP attribution](#cloud-ip-attribution) |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
 
@@ -116,6 +116,42 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 ```
 
 Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`) to run many domains concurrently without exhausting file descriptors or triggering DNS rate limits. Failed domains are collected after each pass and retried up to `--retries` times.
+
+## Cloud IP attribution
+
+Matching a resolved address to a cloud provider is only half an answer. `AWS` alone says
+little: of roughly 10,500 published AWS prefixes, over half carry the generic `AMAZON` tag,
+and the ones that matter operationally — `EC2` in a named region — look identical unless the
+provider's own metadata is kept.
+
+Each match is therefore written as a record carrying the provider's published region and
+service:
+
+```
+domain|ip|provider|region|service|prefix
+```
+
+```
+example.com|13.35.163.22|aws|GLOBAL|CLOUDFRONT|13.35.0.0/16
+example.com|3.11.53.7|aws|eu-west-2|EC2|3.8.0.0/14
+```
+
+The difference is the point: the first is a CDN edge address, the second an EC2 address in a
+specific region. Both are "AWS"; only one is a meaningful target.
+
+The end-of-run summary groups matches the same way:
+
+```
+  CSP matches — AWS: 6  GCP: 0  Azure: 0
+    by region and service:
+         4  aws  GLOBAL  CLOUDFRONT
+         2  aws  GLOBAL  GLOBALACCELERATOR
+```
+
+Metadata is taken verbatim from each provider (AWS `region`/`service`, GCP `scope`/`service`,
+Azure `region`/`systemService`). Where a provider publishes none, the fields read `unknown`
+rather than being inferred. DNSResolver does not judge which addresses are worth pursuing —
+it reports what the provider states and leaves that decision to the operator.
 
 ## Wildcard DNS detection
 

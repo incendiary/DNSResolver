@@ -75,7 +75,7 @@ def get_vendor_ips(domain_context, ip_version):
 
 
 def get_ip_matches(final_ips, vendor_ips_context, domain_context, ip_version):
-    matches = {vendor: set() for vendor in vendor_ips_context}
+    matches = {vendor: {} for vendor in vendor_ips_context}
     for ip in final_ips:
         if not is_ip_version(ip, ip_version):
             continue
@@ -102,12 +102,14 @@ def match_ip_with_vendors(ip_obj, vendor_ips_context, domain_context, matches):
                 domain_context.log_info(
                     f"IP {ip_obj} is in range {ip_range} for vendor {vendor}"
                 )
-                matches[vendor].add(str(ip_obj))
+                # Keep the prefix that matched — it is the key to the region and
+                # service the provider published for it.
+                matches[vendor][str(ip_obj)] = ip_range
 
 
 def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
     return {
-        vendor: list(matches_ipv4[vendor] | matches_ipv6[vendor])
+        vendor: {**matches_ipv4[vendor], **matches_ipv6[vendor]}
         for vendor in vendor_ips_context
     }
 
@@ -115,18 +117,33 @@ def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
 def log_and_write(
     vendor, matched_ips, domain, output_files, domain_context, written_lines
 ):
-    message = f"{domain} resolved to {vendor} IPs: {matched_ips}"
+    """
+    Write one line per matched address, as a handoff record for downstream
+    tooling: domain|ip|provider|region|service|prefix
 
-    # Deduplicate against an in-memory, run-scoped set of lines already
-    # written — avoids re-reading the whole output file on every call.
-    if message in written_lines:
-        return False
-
+    One address per line, pipe-delimited, because this file is consumed by
+    another tool rather than read as prose. Region and service come from the
+    provider's own published ranges and are what make a match actionable — an
+    address is only worth pursuing if you know where it is allocated from and
+    what it belongs to.
+    """
+    csp_ip_addresses = domain_context.get_csp_ip_addresses()
     file_path = output_files["standard"]["csp"]
-    with open(file_path, "a", encoding="utf-8") as file:
-        file.write(message + "\n")
-    written_lines.add(message)
+    wrote_any = False
 
-    domain_context.log_info(message)
+    for ip, prefix in sorted(matched_ips.items()):
+        region, service = csp_ip_addresses.describe(prefix)
+        message = f"{domain}|{ip}|{vendor}|{region}|{service}|{prefix}"
 
-    return True
+        # Deduplicate against an in-memory, run-scoped set of lines already
+        # written — avoids re-reading the whole output file on every call.
+        if message in written_lines:
+            continue
+
+        with open(file_path, "a", encoding="utf-8") as file:
+            file.write(message + "\n")
+        written_lines.add(message)
+        domain_context.log_info(message)
+        wrote_any = True
+
+    return wrote_any

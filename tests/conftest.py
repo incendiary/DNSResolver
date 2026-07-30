@@ -23,12 +23,33 @@ AWS_IPV6 = ["2600:1f00::/25"]
 AZURE_IPV4 = ["13.0.0.0/8", "20.0.0.0/8"]
 AZURE_IPV6 = ["2603:1000::/24"]
 
+# CIDR -> (region, service), as the providers publish it. A match is only
+# actionable downstream if the consumer knows where the address is allocated
+# from and what it belongs to.
+CSP_METADATA = {
+    "34.0.0.0/8": ("europe-west2", "Google Cloud"),
+    "35.0.0.0/8": ("us-central1", "Google Cloud"),
+    "2600:1900::/35": ("europe-west2", "Google Cloud"),
+    "3.0.0.0/8": ("eu-west-2", "EC2"),
+    "52.0.0.0/8": ("us-east-1", "AMAZON"),
+    "2600:1f00::/25": ("eu-west-2", "EC2"),
+    "13.0.0.0/8": ("uksouth", "AzureCloud"),
+    "20.0.0.0/8": ("global", "AzureCloud"),
+    "2603:1000::/24": ("uksouth", "AzureCloud"),
+}
+
 
 @pytest.fixture
 def csp_ips():
     """A real CSPIPAddresses instance populated with test ranges."""
     return CSPIPAddresses(
-        GCP_IPV4, GCP_IPV6, AWS_IPV4, AWS_IPV6, AZURE_IPV4, AZURE_IPV6
+        GCP_IPV4,
+        GCP_IPV6,
+        AWS_IPV4,
+        AWS_IPV6,
+        AZURE_IPV4,
+        AZURE_IPV6,
+        metadata=CSP_METADATA,
     )
 
 

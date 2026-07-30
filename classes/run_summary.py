@@ -32,10 +32,21 @@ class RunSummary:
             if ln.startswith("NS_TAKEOVER|")
         ]
 
+        # Handoff records: domain|ip|provider|region|service|prefix
         csp_lines = self._lines("csp")
-        aws_count = sum(1 for ln in csp_lines if "resolved to aws IPs" in ln)
-        gcp_count = sum(1 for ln in csp_lines if "resolved to gcp IPs" in ln)
-        azure_count = sum(1 for ln in csp_lines if "resolved to azure IPs" in ln)
+        csp_records = [ln.split("|") for ln in csp_lines if ln.count("|") >= 5]
+        aws_count = sum(1 for r in csp_records if r[2] == "aws")
+        gcp_count = sum(1 for r in csp_records if r[2] == "gcp")
+        azure_count = sum(1 for r in csp_records if r[2] == "azure")
+
+        # Region and service are what an operator acts on, so surface the
+        # breakdown rather than a bare provider tally.
+        csp_breakdown = {}
+        for record in csp_records:
+            provider, region, service = record[2], record[3], record[4]
+            csp_breakdown[(provider, region, service)] = (
+                csp_breakdown.get((provider, region, service), 0) + 1
+            )
 
         classified = {}
         unclassified = []
@@ -74,6 +85,12 @@ class RunSummary:
         print(
             f"  CSP matches — AWS: {aws_count}  GCP: {gcp_count}  Azure: {azure_count}"
         )
+        if csp_breakdown:
+            print("    by region and service:")
+            for (provider, region, service), count in sorted(
+                csp_breakdown.items(), key=lambda kv: (-kv[1], kv[0])
+            ):
+                print(f"      {count:>4}  {provider}  {region}  {service}")
         print(thin)
 
         if total_candidates == 0:

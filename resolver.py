@@ -21,18 +21,24 @@ async def run(env_manager):
     both the CLI entrypoint (resolver.py) and the Lambda entrypoint (lambda_handler.py)
     can share the same logic.
     """
-    gcp_ipv4, gcp_ipv6 = fetch_google_cloud_ip_ranges(
+    gcp_ipv4, gcp_ipv6, gcp_meta = fetch_google_cloud_ip_ranges(
         env_manager.output_dir, env_manager.extreme
     )
-    aws_ipv4, aws_ipv6 = fetch_aws_ip_ranges(
+    aws_ipv4, aws_ipv6, aws_meta = fetch_aws_ip_ranges(
         env_manager.output_dir, env_manager.extreme
     )
-    azure_ipv4, azure_ipv6 = fetch_azure_ip_ranges(
+    azure_ipv4, azure_ipv6, azure_meta = fetch_azure_ip_ranges(
         env_manager.output_dir, env_manager.extreme
     )
 
     csp_ip_addresses = CSPIPAddresses(
-        gcp_ipv4, gcp_ipv6, aws_ipv4, aws_ipv6, azure_ipv4, azure_ipv6
+        gcp_ipv4,
+        gcp_ipv6,
+        aws_ipv4,
+        aws_ipv6,
+        azure_ipv4,
+        azure_ipv6,
+        metadata={**gcp_meta, **aws_meta, **azure_meta},
     )
 
     env_manager.set_domains()

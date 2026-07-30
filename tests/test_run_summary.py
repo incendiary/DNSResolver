@@ -45,9 +45,9 @@ def test_counts_are_accurate(tmp_path, capsys):
             "resolved": "a.com|1.1.1.1\nb.com|2.2.2.2\n",
             "unresolved": "DNS resolution error for c.com: timeout\n",
             "csp": (
-                "a.com resolved to aws IPs: ['1.1.1.1']\n"
-                "b.com resolved to gcp IPs: ['2.2.2.2']\n"
-                "b2.com resolved to gcp IPs: ['3.3.3.3']\n"
+                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16\n"
+                "b.com|2.2.2.2|gcp|europe-west2|Google Cloud|2.2.0.0/16\n"
+                "b2.com|3.3.3.3|gcp|us-central1|Google Cloud|3.3.0.0/16\n"
             ),
         },
     )
@@ -212,3 +212,28 @@ def test_missing_file_treated_as_empty(tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert "No takeover candidates detected." in out
+
+
+def test_csp_breakdown_shows_region_and_service(tmp_path, capsys):
+    """
+    A provider tally alone is not actionable — an operator needs the region an
+    address is allocated from and the service it belongs to.
+    """
+    summary = _make_summary(
+        tmp_path,
+        {
+            "csp": (
+                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16\n"
+                "b.com|1.1.1.2|aws|eu-west-2|EC2|1.1.0.0/16\n"
+                "c.com|9.9.9.9|aws|us-east-1|AMAZON|9.9.0.0/16\n"
+            ),
+        },
+    )
+    summary.display(total_input=3, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "by region and service" in out
+    assert "aws  eu-west-2  EC2" in out
+    assert "aws  us-east-1  AMAZON" in out
+    # The busiest grouping is listed first.
+    assert out.index("eu-west-2") < out.index("us-east-1")
