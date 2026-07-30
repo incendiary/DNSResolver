@@ -210,6 +210,12 @@ merely that a function "runs"; assert the classification/precedence/error-handli
 
 ## Phase 7 — Feature-vs-goals gap analysis (the "how good is good enough?" answer)
 
+> ### ⚠️ This section was written against a misread goal — see [Correction](#correction-the-goal-this-review-assessed-was-wrong) at the end
+>
+> The analysis below treats cloud attribution as a supporting attribute of a dangling-CNAME
+> tool. That is not what the tool is for. The verdicts in the table are sound for the goal
+> stated, and the goal stated was wrong. Read the correction before relying on this.
+
 **Stated goal (README):** passive, DNS-only bulk resolution + CSP attribution + dangling-CNAME and
 NS-takeover detection + forensic evidence, practical for large lists. Active probing (HTTP/TLS/ports/
 screenshots) is *deliberately* out of scope.
@@ -218,7 +224,7 @@ screenshots) is *deliberately* out of scope.
 |---|---|---|
 | Bulk async DNS resolution | asyncio + Semaphore + retry loop | ✅ Met |
 | Multi-IP fidelity (A records) | All A IPs captured, pipe-delimited, all fed to CSP match | ✅ Met |
-| CSP attribution (AWS/GCP/Azure) | 3 providers, v4+v6, resilient Azure fetch | ✅ Met (perf caveat RA-C at scale) |
+| CSP attribution (AWS/GCP/Azure) | 3 providers, v4+v6, resilient Azure fetch | ⚠️ **Verdict withdrawn** — assessed as an attribute, not as the product. See correction |
 | Dangling CNAME takeover detection | Depth-limited chain follow, 60 classification patterns, self-ref handling | ✅ Met, strong |
 | NS takeover detection | Unresolvable-NS check | ✅ Met |
 | Forensic evidence | Async dig/nslookup capture | ✅ Met (CLI only, by design) |
@@ -331,3 +337,73 @@ and what it lacked was a green pipeline, three correctness fixes, and evidence. 
 It is **not** finished — F1 is a genuine capability gap, and scale performance is unproven. Neither
 is a gap between promise and delivery: the README claims neither wildcard handling nor benchmarked
 throughput.
+
+
+---
+
+## Correction: the goal this review assessed was wrong
+
+*Added 2026-07-30, after the maintainer corrected the premise.*
+
+This review assessed DNSResolver as a dangling-CNAME detector with cloud attribution as a
+supporting attribute. That is not what the tool is for, and the error runs through the whole
+gap analysis in Phase 7.
+
+### The actual purpose
+
+Two jobs of **equal** weight:
+
+1. **Dangling CNAME / subdomain takeover candidates.** Commodity — other tooling covers this.
+2. **A records resolving into claimable cloud IP space.** The differentiator.
+
+Job 2 is the one that is easy to under-value from the code. A dangling CNAME names a service,
+so intent can be read straight from DNS. A bare A record cannot: if the address is a cloud IP
+the owner released, whoever allocates it next controls what is served for that hostname, and
+**DNS gives no signal that this is so**. The only way to find out is to churn allocation in
+that provider and region until the address comes back to you.
+
+The tool identifies and hands off those targets. It never claims anything — that is a separate
+tool. Which means the output files are **machine-readable interfaces**, not reports.
+
+### What the misframing caused this review to miss
+
+Phase 7 recorded CSP attribution as "✅ Met". At the time, `imports/cloud_ip_ranges.py` kept
+only the CIDR string from each published prefix and discarded everything else:
+
+| Provider | Published | Kept |
+|---|---|---|
+| AWS | `ip_prefix`, `region`, `service`, `network_border_group` | prefix |
+| GCP | `ipv4Prefix`/`ipv6Prefix`, `service`, `scope` | prefix |
+| Azure | `addressPrefixes`, `region`, `systemService` | prefixes |
+
+The output read `example.com resolved to aws IPs: ['1.2.3.4']`. For a downstream consumer that
+is close to useless: over half of AWS's ~10,500 prefixes carry the generic `AMAZON` tag, and
+nothing distinguished a CloudFront edge from an EC2 address in a named region. The primary
+product was, in effect, unfinished — and the review called it met.
+
+Two further defects followed from the same blind spot, both found only after the reframing:
+
+- **Wildcard resolutions were fed to the cloud matcher unmarked.** A wildcarded zone in cloud
+  space emitted one record per enumerated subdomain, each a distinct line, none deduplicated —
+  the hosting platform's own addresses burying real targets in the primary output.
+- **`network_border_group` was discarded**, though it is the boundary an Elastic IP is actually
+  allocated from, and so the exact scope a consumer operates within.
+
+### Since fixed
+
+- Region, service and border group captured from all three providers.
+- Handoff records: `[WILDCARD|]domain|ip|provider|region|service|prefix|border_group`.
+- Summary groups by provider, region and service, and excludes wildcard records from target counts.
+- Wildcard detection documented as best-effort against large rotating pools.
+
+### The lesson
+
+This is a sharper version of the verification lesson recorded above. There, tests passed while
+the code was wrong. Here, the **review** was internally consistent, evidence-backed and
+thorough — while measuring against the wrong thing. Rigour applied to a wrong premise produces
+confident, well-supported, wrong conclusions.
+
+The premise came from the README, which led with dangling-CNAME detection and listed cloud
+matching as a bullet. It was a reasonable misreading, available to anyone. That is why
+[`AGENTS.md`](AGENTS.md) now states the purpose explicitly at repo root: so the next reader,
+human or agent, does not have to infer it.
