@@ -329,3 +329,26 @@ def test_no_cloud_addresses_says_so_explicitly(tmp_path, capsys):
     summary.display(total_input=1, failed_count=0)
 
     assert "No cloud-hosted addresses found." in capsys.readouterr().out
+
+
+def test_catch_all_zone_records_are_also_excluded_from_targets(tmp_path, capsys):
+    """
+    Both verdicts are excluded from the target count. A catch-all served from a
+    pool larger than the probe sampled is still a catch-all — counting it as a
+    target is the failure this two-tier reporting exists to prevent.
+    """
+    summary = _make_summary(
+        tmp_path,
+        {
+            "csp": (
+                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16|eu-west-2\n"
+                "WILDCARD|b.com|2.2.2.2|aws|eu-west-1|EC2|2.2.0.0/16|eu-west-1\n"
+                "WILDCARD_ZONE|c.com|3.3.3.3|aws|us-east-1|EC2|3.3.0.0/16|us-east-1\n"
+            ),
+        },
+    )
+    summary.display(total_input=3, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "AWS: 1" in out, "only the non-wildcard address is a target"
+    assert "excluded (wildcard) :    2" in out

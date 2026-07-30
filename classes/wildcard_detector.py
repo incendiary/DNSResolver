@@ -91,17 +91,46 @@ class WildcardDetector:
         )
         return frozenset(addresses)
 
-    async def is_wildcard_resolution(self, domain, resolved_ips):
+    async def classify(self, domain, resolved_ips):
         """
-        True when every address for this domain comes from the zone wildcard, so
-        the name resolves only because the zone answers for anything.
+        Report the two things DNS can actually establish about a resolution.
 
-        A host resolving to addresses outside the wildcard set is real and is not
-        flagged, even if it also shares one with the wildcard.
+        Returns one of:
+
+        `None`
+            The zone does not answer for random names. The resolution stands on
+            its own and nothing is claimed about it.
+
+        `"WILDCARD"`
+            Every address matches ones the probe observed. This resolution is a
+            catch-all answer — the strongest statement available.
+
+        `"WILDCARD_ZONE"`
+            The zone answers for anything, but these addresses were not among
+            those observed. Two causes are indistinguishable here: a catch-all
+            served from a pool larger than the probe sampled, or a genuine host.
+            Either way the resolution is not evidence the name exists, because
+            everything in this zone resolves.
+
+        Separating the two matters because the earlier single verdict conflated
+        them. Testing addresses against a sampled set silently misses catch-alls
+        behind large rotating fleets, and reporting only that test made a miss
+        look like a clean result. The zone-level fact is always reliable; the
+        address-level one is precise but incomplete. Both are reported so the
+        consumer can weigh them rather than inherit a false binary.
         """
-        if not resolved_ips:
-            return False
         wildcard = await self.wildcard_ips(domain)
         if not wildcard:
-            return False
-        return set(resolved_ips).issubset(wildcard)
+            return None
+        if resolved_ips and set(resolved_ips).issubset(wildcard):
+            return "WILDCARD"
+        return "WILDCARD_ZONE"
+
+    async def is_wildcard_resolution(self, domain, resolved_ips):
+        """
+        True only for a confirmed catch-all answer.
+
+        Retained for callers that want the high-confidence signal alone; prefer
+        `classify` where the zone-level fact also matters.
+        """
+        return await self.classify(domain, resolved_ips) == "WILDCARD"

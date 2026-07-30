@@ -19,7 +19,7 @@ def dns_handler():
     handler = MagicMock()
     handler.resolve_domain_async = AsyncMock(return_value=(True, ["1.2.3.4"]))
     # Default to "no wildcard" so these tests exercise the ordinary path.
-    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
+    handler.wildcard_detector.classify = AsyncMock(return_value=None)
     return handler
 
 
@@ -73,7 +73,7 @@ async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
     third return value so main_async can aggregate them.
     """
     handler = MagicMock()
-    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
+    handler.wildcard_detector.classify = AsyncMock(return_value=None)
     handler.resolve_domain_async = AsyncMock(return_value=(True, ["1.2.3.4"]))
 
     with patch("imports.domain_processor.perform_csp_checks"):
@@ -98,7 +98,7 @@ async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
 
 async def test_csp_checks_not_called_on_failure(mock_env_manager, csp_ips, pbar):
     handler = MagicMock()
-    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
+    handler.wildcard_detector.classify = AsyncMock(return_value=None)
     handler.resolve_domain_async = AsyncMock(return_value=(False, []))
 
     with patch("imports.domain_processor.perform_csp_checks") as mock_csp:
@@ -113,7 +113,7 @@ async def test_returns_failure_and_empty_ips_on_failure(
     mock_env_manager, csp_ips, pbar
 ):
     handler = MagicMock()
-    handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=False)
+    handler.wildcard_detector.classify = AsyncMock(return_value=None)
     handler.resolve_domain_async = AsyncMock(return_value=(False, []))
 
     with patch("imports.domain_processor.perform_csp_checks"):
@@ -132,7 +132,7 @@ async def test_wildcard_resolution_is_marked_in_output(
     A domain resolving only to its zone's wildcard addresses is written with a
     WILDCARD| prefix, so a catch-all answer can be told from a real host.
     """
-    dns_handler.wildcard_detector.is_wildcard_resolution = AsyncMock(return_value=True)
+    dns_handler.wildcard_detector.classify = AsyncMock(return_value="WILDCARD")
 
     with patch("imports.domain_processor.perform_csp_checks"):
         await process_domain_async(
@@ -155,3 +155,23 @@ async def test_ordinary_resolution_is_not_prefixed(
     written = [c[0][1] for c in mock_env_manager.write_to_file.call_args_list]
     assert any(ln == "real.example.com|1.2.3.4" for ln in written)
     assert not any(ln.startswith("WILDCARD|") for ln in written)
+
+
+async def test_catch_all_zone_resolution_is_marked_distinctly(
+    mock_env_manager, csp_ips, dns_handler, pbar
+):
+    """
+    A resolution in a zone that answers for anything, whose addresses were not
+    among those sampled, is marked WILDCARD_ZONE rather than WILDCARD. The
+    distinction is the point: one is a confirmed catch-all, the other is
+    unverifiable, and collapsing them hides catch-alls behind rotating pools.
+    """
+    dns_handler.wildcard_detector.classify = AsyncMock(return_value="WILDCARD_ZONE")
+
+    with patch("imports.domain_processor.perform_csp_checks"):
+        await process_domain_async(
+            "maybe.example.com", mock_env_manager, pbar, csp_ips, dns_handler
+        )
+
+    written = [c[0][1] for c in mock_env_manager.write_to_file.call_args_list]
+    assert any(ln.startswith("WILDCARD_ZONE|maybe.example.com|") for ln in written)

@@ -105,7 +105,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 
 | File | Contents |
 |------|----------|
-| `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Lines prefixed `WILDCARD\|` resolved only via a zone wildcard — see [Wildcard DNS detection](#wildcard-dns-detection) |
+| `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Prefixed `WILDCARD\|` (confirmed catch-all) or `WILDCARD_ZONE\|` (zone answers for anything, unverifiable) — see [Wildcard DNS detection](#wildcard-dns-detection) |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
 | `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|` lines for unresolvable nameservers |
 | `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
@@ -160,9 +160,10 @@ and advertised from. It usually mirrors the region, but differs for Local Zones 
 which is precisely where the distinction matters. GCP and Azure publish no equivalent and it
 reads `unknown` for them.
 
-Records for a resolution that came from a zone wildcard are prefixed `WILDCARD|`. Those addresses
-belong to the hosting platform and are in active use, so they are not targets; they are reported
-for completeness and excluded from the summary's counts.
+Records from a catch-all zone carry the same marker as the resolution output — `WILDCARD|` or
+`WILDCARD_ZONE|`. In such a zone an address cannot be attributed to the domain rather than to the
+hosting platform, so both are reported for completeness and excluded from the summary's target
+counts.
 
 The difference is the point: the first is a CDN edge address, the second an EC2 address in a
 specific region. Both are "AWS"; only one is a meaningful target.
@@ -204,16 +205,26 @@ The end-of-run summary reports the count separately:
     of which wildcard  :      2  (catch-all zone — resolution proves nothing)
 ```
 
-Notes:
+Two verdicts are reported, because only one of the two questions is reliably answerable:
 
-- A host resolving to any address **outside** the wildcard set is treated as real and is not flagged,
-  even if it also shares one with the wildcard.
+| Marker | Meaning |
+|---|---|
+| `WILDCARD` | Every address matched ones the probe observed — a confirmed catch-all answer. |
+| `WILDCARD_ZONE` | The zone answers for anything, but these addresses were not among those sampled. Could be a catch-all served from a pool larger than the probe saw, or a genuine host — DNS cannot tell. |
+| *(none)* | The zone does not answer for random names. Nothing is claimed. |
+
+Whether a **zone** is wildcarded is always knowable, by probing random labels. Whether a
+**particular answer** came from that wildcard often is not: a large rotating fleet serves
+addresses a couple of probes never see. Reporting only the address-level test made such a
+catch-all look like a clean result, so both facts are now reported separately.
+
+Other notes:
+
 - Results are cached per zone, so a scan costs one probe round per zone, not one per domain. Zones
   with no wildcard are probed once and then left completely untouched.
 - Both IPv4 and IPv6 are probed, so a dual-stack catch-all is matched correctly.
-- Detection is DNS-only and cannot distinguish a real host from a wildcard when the host genuinely
-  shares the wildcard's addresses — GitHub Pages sites are a common example, as they all resolve to
-  the same set. Confirming those requires active probing, which is deliberately out of scope.
+- Cloud matches inside a catch-all zone carry the same marker and are excluded from target counts:
+  an address there cannot be attributed to the domain rather than to the hosting platform.
 
 ## Configuration
 
@@ -312,14 +323,11 @@ self-referential and non-existent CNAMEs, IPv6 (AAAA) resolution, and wildcard D
 - **Dangling-CNAME classification is first-match-wins** over the patterns in `config.json`, which are
   ordered specific to general. A target matching no pattern is reported as `unknown` rather than
   guessed at.
-- **Wildcard detection cannot separate a real host from a catch-all** when the host genuinely shares
-  the wildcard's addresses (GitHub Pages is the common case). Confirming those requires active
-  probing, which is out of scope.
-- **Wildcard detection is unreliable against large rotating address pools.** Where a catch-all is
-  served by a big load-balanced fleet (Heroku, for example), two probes capture only part of the
-  rotation, so a later name resolving to different addresses in the same fleet is not recognised as
-  a wildcard answer. Detection is best-effort: a match is good evidence, a miss is not evidence of
-  absence.
+- **Inside a catch-all zone, a real host cannot be distinguished from the wildcard.** Every name
+  resolves, so resolution carries no information either way. This is reported rather than guessed:
+  `WILDCARD` marks a confirmed catch-all answer, `WILDCARD_ZONE` marks a zone that answers for
+  anything where these particular addresses were not among those sampled. Separating a real host
+  from a catch-all needs an HTTP request, which is out of scope.
 - **A takeover candidate is only recorded when a CNAME actually exists.** A name that simply does not
   resolve is reported as unresolved, not as a candidate — there is nothing to claim.
 

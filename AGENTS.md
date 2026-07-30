@@ -171,17 +171,17 @@ bash ~/.claude/skills/local-ci/local-ci.sh --workflow ci.yml
   name under the same platform return byte-identical DNS. Distinguishing them needs an HTTP
   request, which §1 rules out. The flag means *"resolution proves nothing in this zone"*,
   not *"this host does not exist"*.
-- **Wildcard detection is best-effort against rotating pools.** The check asks whether a
-  resolution falls entirely inside the addresses a random-label probe returned. Where the
-  catch-all is a large load-balanced fleet, two probes see only part of the rotation and a
-  later name lands outside the observed set, so it is not recognised. Verified live against
-  a platform whose wildcard rotates across regions: of two fabricated names, one was marked
-  and one was not. A match is good evidence; a miss is not evidence of absence.
+- **Inside a catch-all zone, a real host cannot be told from the wildcard.** Everything
+  resolves, so resolution carries no information. Two verdicts are reported rather than one
+  guess: `WILDCARD` (addresses matched those the probe observed — a confirmed catch-all) and
+  `WILDCARD_ZONE` (the zone answers for anything, but these addresses were not sampled).
 
-  A zone-level semantic (mark every resolution in a zone known to answer for anything, rather
-  than testing each address against a sampled set) would be more robust and is arguably more
-  honest, since DNS cannot discriminate within such a zone anyway. That is an open design
-  decision, not an oversight.
+  This replaced a single address-level test that silently missed catch-alls behind large
+  rotating fleets: two probes see only part of the rotation, so a later name landed outside
+  the observed set and was reported as a clean result. Verified live against a platform whose
+  wildcard rotates across regions — of two fabricated names, the old logic caught one, the
+  two-tier catches both. Whether a **zone** is wildcarded is always knowable; whether a
+  **particular answer** came from it often is not, and the output now says which is which.
 - **Performance at scale is reasoned, not measured.** Known cliffs were removed (per-IP CIDR
   parsing, O(n²) dedupe) but no benchmark has been run against a large list.
 
