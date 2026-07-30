@@ -86,33 +86,35 @@ def test_get_vendor_ips_unknown_version_returns_empty(ctx):
 def test_match_ip_with_vendors_records_match(ctx):
     ip_obj = ipaddress.IPv4Address("34.1.2.3")
     vendor_ips = {"gcp": ["34.0.0.0/8"], "aws": [], "azure": []}
-    matches = {"gcp": set(), "aws": set(), "azure": set()}
+    matches = {"gcp": {}, "aws": {}, "azure": {}}
 
     match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
 
     assert "34.1.2.3" in matches["gcp"]
-    assert matches["aws"] == set()
+    # The matched prefix is retained — it is the key to region and service.
+    assert matches["gcp"]["34.1.2.3"] == "34.0.0.0/8"
+    assert matches["aws"] == {}
 
 
 def test_match_ip_with_vendors_no_match(ctx):
     ip_obj = ipaddress.IPv4Address("1.2.3.4")
     vendor_ips = {"gcp": ["34.0.0.0/8"]}
-    matches = {"gcp": set()}
+    matches = {"gcp": {}}
 
     match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
 
-    assert matches["gcp"] == set()
+    assert matches["gcp"] == {}
 
 
 def test_match_ip_with_vendors_ignores_invalid_range(ctx):
     """A bad CIDR string should not crash — it's logged and skipped."""
     ip_obj = ipaddress.IPv4Address("1.2.3.4")
     vendor_ips = {"gcp": ["not-a-valid-cidr"]}
-    matches = {"gcp": set()}
+    matches = {"gcp": {}}
 
     match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
 
-    assert matches["gcp"] == set()
+    assert matches["gcp"] == {}
 
 
 # ---------------------------------------------------------------------------
@@ -121,21 +123,22 @@ def test_match_ip_with_vendors_ignores_invalid_range(ctx):
 
 
 def test_merge_matches_combines_ipv4_and_ipv6():
-    v4 = {"gcp": {"1.2.3.4"}, "aws": set()}
-    v6 = {"gcp": {"::1"}, "aws": set()}
+    """Both families merge, each address keeping the prefix it matched."""
+    v4 = {"gcp": {"1.2.3.4": "1.2.0.0/16"}, "aws": {}}
+    v6 = {"gcp": {"::1": "::/64"}, "aws": {}}
     vendor_context = {"gcp": [], "aws": []}
 
     result = merge_matches(v4, v6, vendor_context)
 
-    assert set(result["gcp"]) == {"1.2.3.4", "::1"}
-    assert result["aws"] == []
+    assert result["gcp"] == {"1.2.3.4": "1.2.0.0/16", "::1": "::/64"}
+    assert result["aws"] == {}
 
 
 def test_merge_matches_empty_sets():
-    v4 = {"gcp": set()}
-    v6 = {"gcp": set()}
+    v4 = {"gcp": {}}
+    v6 = {"gcp": {}}
     result = merge_matches(v4, v6, {"gcp": []})
-    assert result["gcp"] == []
+    assert result["gcp"] == {}
 
 
 # ---------------------------------------------------------------------------
@@ -146,13 +149,13 @@ def test_merge_matches_empty_sets():
 def test_get_ip_matches_finds_gcp_ipv4(ctx, csp_ips):
     # 34.1.2.3 falls in GCP's 34.0.0.0/8 range (from conftest)
     result = get_ip_matches(["34.1.2.3"], get_vendor_ips(ctx, 4), ctx, ip_version=4)
-    assert "34.1.2.3" in result["gcp"]
+    assert result["gcp"]["34.1.2.3"] == "34.0.0.0/8"
 
 
 def test_get_ip_matches_skips_wrong_ip_version(ctx):
     # An IPv6 address should be skipped when looking for IPv4 matches
     result = get_ip_matches(["2600:1900::1"], get_vendor_ips(ctx, 4), ctx, ip_version=4)
-    assert all(len(s) == 0 for s in result.values())
+    assert all(len(m) == 0 for m in result.values())
 
 
 # ---------------------------------------------------------------------------
@@ -165,10 +168,17 @@ def test_log_and_write_creates_entry(tmp_path, ctx):
     out_file.touch()
     output_files = {"standard": {"csp": str(out_file)}}
 
-    result = log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx, set())
+    result = log_and_write(
+        "gcp", {"34.1.2.3": "34.0.0.0/8"}, "example.com", output_files, ctx, set()
+    )
 
     assert result is True
-    assert "example.com resolved to gcp IPs" in out_file.read_text()
+    # One handoff record per address: domain|ip|provider|region|service|prefix.
+    # Region and service are what make the match actionable downstream.
+    assert (
+        out_file.read_text().strip()
+        == "example.com|34.1.2.3|gcp|europe-west2|Google Cloud|34.0.0.0/8"
+    )
 
 
 def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
@@ -179,10 +189,20 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
     written_lines = set()
 
     first = log_and_write(
-        "gcp", ["34.1.2.3"], "example.com", output_files, ctx, written_lines
+        "gcp",
+        {"34.1.2.3": "34.0.0.0/8"},
+        "example.com",
+        output_files,
+        ctx,
+        written_lines,
     )
     second = log_and_write(
-        "gcp", ["34.1.2.3"], "example.com", output_files, ctx, written_lines
+        "gcp",
+        {"34.1.2.3": "34.0.0.0/8"},
+        "example.com",
+        output_files,
+        ctx,
+        written_lines,
     )
 
     assert first is True
@@ -207,9 +227,16 @@ def test_log_and_write_no_full_file_read(tmp_path, ctx, monkeypatch):
 
     monkeypatch.setattr("builtins.open", guarded_open)
 
-    log_and_write("gcp", ["34.1.2.3"], "example.com", output_files, ctx, written_lines)
+    log_and_write(
+        "gcp",
+        {"34.1.2.3": "34.0.0.0/8"},
+        "example.com",
+        output_files,
+        ctx,
+        written_lines,
+    )
 
-    assert "example.com resolved to gcp IPs" in out_file.read_text()
+    assert "example.com|34.1.2.3|gcp|" in out_file.read_text()
 
 
 def test_log_and_write_substring_line_not_suppressed(tmp_path, ctx):
@@ -221,14 +248,18 @@ def test_log_and_write_substring_line_not_suppressed(tmp_path, ctx):
     output_files = {"standard": {"csp": str(out_file)}}
     written_lines = set()
 
-    # "example.com resolved to gcp IPs: ['1.1.1.1']" contains
-    # "ple.com resolved to gcp IPs: ['1.1.1.1']" as a substring
+    # "example.com|34.1.2.3|..." contains "ple.com|34.1.2.3|..." as a substring
     # (example.com = exam + ple.com), but they are different domains/lines.
     first = log_and_write(
-        "gcp", ["1.1.1.1"], "example.com", output_files, ctx, written_lines
+        "gcp",
+        {"34.1.2.3": "34.0.0.0/8"},
+        "example.com",
+        output_files,
+        ctx,
+        written_lines,
     )
     second = log_and_write(
-        "gcp", ["1.1.1.1"], "ple.com", output_files, ctx, written_lines
+        "gcp", {"34.1.2.3": "34.0.0.0/8"}, "ple.com", output_files, ctx, written_lines
     )
 
     assert first is True
@@ -316,11 +347,11 @@ def test_parse_network_equivalence_ip_inside_and_outside_range(ctx):
     inside_ip = ipaddress.IPv4Address("34.1.2.3")
     outside_ip = ipaddress.IPv4Address("8.8.8.8")
 
-    matches = {"gcp": set(), "aws": set(), "azure": set()}
+    matches = {"gcp": {}, "aws": {}, "azure": {}}
     match_ip_with_vendors(inside_ip, vendor_ips, ctx, matches)
     match_ip_with_vendors(outside_ip, vendor_ips, ctx, matches)
 
-    assert matches == {"gcp": {"34.1.2.3"}, "aws": set(), "azure": set()}
+    assert matches == {"gcp": {"34.1.2.3": "34.0.0.0/8"}, "aws": {}, "azure": {}}
 
 
 def test_parse_network_is_memoised_across_calls():
@@ -348,7 +379,7 @@ def test_match_ip_with_vendors_reuses_cached_network(ctx):
     re-parse the CIDR strings for each IP."""
     parse_network.cache_clear()
     vendor_ips = {"gcp": ["34.0.0.0/8", "35.0.0.0/8"], "aws": [], "azure": []}
-    matches = {"gcp": set(), "aws": set(), "azure": set()}
+    matches = {"gcp": {}, "aws": {}, "azure": {}}
 
     ips = [ipaddress.IPv4Address(f"34.1.2.{i}") for i in range(10)]
     for ip in ips:
@@ -359,3 +390,44 @@ def test_match_ip_with_vendors_reuses_cached_network(ctx):
     # regardless of how many IPs (10) were checked against them.
     assert info.misses == 2
     assert info.hits == 10 * 2 - 2
+
+
+def test_handoff_record_carries_region_and_service_end_to_end(
+    tmp_path, mock_env_manager, ctx
+):
+    """
+    The whole point of the CSP output: a downstream tool must be able to read
+    where an address is allocated from and what it belongs to, without going
+    back to the provider's range files.
+    """
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
+
+    # 3.1.2.3 falls in AWS 3.0.0.0/8, published as eu-west-2 / EC2 in conftest.
+    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3"])
+
+    line = out_file.read_text().strip()
+    assert line == "example.com|3.1.2.3|aws|eu-west-2|EC2|3.0.0.0/8"
+
+    domain, ip, provider, region, service, prefix = line.split("|")
+    assert (provider, region, service) == ("aws", "eu-west-2", "EC2")
+
+
+def test_each_matched_address_gets_its_own_record(tmp_path, mock_env_manager, ctx):
+    """
+    One line per address, not one line per domain with a list. Addresses in the
+    same provider can sit in different regions, and a consumer acts per address.
+    """
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
+
+    # 3.x -> eu-west-2/EC2, 52.x -> us-east-1/AMAZON (both AWS, different regions)
+    perform_csp_checks(ctx, mock_env_manager, ["3.1.2.3", "52.1.2.3"])
+
+    lines = sorted(ln for ln in out_file.read_text().splitlines() if ln)
+    assert lines == [
+        "example.com|3.1.2.3|aws|eu-west-2|EC2|3.0.0.0/8",
+        "example.com|52.1.2.3|aws|us-east-1|AMAZON|52.0.0.0/8",
+    ]

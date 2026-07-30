@@ -203,30 +203,30 @@ believing it works.
 
 ---
 
-## 9. In flight
+## 9. Recently landed
 
-Region and service metadata capture is partially implemented on the branch
-`feat/cloud-region-service`. All three providers publish it and the code currently discards
-it at parse time:
+Region and service metadata capture is **done**. All three providers publish it and the code
+previously discarded it at parse time:
 
-| Provider | Publishes | Historically kept |
+| Provider | Publishes | Now captured as |
 |---|---|---|
-| AWS | `ip_prefix`, `region`, `service`, `network_border_group` | prefix only |
-| GCP | `ipv4Prefix`/`ipv6Prefix`, `service`, `scope` | prefix only |
-| Azure | `addressPrefixes`, `region`, `systemService` | prefixes only |
+| AWS | `ip_prefix`, `region`, `service` | region, service |
+| GCP | `ipv4Prefix`/`ipv6Prefix`, `service`, `scope` | scope → region, service |
+| Azure | `addressPrefixes`, `region`, `systemService` | region, systemService → service |
 
-Without region and service a cloud match is not actionable downstream — the consumer needs
-to know where to allocate and what the address belongs to. Of AWS's ~10,500 prefixes, over
-half are the generic `AMAZON` tag, so "it is an AWS IP" is close to no information; `EC2`
-in a named region is the useful signal.
-
-The work extends the fetchers to return `(ipv4, ipv6, metadata)` where metadata maps
-CIDR → `(region, service)`, carries it on `CSPIPAddresses`, and writes one handoff record
-per matched address:
+Fetchers return `(ipv4, ipv6, metadata)` where metadata maps CIDR → `(region, service)`.
+`CSPIPAddresses` carries it and exposes `describe(cidr)`. Each matched address is written as
+one handoff record:
 
 ```
 domain|ip|provider|region|service|prefix
 ```
 
-This changes the `csp_matches_*.txt` contract from prose to structured fields, and the
-associated tests must be updated to assert the new contract rather than relaxed.
+Why it mattered: over half of AWS's ~10,500 prefixes carry the generic `AMAZON` tag, so
+"it is an AWS IP" was close to no information. A live run against AWS-fronted hosts now
+reports `CLOUDFRONT` and `GLOBALACCELERATOR` rather than a flat provider tally — telling an
+operator at a glance that these are CDN edges, not EC2 addresses in a region, and so not
+worth pursuing.
+
+Fields are taken verbatim from the provider; where none is published they read `unknown`
+rather than being inferred. The tool does not judge what is claimable — §1 applies.
