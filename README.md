@@ -101,6 +101,11 @@ sort -u -o domains.txt domains.txt
 
 ## Output
 
+> **Formats changed in v2.0.0.** `csp_matches_*.txt` moved from prose to structured fields,
+> `resolution_results_*.txt` and `csp_matches_*.txt` may carry a `WILDCARD_ZONE|` prefix, and
+> `takeover_candidates_*.txt` gained hop count and chain path. Anything parsing v1 output needs
+> updating. These files are consumed by other tooling, so their formats are treated as contracts.
+
 Each run creates a timestamped subdirectory under the output directory containing:
 
 | File | Contents |
