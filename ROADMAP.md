@@ -1,7 +1,14 @@
 # DNSResolver — Roadmap
 
-Single source of truth for planned work. Derived from [`REVIEW.md`](REVIEW.md) (holistic review,
-2026-07-15). Items are bundled into **atomic point-release PRs of similar nature** (per
+Single source of truth for planned work.
+
+> **On its derivation.** The plan below came from [`REVIEW.md`](REVIEW.md) (2026-07-15), which
+> assessed the tool against a misread goal — cloud attribution treated as a supporting attribute
+> rather than as one of two co-equal products. That review now carries a correction, and the work
+> recorded under "Since v1.12.0" came from the reframing rather than from this plan. Read
+> [`AGENTS.md`](AGENTS.md) for what the tool is actually for before planning further work.
+
+Derived from [`REVIEW.md`](REVIEW.md) (holistic review, 2026-07-15). Items are bundled into **atomic point-release PRs of similar nature** (per
 devops-practices). Each group has a detailed, self-contained execution plan under
 [`docs/roadmap/`](docs/roadmap/) written so a less-capable agent can run it independently.
 
@@ -106,11 +113,52 @@ self-referential CNAME classification, v1.10.4 README corrections, plus the tool
 
 Every item above has shipped. What remains is not roadmap work:
 
-- **PR 104 — `feat: CNAME chain depth tracking in dangling output`.** An open feature PR, authored
-  separately. Needs review on its merits; not part of this roadmap.
+- ~~**PR 104 — CNAME chain depth tracking.**~~ Merged. Rebased against the reframing work with only
+  a trivial conflict; the chain tracking coexists with the `depth > 0` self-referential gating and
+  the CNAME-required rule.
 - **Performance at true scale is unmeasured.** PR-C removed the known cliffs (per-IP CIDR parsing,
   O(n²) dedupe) but no benchmark has been run against a 10k+ domain list. The improvement is
   reasoned, not demonstrated.
 - **Wildcard detection is DNS-only by design.** It cannot separate a real host from a catch-all when
   the host genuinely shares the wildcard's addresses. Resolving that needs active probing, which is
   deliberately out of scope for this tool.
+
+
+---
+
+## Since v1.12.0
+
+Work that came from correcting the tool's stated purpose rather than from the plan above. All
+merged; none of it was foreseen by the original review, because the review measured the wrong thing.
+
+| PR | Change |
+|---|---|
+| 149 | `AGENTS.md` — states the actual purpose at repo root, so the next reader does not have to infer it |
+| 150 | Cloud region and service captured from all three providers; `csp_matches` becomes structured handoff records |
+| 151 | Wildcard answers kept out of cloud target counts; AWS `network_border_group` captured |
+| 104 | CNAME chain depth and hop path in dangling output |
+| 152 | README and `REVIEW.md` reframed — both purposes stated as co-equal, the review's premise corrected in place |
+| 153 | Wildcard reported as two verdicts: confirmed catch-all versus catch-all zone |
+
+The through-line: the cloud-matching path is one of the tool's two products and had never been
+assessed as such. It was discarding every field that made a match actionable, counting hosting
+platform addresses as targets, and reporting a wildcard test that silently missed rotating pools.
+
+## Outstanding
+
+Nothing blocking. Two items are genuinely open:
+
+- [ ] **Performance at scale is unmeasured.** The known cliffs were removed (per-IP CIDR parsing,
+      O(n²) dedupe) but no benchmark has been run against a 10k+ domain list. The improvement is
+      reasoned, not demonstrated — and "practical for large domain lists" is a claim in the README.
+- [ ] **The downstream consumer needs updating.** Output contracts changed materially:
+      `csp_matches_*.txt` went from prose to seven structured fields, `resolution_results_*.txt` and
+      `csp_matches_*.txt` gained a `WILDCARD_ZONE|` prefix, and `takeover_candidates_*.txt` gained
+      hop count and chain path. Anything parsing the old formats will break. Outside this repo, but
+      a real dependency of the work above.
+
+## Shipped (v1.0 – v1.12.0)
+
+See GitHub Releases for the full history. Highlights: consolidated output files, an actionable
+end-of-run summary, correct handling of self-referential and non-existent CNAMEs, IPv6 (AAAA)
+resolution, wildcard DNS detection, and 90 takeover fingerprints.
