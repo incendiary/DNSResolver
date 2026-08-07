@@ -436,8 +436,8 @@ Two items are already known to be open, from `ROADMAP.md`:
 
 Neither is necessarily your priority. Confirm with the maintainer.
 
-A third is open and blocking: **TruffleHog fails on push events** — see §10. That one needs
-settling before it blocks other merges.
+A third is worth knowing about: **TruffleHog failed once on a push event** and has not
+reproduced — see §10.
 
 ### Immediate housekeeping
 
@@ -467,8 +467,14 @@ actually want before you decide what "better" means.**
 
 ## 10. Known open item — TruffleHog failing on push events
 
-**Status: unresolved, handed to you deliberately. Investigate before merging anything that
-depends on it.**
+**Status: not reproducible on re-run. Most likely a flaky false positive, but not proven —
+watch for it.**
+
+It failed once, blocking a merge. The same branch with *more* content added then passed on both
+event types. Since the Lob detector's "verified" step makes a live API call, an inconsistent
+response there is the most plausible cause. Recorded because a scanner that fails intermittently
+will eventually block someone at an inconvenient moment, and because "it passed the second time"
+is not the same as knowing why.
 
 The `secret-scan.yml` workflow runs two jobs, `gitleaks` and `trufflehog`, and both are required
 status checks. On the branch that added this document, `trufflehog` **failed on the push event
@@ -476,6 +482,8 @@ while passing on the pull_request event**, blocking the merge.
 
 ### What is known
 
+- It has failed **once**, and passed on every run before and since — including a re-run of the
+  same branch carrying additional content.
 - The failure reports `Found verified Lob result` **seven times**, then exits 183.
   "Verified" means TruffleHog believes it validated the credential against Lob's API.
 - Every previous push-event scan on `main` passed — this is new to that branch.
