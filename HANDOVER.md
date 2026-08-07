@@ -220,6 +220,73 @@ Beyond the generic frame, these are genuinely open and worth putting to the main
 
 ---
 
+## 4b. The codebase review method (8 phases)
+
+The previous agent used a structured review method. It is reproduced here because you will not
+have it, and because the maintainer has asked for this kind of review. **Run it against a goal
+you have confirmed in §4, not against the one you infer.** That is the whole lesson of this
+project.
+
+Work the phases in order. A null finding is still a finding — record it.
+
+**Phase 1 — Architecture map.** Identify the layers. List each module with a one-line purpose.
+Note any module without a single clear responsibility. Trace the data flow: where input enters,
+how it moves, where it leaves. Output as a table of module / responsibility / concerns.
+
+**Phase 2 — Risk inventory.** Classify every risk and score it 1–5.
+
+| Category | Look for |
+|---|---|
+| Security | Injection, auth bypass, secret exposure, dependency CVEs |
+| Scalability | Unbounded loops, per-item work that should be per-run, in-memory state |
+| Reliability | Uncaught exceptions, missing retries, hard exits, no fallback on external calls |
+| Maintainability | Long functions, deep nesting, missing tests on critical paths |
+| Dependency | Unpinned versions, abandoned packages, single-purpose deps |
+
+Output a table: number / category / finding / score / file:line.
+
+**Phase 3 — Predictive failure analysis.** For every risk scoring 3 or above, write: what
+observably happens; the trigger condition; whether it fails today, at 10× load, or on the next
+upgrade; the minimum fix; and the full fix. Be concrete — an error message or a corrupted output,
+not "may cause problems".
+
+**Phase 4 — Test coverage gaps.** List critical paths with no coverage. Flag tests that assert so
+broadly they would pass even if the logic were wrong. Rank the three highest-value additions by
+the risk score of what they leave uncovered.
+
+**Phase 5 — Dependency audit.** For each dependency: pinned, ranged or floating; date of last
+upstream release; known CVEs (`pip-audit -r requirements.txt`). Note any dependency doing one
+small thing that could be inlined.
+
+**Phase 6 — CI/CD gaps.** Does the pipeline run tests on every PR? Lint and format? Scan for
+secrets? Pin action versions? Run on a schedule to catch environment drift? Flag every "no" and
+write the YAML that would fix it.
+
+**Phase 7 — Feature-versus-goals gap analysis.** Map current capability against the *stated*
+goal, and say plainly where it falls short. **This is the phase that went wrong here.** It was
+completed rigorously against a goal that had been misread, and returned a confident "meets its
+goals" for a component that was, judged correctly, unfinished. Confirm the goal in §4 before
+writing this phase, and state which goal you are measuring against.
+
+**Phase 8 — Write it up.** Executive summary (3–5 sentences: top risk, most urgent fix, overall
+health), then the phase outputs, then an action roadmap. Each action item must be executable by
+someone who has not read the review:
+
+```
+### RA-N: <short imperative title>
+Context:          what the problem is and where, in 1–2 sentences
+Success criteria: exactly how to verify it is done
+Files to change:  explicit paths
+Effort:           XS / S / M / L / XL
+```
+
+Write findings to `REVIEW.md` and action items to `ROADMAP.md`. **Do not overwrite the existing
+correction section in `REVIEW.md`** — it is deliberate evidence that a thorough review can be
+wrong, and it is more useful to you than a clean document would be.
+
+
+---
+
 ## 5. DevOps standards — how work must be delivered
 
 These are the maintainer's standing practices. Follow them exactly.
@@ -369,6 +436,9 @@ Two items are already known to be open, from `ROADMAP.md`:
 
 Neither is necessarily your priority. Confirm with the maintainer.
 
+A third is open and blocking: **TruffleHog fails on push events** — see §10. That one needs
+settling before it blocks other merges.
+
 ### Immediate housekeeping
 
 Two dependabot PRs are open (`#156` boto3, `#157` ruff). They are mechanical, gated by CI, and
@@ -392,3 +462,106 @@ Three separate times, the defect that mattered was invisible to a green test sui
 
 Whatever else you do: **run the thing, against reality, and ask the maintainer what they
 actually want before you decide what "better" means.**
+
+---
+
+## 10. Known open item — TruffleHog failing on push events
+
+**Status: unresolved, handed to you deliberately. Investigate before merging anything that
+depends on it.**
+
+The `secret-scan.yml` workflow runs two jobs, `gitleaks` and `trufflehog`, and both are required
+status checks. On the branch that added this document, `trufflehog` **failed on the push event
+while passing on the pull_request event**, blocking the merge.
+
+### What is known
+
+- The failure reports `Found verified Lob result` **seven times**, then exits 183.
+  "Verified" means TruffleHog believes it validated the credential against Lob's API.
+- Every previous push-event scan on `main` passed — this is new to that branch.
+- Only three Markdown files changed on it: `HANDOVER.md`, `AGENTS.md`, `README.md`.
+- Grepping the added lines for key-shaped strings — long hex runs, `live_*`, `test_*`, `sk_*` —
+  found **nothing**.
+- The failing run scanned `unit_kind: dir`, 369 chunks / ~500 KB. The passing PR-scoped run
+  scanned the diff.
+
+### Likely explanations, in order
+
+1. **A TruffleHog false positive.** The Lob detector is known to be loose, and "verified" can
+   fire on patterns that happen to satisfy a permissive endpoint. Seven hits with no key-shaped
+   string in the diff points this way.
+2. **Differing scan scope between events.** Push and pull_request runs cover different ranges;
+   the push run may be reaching content the PR run never inspects.
+3. **Something genuinely present** that the greps above did not model. Least likely, but it is a
+   secret scanner and it must be excluded, not assumed away.
+
+### How to settle it
+
+```bash
+docker run --rm -v "$PWD:/repo" ghcr.io/trufflesecurity/trufflehog:latest \
+  filesystem /repo --results=verified --json | jq '.DetectorName, .Raw' 
+```
+
+That prints what is actually matching. Compare against `.github/workflows/secret-scan.yml` to see
+the exact invocation and scope CI uses.
+
+**Do not resolve this by bypassing the check, by merging with admin rights, or by removing
+TruffleHog from the required contexts.** It is a security control on a public repository. Either
+prove the finding is a false positive and suppress it narrowly with a documented reason, or
+remove whatever is genuinely matching.
+
+If it proves to be a false positive, the fix is a scoped exclusion — not disabling the scanner.
+
+---
+
+## 11. Additional context you will want
+
+### The companion project
+
+A separate tool consumes this one's output and performs the actual reclaim work. It is not in
+this repository and the previous agent never saw it. Two consequences:
+
+- Output formats are **contracts**, and v2.0.0 broke three of them. Confirm with the maintainer
+  whether the consumer has been updated.
+- Do not add claiming, allocation, or cloud-provider API calls here. That is the other tool's job,
+  and the boundary is deliberate.
+
+There is also a separate project that produces the Lambda packaging. This repository keeps
+`lambda_handler.py` as a reference entry point only; the `Dockerfile` and ECR build workflow were
+removed in v2.0.0 because they failed on every release tag for want of credentials this repo does
+not hold.
+
+### Testing against real infrastructure
+
+The maintainer authorised live runs against a corporate domain during the previous engagement,
+and those runs found defects the test suite did not. If you want to do the same:
+
+- **Ask first.** Do not scan any third-party domain without explicit authorisation for that
+  specific target.
+- **Never write the target's name into the repository.** Secret scanning enforces this, and the
+  repository is public. Use `example.com` in code, tests and documentation.
+- Public wildcard zones are useful for testing detection without touching anyone's
+  infrastructure: `github.io` is wildcarded with a stable address set, `herokuapp.com` is
+  wildcarded with a large rotating fleet across regions. The second is the harder case and is
+  what exposed the limits of address-level wildcard matching.
+
+### How the previous engagement was run
+
+Work was delivered in sprints: a roadmap of bundled PRs, each with a written plan under
+`docs/roadmap/`, executed one branch per item, squash-merged, then released as a batch. Some
+items were delegated to sub-agents with a model tier chosen per §6. Where sub-agents were used
+they were given the plan file plus the standards in `docs/roadmap/AGENT-GUIDE.md`, and their work
+was verified before merge rather than taken on trust — two of them reported facts about the
+baseline that turned out to be wrong, and were right to flag the discrepancy rather than paper
+over it.
+
+You are not obliged to work that way. It is recorded so the existing artefacts make sense.
+
+### Things deliberately not done
+
+- **No benchmark.** Performance work was reasoned from the code, never measured.
+- **No active probing.** The DNS-only boundary was held even where crossing it would have
+  resolved an ambiguity — see the wildcard limitation in `AGENTS.md` §7.
+- **No changes to the companion tool**, which is out of scope for this repository.
+- **PR 104 was left alone** for most of the engagement because it was authored separately; it was
+  reviewed on its merits and merged only at the end.
