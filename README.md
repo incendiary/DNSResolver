@@ -336,6 +336,15 @@ self-referential and non-existent CNAMEs, IPv6 (AAAA) resolution, and wildcard D
 - **A takeover candidate is only recorded when a CNAME actually exists.** A name that simply does not
   resolve is reported as unresolved, not as a candidate — there is nothing to claim.
 
+## For AI agents
+
+Working on this codebase with an AI agent? Two documents carry what the code does not say:
+
+- **[`AGENTS.md`](AGENTS.md)** — what the tool is for, architecture, output contracts, and the
+  conventions and traps that have already cost time here.
+- **[`HANDOVER.md`](HANDOVER.md)** — a self-contained brief for an agent picking the project up
+  cold, including the delivery standards and review method written out in full.
+
 ## Contributing
 
 1. Fork the repository

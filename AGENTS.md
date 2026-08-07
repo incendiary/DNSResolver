@@ -6,6 +6,10 @@ obvious from the code, plus the conventions and traps that have already cost tim
 Companion documents: [`REVIEW.md`](REVIEW.md) (findings), [`ROADMAP.md`](ROADMAP.md) (planned
 work), [`docs/roadmap/AGENT-GUIDE.md`](docs/roadmap/AGENT-GUIDE.md) (per-task working rules).
 
+> **Picking this project up fresh?** Read [`HANDOVER.md`](HANDOVER.md) first. It is written for
+> an agent with no access to this project's tooling or skill library, and carries the delivery
+> standards, the review method, and the traps in full.
+
 ---
 
 ## 1. What this tool is for
@@ -104,15 +108,18 @@ consumed by other tooling — changing a format is a breaking change.**
 
 | File | Format |
 |---|---|
-| `resolution_results_*.txt` | `domain\|ip1\|ip2\|…` — IPv4 first, then IPv6. Prefixed `WILDCARD\|` when the name resolved only via a zone wildcard. |
-| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence` and `NS_TAKEOVER\|origin\|domain` |
-| `csp_matches_*.txt` | Cloud handoff records — see below |
+| `resolution_results_*.txt` | `domain\|ip1\|ip2\|…` — IPv4 first, then IPv6. May be prefixed `WILDCARD\|` (confirmed catch-all) or `WILDCARD_ZONE\|` (zone answers for anything; these addresses were not sampled). |
+| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — chain is the full CNAME path (`a -> b -> c`). Plus `NS_TAKEOVER\|origin\|domain`. |
+| `csp_matches_*.txt` | One record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`, carrying the same `WILDCARD\|`/`WILDCARD_ZONE\|` prefix where it applies. |
 | `unresolved_results_*.txt` | Domains that failed all retries |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | `dig`/`nslookup` capture per flagged domain, when `--evidence` is set |
 
-The prefix convention (`WILDCARD|`, `DANGLING|`, `NS_TAKEOVER|`) is the house style for
-tagging a line's type while keeping untagged lines backward compatible. Follow it.
+The prefix convention (`WILDCARD|`, `WILDCARD_ZONE|`, `DANGLING|`, `NS_TAKEOVER|`) is the house
+style for tagging a line's type while keeping untagged lines backward compatible. Follow it.
+
+These formats changed in **v2.0.0** and the bump was major precisely because they are contracts.
+A separate tool consumes them.
 
 ---
 
