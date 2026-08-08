@@ -4,9 +4,11 @@ Baseline invariant tests — always present, never disabled.
 These tests verify repo hygiene, not application logic:
   - VERSION file exists and matches the latest git tag
   - No unpinned @main/@master refs in user-facing docs
+  - GitHub Actions are pinned to immutable commit SHAs
   - version.py __version__ matches VERSION file
 """
 
+import glob
 import os
 import re
 import subprocess
@@ -47,6 +49,23 @@ def test_no_unpinned_refs_in_docs():
             if re.search(r"@main\b|@master\b", line):
                 violations.append(f"{fname}:{i}: {line.rstrip()}")
     assert not violations, "Unpinned @main/@master refs found:\n" + "\n".join(
+        violations
+    )
+
+
+def test_workflow_actions_are_pinned_to_commit_shas():
+    violations = []
+    uses_pattern = re.compile(r"^\s*(?:-\s+)?uses:\s+\S+@([^\s#]+)")
+    workflow_paths = glob.glob(os.path.join(REPO_ROOT, ".github", "workflows", "*.yml"))
+
+    for workflow_path in workflow_paths:
+        for line_number, line in enumerate(open(workflow_path), 1):
+            match = uses_pattern.match(line)
+            if match and not re.fullmatch(r"[0-9a-f]{40}", match.group(1)):
+                relative_path = os.path.relpath(workflow_path, REPO_ROOT)
+                violations.append(f"{relative_path}:{line_number}: {line.rstrip()}")
+
+    assert not violations, "Workflow actions must use full commit SHAs:\n" + "\n".join(
         violations
     )
 
