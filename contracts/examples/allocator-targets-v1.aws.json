@@ -1,0 +1,14 @@
+[
+  {
+    "contract_version": "1.0",
+    "hostname": "api.example.com",
+    "ip": "192.0.2.10",
+    "provider": "aws",
+    "region": "ap-southeast-1",
+    "services": ["AMAZON", "EC2"],
+    "prefixes": ["192.0.2.0/24"],
+    "network_border_groups": ["ap-southeast-1"],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  }
+]

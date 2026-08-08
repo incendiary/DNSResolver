@@ -1,0 +1,18 @@
+[
+  {
+    "contract_version": "1.0",
+    "hostname": "random.example.com",
+    "kind": "wildcard_zone",
+    "ips": ["192.0.2.44"],
+    "reasons": ["The parent zone answers for random labels"],
+    "actionability": "excluded"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "old.example.com",
+    "kind": "dangling_cname",
+    "ips": [],
+    "reasons": ["The CNAME target returned NXDOMAIN"],
+    "actionability": "excluded"
+  }
+]

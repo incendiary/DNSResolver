@@ -15,13 +15,14 @@ work), [`docs/roadmap/AGENT-GUIDE.md`](docs/roadmap/AGENT-GUIDE.md) (per-task wo
 ## 1. What this tool is for
 
 DNSResolver is passive DNS reconnaissance for offensive security. It takes a flat list of
-candidate domains and **produces targets**. It has two jobs of equal weight:
+authorised candidate domains and **produces targets** for a separate multi-cloud allocation
+pipeline. Cloud-address attribution is the primary job; takeover observations are secondary.
 
-**Job 1 — dangling CNAME / subdomain takeover candidates.** A CNAME pointing at a service
-name nobody owns any more. Well-covered ground; other tools do this too.
-
-**Job 2 — A records resolving into claimable cloud IP space.** This is the differentiator
+**Primary — A and AAAA records resolving into cloud IP space.** This is the differentiator
 and the part that is easy to under-value when reading the code.
+
+**Secondary — dangling CNAME and NS takeover observations.** These are retained for a
+different consumer but must never be mixed into the actionable address-allocation feed.
 
 ### Why Job 2 is the interesting one
 
@@ -63,6 +64,9 @@ they are accepted trade-offs, not bugs. See §7.
 resolver.py            CLI entry point ────┐
 lambda_handler.py      Lambda entry point ─┴─► run(env_manager)  — shared async pipeline
 ```
+
+The Lambda deployment idea is shelved. Keep the existing shared entry point working, but do
+not add Lambda-specific features or let Lambda constraints drive current design decisions.
 
 | Module | Responsibility |
 |---|---|
@@ -120,6 +124,10 @@ style for tagging a line's type while keeping untagged lines backward compatible
 
 These formats changed in **v2.0.0** and the bump was major precisely because they are contracts.
 A separate tool consumes them.
+
+The provider-aware JSON interface is specified in
+[`docs/ALLOCATOR-CONTRACT.md`](docs/ALLOCATOR-CONTRACT.md). Its schemas, frozen examples,
+and documentation field tables are checked together by `tests/test_allocator_contract.py`.
 
 ---
 
