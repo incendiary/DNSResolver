@@ -114,6 +114,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
 | `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|` lines for unresolvable nameservers |
 | `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
+| `allocator-targets-v1.json` | Versioned provider-aware allocator handoff. Groups service, prefix, and border-group metadata per provider/hostname/address/region and excludes wildcard observations. |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `provider_catalogues.json` | AWS, GCP, and Azure catalogue status, source, retrieval time, snapshot identifier, and any failure reason |
 | `{provider}_ip_ranges.json` | Validated provider ranges and provenance used by this run, from either a live source or a fresh cache |

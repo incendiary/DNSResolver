@@ -20,9 +20,12 @@ AWS EC2 region is a contract violation. GCP and Azure allocation remain consumer
 work; their records are included now so DNSResolver does not need another
 breaking schema change when those allocators arrive.
 
-The current pipe-delimited `csp_matches_*.txt` file is not this contract. A later
-implementation change will publish the documents defined here while retaining
-or deliberately migrating the legacy output.
+The shared resolver pipeline publishes `allocator-targets-v1.json` after a
+successful run while retaining the pipe-delimited `csp_matches_*.txt` interface.
+The JSON publisher groups provider metadata for identical targets and excludes
+`WILDCARD` and `WILDCARD_ZONE` observations. If any provider catalogue is
+unusable, or a CSP record is malformed, no allocator-target document is
+published.
 
 ## Documents
 

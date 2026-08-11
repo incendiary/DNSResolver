@@ -13,7 +13,9 @@ from imports.cloud_ip_ranges import ProviderCatalogue
 def run_environment(tmp_path):
     environment = MagicMock()
     environment.output_dir = str(tmp_path)
-    environment.output_files = {"standard": {}}
+    csp_path = tmp_path / "csp_matches.txt"
+    csp_path.write_text("", encoding="utf-8")
+    environment.output_files = {"standard": {"csp": str(csp_path)}}
     environment.domains = {"example.com"}
     environment.retries = 1
     environment.max_threads = 1
@@ -58,6 +60,12 @@ async def test_run_marks_only_last_attempt_as_final(run_environment):
     assert final_retry_values == [False, True]
     status = Path(run_environment.output_dir) / "provider_catalogues.json"
     assert status.exists()
+    assert (
+        json.loads(
+            (Path(run_environment.output_dir) / "allocator-targets-v1.json").read_text()
+        )
+        == []
+    )
 
 
 async def test_run_fails_closed_before_processing_domains(run_environment):
@@ -101,3 +109,4 @@ async def test_run_fails_closed_before_processing_domains(run_environment):
     )
     assert status["gcp"]["usable"] is False
     assert status["gcp"]["error"] == "TLS failure"
+    assert not (Path(run_environment.output_dir) / "allocator-targets-v1.json").exists()
