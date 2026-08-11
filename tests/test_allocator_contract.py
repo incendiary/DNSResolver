@@ -7,10 +7,13 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
+from imports.cloud_ip_ranges import MAX_CACHE_AGE
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_DIR = REPO_ROOT / "contracts"
 EXAMPLE_DIR = CONTRACT_DIR / "examples"
 DOC_PATH = REPO_ROOT / "docs" / "ALLOCATOR-CONTRACT.md"
+README_PATH = REPO_ROOT / "README.md"
 
 
 SCHEMA_EXAMPLES = {
@@ -123,6 +126,18 @@ def test_documented_field_table_matches_schema(schema_name, marker):
     assert match, f"Missing documented field table for {marker}"
     documented = set(re.findall(r"^\| `([^`]+)` \|", match.group(1), re.MULTILINE))
     assert documented == set(properties)
+
+
+def test_documented_catalogue_freshness_matches_implementation():
+    aws_hours = int(MAX_CACHE_AGE["aws"].total_seconds() / 3600)
+    gcp_hours = int(MAX_CACHE_AGE["gcp"].total_seconds() / 3600)
+    azure_days = MAX_CACHE_AGE["azure"].days
+    assert aws_hours == gcp_hours
+
+    for path in (DOC_PATH, README_PATH):
+        document = " ".join(path.read_text(encoding="utf-8").split())
+        assert f"AWS and GCP snapshots remain usable for {aws_hours} hours" in document
+        assert f"Azure snapshots remain usable for {azure_days} days" in document
 
 
 def test_complete_manifest_requires_all_provider_catalogues_to_be_usable():
