@@ -88,9 +88,11 @@ consumer may investigate them, but the address allocator must ignore them.
 <!-- /schema-fields -->
 
 A manifest may be `complete` only when all three provider catalogues are usable.
-A cached catalogue is usable only when it satisfies the freshness policy that
-will be defined with provider-fetch implementation. An incomplete or failed run
-must set `outputs.actionable_targets` to `null`; observations are still retained.
+AWS and GCP snapshots remain usable for 24 hours after retrieval; Azure snapshots
+remain usable for 14 days because Microsoft publishes that catalogue weekly. Live
+responses and cached snapshots must contain a valid provider document with at least
+one syntactically valid IP prefix. An incomplete or failed run must set
+`outputs.actionable_targets` to `null`; observations are still retained.
 
 The checked examples show both a [complete run](../contracts/examples/run-manifest-v1.complete.json)
 and an [incomplete, fail-closed run](../contracts/examples/run-manifest-v1.incomplete.json).

@@ -1,8 +1,11 @@
 import asyncio
+import json
+from pathlib import Path
 
 from tqdm import tqdm
 
 from classes.csp_ip_addresses import CSPIPAddresses
+from classes.custom_exceptions import ProviderCatalogueError
 from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
 from classes.run_summary import RunSummary
@@ -21,15 +24,38 @@ async def run(env_manager):
     both the CLI entrypoint (resolver.py) and the Lambda entrypoint (lambda_handler.py)
     can share the same logic.
     """
-    gcp_ipv4, gcp_ipv6, gcp_meta = fetch_google_cloud_ip_ranges(
-        env_manager.output_dir, env_manager.extreme
-    )
-    aws_ipv4, aws_ipv6, aws_meta = fetch_aws_ip_ranges(
-        env_manager.output_dir, env_manager.extreme
-    )
-    azure_ipv4, azure_ipv6, azure_meta = fetch_azure_ip_ranges(
-        env_manager.output_dir, env_manager.extreme
-    )
+    catalogues = {
+        "gcp": fetch_google_cloud_ip_ranges(
+            env_manager.output_dir, env_manager.extreme
+        ),
+        "aws": fetch_aws_ip_ranges(env_manager.output_dir, env_manager.extreme),
+        "azure": fetch_azure_ip_ranges(env_manager.output_dir, env_manager.extreme),
+    }
+    status_path = Path(env_manager.output_dir) / "provider_catalogues.json"
+    with open(status_path, "w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                provider: {**catalogue.manifest_entry(), "error": catalogue.error}
+                for provider, catalogue in catalogues.items()
+            },
+            handle,
+            indent=2,
+        )
+
+    unusable = [name for name, catalogue in catalogues.items() if not catalogue.usable]
+    if unusable:
+        details = "; ".join(
+            f"{name}: {catalogues[name].error or catalogues[name].status}"
+            for name in unusable
+        )
+        raise ProviderCatalogueError(
+            "Required provider catalogue(s) unavailable; no domains were processed "
+            f"and no actionable results were published. {details}. Status: {status_path}"
+        )
+
+    gcp_ipv4, gcp_ipv6, gcp_meta = catalogues["gcp"]
+    aws_ipv4, aws_ipv6, aws_meta = catalogues["aws"]
+    azure_ipv4, azure_ipv6, azure_meta = catalogues["azure"]
 
     csp_ip_addresses = CSPIPAddresses(
         gcp_ipv4,
