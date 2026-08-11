@@ -45,6 +45,22 @@ async def test_returns_success_and_ips_on_resolution(
     assert "1.2.3.4" in ips
 
 
+async def test_final_retry_is_forwarded_to_dns_handler(
+    mock_env_manager, csp_ips, dns_handler, pbar
+):
+    with patch("imports.domain_processor.perform_csp_checks"):
+        await process_domain_async(
+            "example.com",
+            mock_env_manager,
+            pbar,
+            csp_ips,
+            dns_handler,
+            final_retry=False,
+        )
+
+    assert dns_handler.resolve_domain_async.await_args.kwargs == {"final_retry": False}
+
+
 async def test_pbar_is_updated_after_processing(
     mock_env_manager, csp_ips, dns_handler, pbar
 ):
@@ -78,7 +94,8 @@ async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
 
     with patch("imports.domain_processor.perform_csp_checks"):
 
-        async def resolve_with_dangling(ctx):
+        async def resolve_with_dangling(ctx, final_retry=True):
+            assert final_retry is True
             ctx.add_dangling_domain_to_domains("cname-target.s3.amazonaws.com")
             return True, ["1.2.3.4"]
 

@@ -39,6 +39,7 @@ def dns_answer(value, attr="host"):
 async def handler(mock_env_manager):
     with (
         patch("classes.dns_handler.aiodns.DNSResolver"),
+        patch("classes.dns_handler.dns.resolver.Resolver"),
         patch("classes.takeover_detector.EvidenceCollector"),
     ):
         h = DNSHandler(mock_env_manager)

@@ -12,13 +12,24 @@ from classes.wildcard_detector import WildcardDetector
 class DNSHandler:
     def __init__(self, env_manager):
         self.env_manager = env_manager
-        self.aiodns_resolver = aiodns.DNSResolver()
-        self.dnspython_resolver = dns.resolver.Resolver()
+        nameservers = [
+            nameserver.strip()
+            for nameserver in (self.env_manager.nameservers or [])
+            if nameserver.strip()
+        ]
+        resolver_options = {}
+        if self.env_manager.timeout is not None:
+            resolver_options["timeout"] = self.env_manager.timeout
+        if nameservers:
+            resolver_options["nameservers"] = nameservers
 
-        random_nameserver = self.env_manager.get_random_nameserver()
-        if random_nameserver:
-            self.aiodns_resolver.nameservers = [random_nameserver]
-            self.dnspython_resolver.nameservers = [random_nameserver]
+        self.aiodns_resolver = aiodns.DNSResolver(**resolver_options)
+        self.dnspython_resolver = dns.resolver.Resolver()
+        if self.env_manager.timeout is not None:
+            self.dnspython_resolver.timeout = self.env_manager.timeout
+            self.dnspython_resolver.lifetime = self.env_manager.timeout
+        if nameservers:
+            self.dnspython_resolver.nameservers = nameservers
 
         self.takeover_detector = TakeoverDetector(self.aiodns_resolver, env_manager)
         self.wildcard_detector = WildcardDetector(self.aiodns_resolver, env_manager)
@@ -40,6 +51,15 @@ class DNSHandler:
             f"Handling DNS error for {current_domain}: {error} | final_retry={final_retry}"
         )
 
+        fallback_ips = await self._resolve_with_dnspython(current_domain)
+        if fallback_ips:
+            self.env_manager.log_info(
+                "Domain %s resolved successfully with dnspython_resolver to %s.",
+                current_domain,
+                fallback_ips,
+            )
+            return True, fallback_ips
+
         if is_dns_error_present(error, [NXDOMAIN]):
             self.env_manager.log_info(
                 f"{current_domain} not found, checking for dangling CNAME."
@@ -60,37 +80,43 @@ class DNSHandler:
                 f"DNS resolution error for {current_domain}: {error} | final_retry={final_retry}"
             )
 
-        # Second-opinion check using dnspython — run in executor to avoid blocking the event loop
+        return False, []
+
+    async def _resolve_with_dnspython(self, current_domain):
+        """Resolve both address families without blocking the asyncio event loop."""
         loop = asyncio.get_running_loop()
-        try:
-            await loop.run_in_executor(
+        results = await asyncio.gather(
+            loop.run_in_executor(
                 None, self.dnspython_resolver.resolve, current_domain, "A"
-            )
-            self.env_manager.log_info(
-                f"Domain {current_domain} resolved successfully with dnspython_resolver."
-            )
-            return True, []
-        except (
+            ),
+            loop.run_in_executor(
+                None, self.dnspython_resolver.resolve, current_domain, "AAAA"
+            ),
+            return_exceptions=True,
+        )
+
+        expected_errors = (
             dns.resolver.NoAnswer,
             dns.resolver.NXDOMAIN,
             dns.resolver.NoNameservers,
             dns.exception.Timeout,
-        ) as e:
-            self.env_manager.log_info(
-                f"DNS error with dnspython_resolver for {current_domain}: {e}"
-            )
-            if isinstance(e, dns.resolver.NXDOMAIN):
+        )
+        final_ips = []
+        for result in results:
+            if isinstance(result, BaseException):
+                if not isinstance(result, expected_errors):
+                    raise result
                 self.env_manager.log_info(
-                    f"{current_domain} not found, checking for dangling CNAME."
+                    "DNS error with dnspython_resolver for %s: %s",
+                    current_domain,
+                    result,
                 )
-                if await self.takeover_detector.handle_takeover_checks(
-                    domain_context, current_domain
-                ):
-                    return True, []
+                continue
+            final_ips.extend(str(answer) for answer in result)
 
-        return False, []
+        return final_ips
 
-    async def resolve_domain_async(self, domain_context):
+    async def resolve_domain_async(self, domain_context, final_retry=True):
         current_domain = domain_context.get_domain()
         self.env_manager.log_info(f"Resolving {current_domain}")
 
@@ -121,7 +147,7 @@ class DNSHandler:
                 f"DNS error for {current_domain}: A={a_error} | AAAA={aaaa_error}"
             )
             return await self.handle_domain_resolution_errors(
-                domain_context, current_domain, a_error, final_retry=True
+                domain_context, current_domain, a_error, final_retry=final_retry
             )
 
         # IPv4 first, then IPv6 — stable ordering for the pipe-delimited output.

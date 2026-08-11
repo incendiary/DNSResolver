@@ -3,14 +3,21 @@ from imports.cloud_service_provider_checks import perform_csp_checks
 
 
 async def process_domain_async(
-    domain, env_manager, pbar, csp_ip_addresses, dns_handler
+    domain,
+    env_manager,
+    pbar,
+    csp_ip_addresses,
+    dns_handler,
+    final_retry=True,
 ):
     domain_context = DomainProcessingContext(env_manager, csp_ip_addresses)
     domain_context.set_domain(domain)
 
     env_manager.log_info(f"Processing domain: {domain}")
 
-    success, final_ips = await dns_handler.resolve_domain_async(domain_context)
+    success, final_ips = await dns_handler.resolve_domain_async(
+        domain_context, final_retry=final_retry
+    )
 
     env_manager.log_info(
         f"Processing domain: {domain} was {'successful' if success else 'unsuccessful'}"
