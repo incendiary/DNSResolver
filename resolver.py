@@ -4,6 +4,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from classes.allocator_contract import publish_allocator_targets
 from classes.csp_ip_addresses import CSPIPAddresses
 from classes.custom_exceptions import ProviderCatalogueError
 from classes.dns_handler import DNSHandler
@@ -125,6 +126,14 @@ async def run(env_manager):
             len(domains_to_process),
             retries + 1,
         )
+
+    targets = publish_allocator_targets(
+        env_manager.output_files["standard"]["csp"], env_manager.output_dir
+    )
+    env_manager.log_info(
+        "Published %d actionable target(s) to allocator-targets-v1.json",
+        len(targets),
+    )
 
     RunSummary(env_manager.output_files, env_manager.output_dir, __version__).display(
         len(env_manager.domains), len(domains_to_process)
