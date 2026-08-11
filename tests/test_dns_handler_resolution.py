@@ -22,10 +22,32 @@ def make_error(code):
     return aiodns.error.DNSError(code, "test error")
 
 
+def test_constructor_applies_timeout_and_all_nameservers(mock_env_manager):
+    mock_env_manager.timeout = 7
+    mock_env_manager.nameservers = [" 192.0.2.53 ", "198.51.100.53"]
+
+    with (
+        patch("classes.dns_handler.aiodns.DNSResolver") as aiodns_resolver_class,
+        patch("classes.dns_handler.dns.resolver.Resolver") as dns_resolver_class,
+        patch("classes.takeover_detector.EvidenceCollector"),
+    ):
+        handler = DNSHandler(mock_env_manager)
+
+    expected_nameservers = ["192.0.2.53", "198.51.100.53"]
+    aiodns_resolver_class.assert_called_once_with(
+        timeout=7, nameservers=expected_nameservers
+    )
+    assert handler.dnspython_resolver is dns_resolver_class.return_value
+    assert handler.dnspython_resolver.timeout == 7
+    assert handler.dnspython_resolver.lifetime == 7
+    assert handler.dnspython_resolver.nameservers == expected_nameservers
+
+
 @pytest.fixture
 async def handler(mock_env_manager):
     with (
         patch("classes.dns_handler.aiodns.DNSResolver"),
+        patch("classes.dns_handler.dns.resolver.Resolver"),
         patch("classes.takeover_detector.EvidenceCollector"),
     ):
         h = DNSHandler(mock_env_manager)
@@ -63,17 +85,25 @@ async def test_nxdomain_with_takeover_returns_true(handler, domain_context):
     assert result == (True, [])
 
 
-async def test_dnspython_success_returns_true(handler, domain_context):
-    """When aiodns fails but dnspython resolves, we get (True, [])."""
+async def test_dnspython_success_preserves_addresses(handler, domain_context):
+    """When aiodns fails, fallback addresses remain available to the pipeline."""
     handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
-    handler.dnspython_resolver.resolve = MagicMock()  # succeeds without raising
+    handler.dnspython_resolver.resolve = MagicMock(
+        side_effect=[["192.0.2.10"], ["2001:db8::10"]]
+    )
     error = make_error(NXDOMAIN)
 
     result = await handler.handle_domain_resolution_errors(
-        domain_context, "example.com", error, final_retry=False
+        domain_context, "example.com", error, final_retry=True
     )
 
-    assert result == (True, [])
+    assert result == (True, ["192.0.2.10", "2001:db8::10"])
+    record_types = [
+        call.args[1] for call in handler.dnspython_resolver.resolve.call_args_list
+    ]
+    assert sorted(record_types) == ["A", "AAAA"]
+    handler.takeover_detector.handle_takeover_checks.assert_not_called()
+    domain_context.env_manager.write_to_file.assert_not_called()
 
 
 async def test_dnspython_noanswer_returns_false(handler, domain_context):
@@ -98,8 +128,21 @@ async def test_dnspython_nxdomain_runs_takeover_check(handler, domain_context):
         domain_context, "example.com", error, final_retry=False
     )
 
-    # handle_takeover_checks called once for aiodns NXDOMAIN + once for dnspython NXDOMAIN
-    assert handler.takeover_detector.handle_takeover_checks.call_count == 2
+    assert handler.takeover_detector.handle_takeover_checks.call_count == 1
+
+
+async def test_nonfinal_failure_does_not_write_unresolved(
+    handler, domain_context, mock_env_manager
+):
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.exception.Timeout)
+
+    result = await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", make_error(TIMEOUT), final_retry=False
+    )
+
+    assert result == (False, [])
+    mock_env_manager.write_to_file.assert_not_called()
 
 
 async def test_servfail_final_retry_logs_contact_message(

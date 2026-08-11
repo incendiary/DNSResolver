@@ -141,6 +141,11 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 
 Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`) to run many domains concurrently without exhausting file descriptors or triggering DNS rate limits. Failed domains are collected after each pass and retried up to `--retries` times.
 
+`--timeout` applies to both the primary aiodns resolver and the dnspython fallback.
+When multiple nameservers are configured, the complete list is supplied to both
+resolver libraries so a failed resolver does not strand the entire run. A domain is written
+to the unresolved output only after both resolvers fail on the final configured attempt.
+
 ## Cloud IP attribution
 
 The current text files are the v2 CLI output. The versioned JSON handoff planned

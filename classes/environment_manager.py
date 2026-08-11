@@ -70,7 +70,13 @@ class EnvironmentManager:
         self.verbose = cfg.args.verbose
         self.extreme = cfg.args.extreme
         self.nameservers = (
-            cfg.args.nameservers.split(",") if cfg.args.nameservers else None
+            [
+                nameserver.strip()
+                for nameserver in cfg.args.nameservers.split(",")
+                if nameserver.strip()
+            ]
+            if cfg.args.nameservers
+            else None
         )
         self.max_threads = cfg.args.max_threads
         self.timeout = cfg.args.timeout

@@ -47,10 +47,15 @@ async def run(env_manager):
     dns_handler = DNSHandler(env_manager)
     sem = asyncio.Semaphore(env_manager.max_threads or 50)
 
-    async def bounded_process(domain, pbar):
+    async def bounded_process(domain, pbar, final_retry):
         async with sem:
             return await process_domain_async(
-                domain, env_manager, pbar, csp_ip_addresses, dns_handler
+                domain,
+                env_manager,
+                pbar,
+                csp_ip_addresses,
+                dns_handler,
+                final_retry=final_retry,
             )
 
     for attempt in range(retries + 1):
@@ -61,7 +66,11 @@ async def run(env_manager):
             total=len(domains_to_process),
             desc=f"Processing Domains (Attempt {attempt + 1} of {retries + 1})",
         ) as pbar:
-            tasks = [bounded_process(domain, pbar) for domain in domains_to_process]
+            final_retry = attempt == retries
+            tasks = [
+                bounded_process(domain, pbar, final_retry)
+                for domain in domains_to_process
+            ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
         failed = []
