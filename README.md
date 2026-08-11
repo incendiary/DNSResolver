@@ -115,6 +115,8 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|` lines for unresolvable nameservers |
 | `csp_matches_*.txt` | One handoff record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
+| `provider_catalogues.json` | AWS, GCP, and Azure catalogue status, source, retrieval time, snapshot identifier, and any failure reason |
+| `{provider}_ip_ranges.json` | Validated provider ranges and provenance used by this run, from either a live source or a fresh cache |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
 
 ## AWS Lambda deployment
@@ -245,20 +247,29 @@ Other notes:
 
 `config.json` sets defaults for timeout, retries, output directory, and domain categorisation patterns used for classifying dangling CNAME targets (e.g. AWS S3, GitHub Pages, Heroku). CLI flags always override config file values.
 
-## Azure IP range fetching
+## Cloud provider catalogue fetching
 
-Microsoft publishes Azure IP ranges via a confirmation page that redirects to a weekly-updated JSON file. The download URL changes every week, making a direct scrape fragile. DNSResolver uses a three-stage fallback chain so a broken confirmation page never silently disables Azure matching:
+AWS, GCP, and Azure are all required inputs. Each live JSON request is retried up to three times,
+then its structure and every CIDR are validated. A successful response is saved under
+`<output-dir>/.provider_catalog_cache/` with its source URL, UTC retrieval time, and a SHA-256
+snapshot identifier. AWS and GCP snapshots remain usable for 24 hours; Azure snapshots remain
+usable for 14 days because Microsoft publishes that catalogue weekly.
 
-| Stage | Source | Behaviour |
-|-------|--------|-----------|
-| 1 | Microsoft confirmation page (live scrape) | Attempted first on every run. On success the result is written to `.azure_ip_cache.json` for future fallback. |
-| 2 | `.azure_ip_cache.json` (local cache) | Used automatically if the scrape fails. A warning is printed. |
-| 3 | `AZURE_PINNED_URL` (hardcoded fallback) | Used if no cache exists. Points to the latest known-good file at the time of the last release. A warning is printed. |
-| — | Exhausted | If all three sources fail, a clear error is printed and Azure matching is skipped for the run. |
+If a live source fails, DNSResolver uses a still-fresh validated snapshot and marks that provider
+`cached`. A missing, malformed, or stale snapshot makes the provider `failed`. Because a partial
+provider set can turn real targets into false zero matches, DNSResolver then exits before reading
+or resolving any domains. It writes the exact states and failure reasons to
+`provider_catalogues.json`; it never silently skips a provider.
 
-### Keeping the pinned URL current
+Microsoft's current Azure JSON URL is discovered from its confirmation page. If URL discovery
+fails, DNSResolver tries `AZURE_PINNED_URL`; a successful pinned fetch is still a live, validated
+catalogue. If both the current and pinned paths fail, the same freshness and fail-closed rules
+apply.
 
-`AZURE_PINNED_URL` is a module-level constant at the top of `imports/cloud_ip_ranges.py`. When Microsoft rotates the weekly file and the cache ages, update it:
+### Keeping the Azure pinned URL current
+
+`AZURE_PINNED_URL` is a module-level constant in `imports/cloud_ip_ranges.py`. When Microsoft
+rotates the weekly file, update it:
 
 ```bash
 # Find the current URL
@@ -272,9 +283,8 @@ with urlopen('https://www.microsoft.com/en-us/download/confirmation.aspx?id=5651
 
 Then update `AZURE_PINNED_URL` in `imports/cloud_ip_ranges.py` and commit.
 
-### Cache file
-
-`.azure_ip_cache.json` is written to the working directory on every successful fetch and is excluded from version control via `.gitignore`. Delete it to force a fresh fetch on the next run.
+Delete the corresponding file under `<output-dir>/.provider_catalog_cache/` only when deliberately
+forcing a live refresh.
 
 ## Using with other tools
 

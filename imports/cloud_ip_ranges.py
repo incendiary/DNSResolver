@@ -1,223 +1,365 @@
-"""Module for fetching and parsing IP ranges from Google Cloud, AWS, Azure, and
-checking if an IP address is in given IP ranges."""
+"""Fetch, validate, cache, and describe required cloud IP catalogues."""
 
+import hashlib
+import ipaddress
 import json
 import os
 import re
-from typing import Dict, List, Tuple
+from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from time import sleep
+from typing import Dict, Iterator, List, Tuple
 from urllib.request import urlopen
 
-import requests
+IPV4_KEYWORDS = ["ipv4Prefix", "ip_prefix"]
+IPV6_KEYWORDS = ["ipv6Prefix", "ipv6_prefix"]
+FETCH_ATTEMPTS = 3
+FETCH_TIMEOUT_SECONDS = 10
+RETRY_DELAY_SECONDS = 0.25
 
-IPV4_KEYWORDS = ["ipv4Prefix", "ip_prefix", "addressPrefixes"]
-IPV6_KEYWORDS = ["ipv6Prefix", "ipv6_prefix", "addressPrefixes"]
+PROVIDER_SOURCES = {
+    "gcp": "https://www.gstatic.com/ipranges/cloud.json",
+    "aws": "https://ip-ranges.amazonaws.com/ip-ranges.json",
+}
+MAX_CACHE_AGE = {
+    "gcp": timedelta(hours=24),
+    "aws": timedelta(hours=24),
+    # Microsoft currently publishes this catalogue weekly.
+    "azure": timedelta(days=14),
+}
 
 
-def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List, Dict]:
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code != 200:
-            print(
-                f"Failed to fetch IP ranges for Azure. Status code: {response.status_code}"
-            )
-            return [], [], {}
+class CatalogueFetchError(RuntimeError):
+    """A provider catalogue could not be fetched or validated."""
 
-        data = json.loads(response.text)
 
-        ipv4_ranges = []
-        ipv6_ranges = []
-        metadata = {}
+@dataclass(frozen=True)
+class ProviderCatalogue:
+    provider: str
+    ipv4_ranges: List[str]
+    ipv6_ranges: List[str]
+    metadata: Dict[str, Tuple[str, str, str]]
+    status: str
+    usable: bool
+    source_url: str
+    retrieved_at: str | None
+    snapshot_id: str | None
+    error: str | None = None
 
-        for value in data.get("values", []):
-            props = value.get("properties", {})
-            # Global tags carry an empty region; say so rather than inventing one.
-            region = props.get("region") or "global"
-            service = props.get("systemService") or value.get("name") or "unknown"
-            for item in props.get("addressPrefixes", []):
-                if ":" in item:
-                    ipv6_ranges.append(item)
-                else:
-                    ipv4_ranges.append(item)
-                metadata[item] = (region, service, "unknown")
+    def __iter__(self) -> Iterator:
+        """Keep range unpacking compatible with the existing matcher boundary."""
+        yield self.ipv4_ranges
+        yield self.ipv6_ranges
+        yield self.metadata
 
-        if extreme:
-            print("IPv4 Ranges:", ipv4_ranges)
-            print("IPv6 Ranges:", ipv6_ranges)
+    def manifest_entry(self) -> dict:
+        return {
+            "status": self.status,
+            "usable": self.usable,
+            "source_url": self.source_url,
+            "retrieved_at": self.retrieved_at,
+            "snapshot_id": self.snapshot_id,
+        }
 
-        return ipv4_ranges, ipv6_ranges, metadata
 
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred while fetching the IP ranges: {e}")
-        return [], [], {}
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _timestamp(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _get_json(url: str) -> dict:
+    errors = []
+    for attempt in range(FETCH_ATTEMPTS):
+        try:
+            with urlopen(url, timeout=FETCH_TIMEOUT_SECONDS) as response:
+                status = getattr(response, "status", response.getcode())
+                if status != 200:
+                    raise CatalogueFetchError(f"HTTP {status}")
+                body = response.read().decode("utf-8")
+            data = json.loads(body)
+            if not isinstance(data, dict):
+                raise CatalogueFetchError("top-level JSON value is not an object")
+            return data
+        except (OSError, UnicodeDecodeError, ValueError, CatalogueFetchError) as error:
+            errors.append(str(error))
+            if attempt + 1 < FETCH_ATTEMPTS:
+                sleep(RETRY_DELAY_SECONDS)
+    raise CatalogueFetchError(
+        f"failed after {FETCH_ATTEMPTS} attempts: {errors[-1] or 'unknown error'}"
+    )
+
+
+def _validate_ranges(ipv4_ranges: List[str], ipv6_ranges: List[str]) -> None:
+    if not ipv4_ranges and not ipv6_ranges:
+        raise CatalogueFetchError("catalogue contains no IP prefixes")
+    for cidr in ipv4_ranges:
+        try:
+            version = ipaddress.ip_network(cidr).version
+        except ValueError as error:
+            raise CatalogueFetchError(f"invalid IPv4 prefix: {cidr}") from error
+        if version != 4:
+            raise CatalogueFetchError(f"invalid IPv4 prefix: {cidr}")
+    for cidr in ipv6_ranges:
+        try:
+            version = ipaddress.ip_network(cidr).version
+        except ValueError as error:
+            raise CatalogueFetchError(f"invalid IPv6 prefix: {cidr}") from error
+        if version != 6:
+            raise CatalogueFetchError(f"invalid IPv6 prefix: {cidr}")
+
+
+def _parse_standard(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
+    prefixes = data.get("prefixes")
+    if not isinstance(prefixes, list):
+        raise CatalogueFetchError("missing or invalid 'prefixes' list")
+    ipv6_prefixes = data.get("ipv6_prefixes", [])
+    if not isinstance(ipv6_prefixes, list):
+        raise CatalogueFetchError("invalid 'ipv6_prefixes' list")
+
+    ipv4_ranges = []
+    ipv6_ranges = []
+    metadata = {}
+    for prefix in prefixes + ipv6_prefixes:
+        if not isinstance(prefix, dict):
+            raise CatalogueFetchError("prefix entry is not an object")
+        region = prefix.get("region") or prefix.get("scope") or "unknown"
+        service = prefix.get("service") or "unknown"
+        border_group = prefix.get("network_border_group") or "unknown"
+        for keyword in IPV4_KEYWORDS:
+            if keyword in prefix:
+                cidr = prefix[keyword]
+                ipv4_ranges.append(cidr)
+                metadata[cidr] = (region, service, border_group)
+        for keyword in IPV6_KEYWORDS:
+            if keyword in prefix:
+                cidr = prefix[keyword]
+                ipv6_ranges.append(cidr)
+                metadata[cidr] = (region, service, border_group)
+    _validate_ranges(ipv4_ranges, ipv6_ranges)
+    if extreme:
+        print("IPv4 Ranges:", ipv4_ranges)
+        print("IPv6 Ranges:", ipv6_ranges)
+    return ipv4_ranges, ipv6_ranges, metadata
+
+
+def _parse_azure(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
+    values = data.get("values")
+    if not isinstance(values, list):
+        raise CatalogueFetchError("missing or invalid 'values' list")
+
+    ipv4_ranges = []
+    ipv6_ranges = []
+    metadata = {}
+    for value in values:
+        if not isinstance(value, dict) or not isinstance(value.get("properties"), dict):
+            raise CatalogueFetchError("Azure value entry has invalid properties")
+        props = value["properties"]
+        prefixes = props.get("addressPrefixes")
+        if not isinstance(prefixes, list):
+            raise CatalogueFetchError("Azure value has no addressPrefixes list")
+        region = props.get("region") or "global"
+        service = props.get("systemService") or value.get("name") or "unknown"
+        for cidr in prefixes:
+            (ipv6_ranges if ":" in cidr else ipv4_ranges).append(cidr)
+            metadata[cidr] = (region, service, "unknown")
+    _validate_ranges(ipv4_ranges, ipv6_ranges)
+    if extreme:
+        print("IPv4 Ranges:", ipv4_ranges)
+        print("IPv6 Ranges:", ipv6_ranges)
+    return ipv4_ranges, ipv6_ranges, metadata
 
 
 def fetch_ip_ranges(url: str, extreme: bool = False) -> Tuple[List, List, Dict]:
+    return _parse_standard(_get_json(url), extreme)
+
+
+def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List, Dict]:
+    return _parse_azure(_get_json(url), extreme)
+
+
+def _snapshot_id(ranges: Tuple[List, List, Dict]) -> str:
+    payload = json.dumps(ranges, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _cache_path(output_dir: str, provider: str) -> Path:
+    return Path(output_dir).parent / ".provider_catalog_cache" / f"{provider}.json"
+
+
+def _write_catalogue(path: Path, catalogue: ProviderCatalogue) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(asdict(catalogue), handle, indent=2)
+    os.replace(temporary, path)
+
+
+def _save_catalogue(output_dir: str, catalogue: ProviderCatalogue) -> None:
+    _write_catalogue(
+        Path(output_dir) / f"{catalogue.provider}_ip_ranges.json", catalogue
+    )
+    _write_catalogue(_cache_path(output_dir, catalogue.provider), catalogue)
+
+
+def _load_cached_catalogue(
+    output_dir: str, provider: str, source_url: str
+) -> ProviderCatalogue:
+    path = _cache_path(output_dir, provider)
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    retrieved_at = datetime.fromisoformat(data["retrieved_at"].replace("Z", "+00:00"))
+    now = _utc_now()
+    if retrieved_at > now + timedelta(minutes=5):
+        raise CatalogueFetchError(f"cached catalogue has a future timestamp ({path})")
+    if now - retrieved_at > MAX_CACHE_AGE[provider]:
+        raise CatalogueFetchError(f"cached catalogue is stale ({path})")
+    ranges = (data["ipv4_ranges"], data["ipv6_ranges"], data["metadata"])
+    _validate_ranges(ranges[0], ranges[1])
+    calculated_snapshot = _snapshot_id(ranges)
+    if data.get("snapshot_id") not in (None, calculated_snapshot):
+        raise CatalogueFetchError(
+            f"cached catalogue snapshot ID does not match ({path})"
+        )
+    catalogue = ProviderCatalogue(
+        provider=provider,
+        ipv4_ranges=ranges[0],
+        ipv6_ranges=ranges[1],
+        metadata=ranges[2],
+        status="cached",
+        usable=True,
+        source_url=data.get("source_url") or source_url,
+        retrieved_at=data["retrieved_at"],
+        snapshot_id=calculated_snapshot,
+    )
+    _write_catalogue(Path(output_dir) / f"{provider}_ip_ranges.json", catalogue)
+    return catalogue
+
+
+def _failed_catalogue(
+    provider: str, source_url: str, error: Exception
+) -> ProviderCatalogue:
+    return ProviderCatalogue(
+        provider=provider,
+        ipv4_ranges=[],
+        ipv6_ranges=[],
+        metadata={},
+        status="failed",
+        usable=False,
+        source_url=source_url,
+        retrieved_at=None,
+        snapshot_id=None,
+        error=str(error),
+    )
+
+
+def _fetch_catalogue(
+    provider: str, source_url: str, output_dir: str, extreme: bool, parser
+) -> ProviderCatalogue:
     try:
-        response = requests.get(url, timeout=10)
-        if response.status_code != 200:
-            print(f"Failed to fetch IP ranges. Status code: {response.status_code}")
-            return [], [], {}
-
-        data = json.loads(response.text)
-
-        if "prefixes" not in data:
-            print(f"No 'prefixes' key in retrieved data: {data}")
-            return [], [], {}
-
-        ipv4_ranges = []
-        ipv6_ranges = []
-        metadata = {}
-
-        for prefix in data["prefixes"]:
-            # AWS calls it 'region', GCP calls it 'scope'. Both name the place an
-            # address is allocated from, which is what an operator needs in order
-            # to act on a match.
-            region = prefix.get("region") or prefix.get("scope") or "unknown"
-            service = prefix.get("service") or "unknown"
-            # AWS publishes the network border group: the boundary an Elastic IP
-            # is actually allocated and advertised from. It usually mirrors the
-            # region but differs for Local Zones and Wavelength, which is exactly
-            # where the distinction matters. GCP and Azure publish no equivalent.
-            border_group = prefix.get("network_border_group") or "unknown"
-
-            for keyword in IPV4_KEYWORDS:
-                if keyword in prefix:
-                    cidr = prefix[keyword]
-                    ipv4_ranges.append(cidr)
-                    metadata[cidr] = (region, service, border_group)
-            for keyword in IPV6_KEYWORDS:
-                if keyword in prefix:
-                    cidr = prefix[keyword]
-                    ipv6_ranges.append(cidr)
-                    metadata[cidr] = (region, service, border_group)
-
-        if extreme:
-            print("IPv4 Ranges:", ipv4_ranges)
-            print("IPv6 Ranges:", ipv6_ranges)
-
-        return ipv4_ranges, ipv6_ranges, metadata
-
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred while fetching the IP ranges: {e}")
-    except IOError as e:
-        print(f"An error occurred while writing to the file: {e}")
-
-    return [], [], {}
-
-
-def _fetch_and_save(
-    url: str, filename: str, output_dir: str, extreme: bool
-) -> Tuple[List, List, Dict]:
-    ranges = fetch_ip_ranges(url, extreme)
-    with open(os.path.join(output_dir, filename), "w", encoding="utf-8") as f:
-        json.dump(ranges, f, indent=4)
-    return ranges
+        ranges = parser(source_url, extreme)
+        if len(ranges) != 3:
+            raise CatalogueFetchError("parser returned an incomplete catalogue")
+        _validate_ranges(ranges[0], ranges[1])
+        catalogue = ProviderCatalogue(
+            provider=provider,
+            ipv4_ranges=ranges[0],
+            ipv6_ranges=ranges[1],
+            metadata=ranges[2],
+            status="complete",
+            usable=True,
+            source_url=source_url,
+            retrieved_at=_timestamp(_utc_now()),
+            snapshot_id=_snapshot_id(ranges),
+        )
+        _save_catalogue(output_dir, catalogue)
+        return catalogue
+    except (
+        CatalogueFetchError,
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+    ) as live_error:
+        try:
+            return _load_cached_catalogue(output_dir, provider, source_url)
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            CatalogueFetchError,
+        ) as cache_error:
+            return _failed_catalogue(
+                provider,
+                source_url,
+                CatalogueFetchError(f"live fetch: {live_error}; cache: {cache_error}"),
+            )
 
 
 def fetch_google_cloud_ip_ranges(
     output_dir: str, extreme: bool = False
-) -> Tuple[List, List, Dict]:
-    return _fetch_and_save(
-        "https://www.gstatic.com/ipranges/cloud.json",
-        "gcp_ip_ranges.json",
-        output_dir,
-        extreme,
+) -> ProviderCatalogue:
+    return _fetch_catalogue(
+        "gcp", PROVIDER_SOURCES["gcp"], output_dir, extreme, fetch_ip_ranges
     )
 
 
-def fetch_aws_ip_ranges(
-    output_dir: str, extreme: bool = False
-) -> Tuple[List, List, Dict]:
-    return _fetch_and_save(
-        "https://ip-ranges.amazonaws.com/ip-ranges.json",
-        "aws_ip_ranges.json",
-        output_dir,
-        extreme,
+def fetch_aws_ip_ranges(output_dir: str, extreme: bool = False) -> ProviderCatalogue:
+    return _fetch_catalogue(
+        "aws", PROVIDER_SOURCES["aws"], output_dir, extreme, fetch_ip_ranges
     )
 
 
-# Pinned as of 2026-05-10. Update when Microsoft rotates the file.
+# Pinned as of 2026-05-10. It is only attempted when discovery is unavailable.
 AZURE_PINNED_URL = (
     "https://download.microsoft.com/download/7/1/d/"
     "71d86715-5596-4529-9b13-da13a5de5b63/ServiceTags_Public_20260504.json"
 )
-AZURE_CACHE_PATH = ".azure_ip_cache.json"
+AZURE_CONFIRMATION_URL = (
+    "https://www.microsoft.com/en-us/download/confirmation.aspx?id=56519"
+)
 
 
-def _save_azure_cache(ranges: Tuple[List, List, Dict]) -> None:
-    try:
-        with open(AZURE_CACHE_PATH, "w", encoding="utf-8") as f:
-            json.dump(ranges, f, indent=4)
-    except IOError as e:
-        print(f"Warning: could not write Azure IP cache: {e}")
-
-
-def _load_azure_cache() -> Tuple[List, List, Dict]:
-    with open(AZURE_CACHE_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    # Caches written before region/service capture hold only the two range lists.
-    # Read them rather than discarding a usable cache; metadata is simply absent.
-    metadata = data[2] if len(data) > 2 else {}
-    return data[0], data[1], metadata
-
-
-def fetch_azure_ip_ranges(
-    output_dir: str, extreme: bool = False
-) -> Tuple[List, List, Dict]:
-    confirmation_url = (
-        "https://www.microsoft.com/en-us/download/confirmation.aspx?id=56519"
-    )
-    json_url = None
-
-    # Step 1: scrape the confirmation page for the current download URL
-    try:
-        with urlopen(confirmation_url, timeout=10) as response:
-            html = response.read().decode("utf-8")
-            match = re.search(
-                r'https://download\.microsoft\.com/download/[^"]+\.json', html
-            )
-            if match:
-                json_url = match.group(0)
-            else:
-                print("Azure IP fetch: download link not found on confirmation page.")
-    except Exception as e:
-        print(f"Azure IP fetch: confirmation page unavailable — {e}")
-
-    # Step 2: if scrape succeeded, fetch and return
-    if json_url:
-        ranges = fetch_ip_ranges_for_azure(json_url, extreme)
-        if ranges[0] or ranges[1]:
-            _save_azure_cache(ranges)
-            with open(
-                os.path.join(output_dir, "azure_ip_ranges.json"), "w", encoding="utf-8"
-            ) as f:
-                json.dump(ranges, f, indent=4)
-            return ranges
-
-    # Step 3: scrape failed — try local cache
-    if os.path.exists(AZURE_CACHE_PATH):
-        print(
-            f"Azure IP fetch: using cached ranges from '{AZURE_CACHE_PATH}'. "
-            "To fetch fresh data set AZURE_PINNED_URL to the latest Microsoft download URL."
-        )
+def _discover_azure_url() -> str:
+    errors = []
+    for attempt in range(FETCH_ATTEMPTS):
         try:
-            return _load_azure_cache()
-        except Exception as e:
-            print(f"Azure IP fetch: cache load failed — {e}")
+            with urlopen(
+                AZURE_CONFIRMATION_URL, timeout=FETCH_TIMEOUT_SECONDS
+            ) as response:
+                html = response.read().decode("utf-8")
+            match = re.search(
+                r"https://download\.microsoft\.com/download/[^\"]+\.json", html
+            )
+            if not match:
+                raise CatalogueFetchError("download link not found")
+            return match.group(0)
+        except Exception as error:
+            errors.append(str(error))
+            if attempt + 1 < FETCH_ATTEMPTS:
+                sleep(RETRY_DELAY_SECONDS)
+    raise CatalogueFetchError(f"Azure URL discovery failed: {errors[-1]}")
 
-    # Step 4: no cache — fall back to pinned URL
-    print(
-        f"Azure IP fetch: no cache found, falling back to pinned URL ({AZURE_PINNED_URL}). "
-        "This may be stale — update AZURE_PINNED_URL in cloud_ip_ranges.py if needed."
+
+def fetch_azure_ip_ranges(output_dir: str, extreme: bool = False) -> ProviderCatalogue:
+    discovery_error = None
+    try:
+        source_url = _discover_azure_url()
+    except CatalogueFetchError as error:
+        discovery_error = error
+        source_url = AZURE_PINNED_URL
+
+    catalogue = _fetch_catalogue(
+        "azure", source_url, output_dir, extreme, fetch_ip_ranges_for_azure
     )
-    ranges = fetch_ip_ranges_for_azure(AZURE_PINNED_URL, extreme)
-    if ranges[0] or ranges[1]:
-        _save_azure_cache(ranges)
-        with open(
-            os.path.join(output_dir, "azure_ip_ranges.json"), "w", encoding="utf-8"
-        ) as f:
-            json.dump(ranges, f, indent=4)
-        return ranges
-
-    print("Azure IP fetch: all sources exhausted — no Azure ranges loaded.")
-    return [], [], {}
+    if catalogue.usable:
+        return catalogue
+    if discovery_error:
+        return ProviderCatalogue(
+            **{**asdict(catalogue), "error": f"{discovery_error}; {catalogue.error}"}
+        )
+    return catalogue
