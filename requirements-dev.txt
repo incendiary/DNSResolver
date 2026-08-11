@@ -1,5 +1,5 @@
 # Development tooling — not needed at runtime or in Lambda
 -r requirements.txt
-ruff==0.16.0  # pinned exact — bump deliberately, not via range
+ruff==0.16.2  # pinned exact — bump deliberately, not via range
 pre-commit~=4.6
 jsonschema==4.25.1  # validates published allocator contracts and examples
