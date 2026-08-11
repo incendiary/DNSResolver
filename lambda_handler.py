@@ -26,6 +26,7 @@ this module is the reference entry point only. See docs/LAMBDA.md.
 import asyncio
 import logging
 import os
+import urllib.parse
 
 import boto3
 
@@ -45,7 +46,10 @@ def handler(event, context):
 async def _main(event):
     record = event["Records"][0]["s3"]
     input_bucket = record["bucket"]["name"]
-    input_key = record["object"]["key"]
+    input_key = urllib.parse.unquote_plus(record["object"]["key"])
+    input_version = record["object"].get("versionId")
+    if not input_version:
+        raise ValueError("S3 event object versionId is required")
 
     output_bucket = os.environ.get("OUTPUT_BUCKET", input_bucket)
     output_prefix = os.environ.get("OUTPUT_PREFIX", "results/").rstrip("/")
@@ -61,8 +65,19 @@ async def _main(event):
     s3 = boto3.client("s3")
 
     domains_path = os.path.join(TEMP_DIR, "domains.txt")
-    s3.download_file(input_bucket, input_key, domains_path)
-    logger.info("Downloaded %s/%s to %s", input_bucket, input_key, domains_path)
+    s3.download_file(
+        input_bucket,
+        input_key,
+        domains_path,
+        ExtraArgs={"VersionId": input_version},
+    )
+    logger.info(
+        "Downloaded %s/%s version %s to %s",
+        input_bucket,
+        input_key,
+        input_version,
+        domains_path,
+    )
 
     output_dir = os.path.join(TEMP_DIR, "dnsresolver_output")
 

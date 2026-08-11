@@ -10,7 +10,10 @@ S3_EVENT = {
         {
             "s3": {
                 "bucket": {"name": "my-input-bucket"},
-                "object": {"key": "domains/domains.txt"},
+                "object": {
+                    "key": "domains/domains%20list.txt",
+                    "versionId": "domain-list-version-1",
+                },
             }
         }
     ]
@@ -22,7 +25,7 @@ def mock_s3(tmp_path):
     """Boto3 S3 client mock that writes a minimal domains file on download_file."""
     client = MagicMock()
 
-    def fake_download(bucket, key, dest):
+    def fake_download(bucket, key, dest, ExtraArgs=None):
         with open(dest, "w") as f:
             f.write("example.com\n")
 
@@ -56,9 +59,36 @@ async def test_handler_downloads_domains_from_s3(tmp_path, mock_s3, mock_env_man
 
     mock_s3.download_file.assert_called_once_with(
         "my-input-bucket",
-        "domains/domains.txt",
+        "domains/domains list.txt",
         str(tmp_path / "domains.txt"),
+        ExtraArgs={"VersionId": "domain-list-version-1"},
     )
+
+
+async def test_handler_rejects_unversioned_s3_event_before_download(
+    tmp_path, mock_s3, mock_env_manager
+):
+    event = {
+        "Records": [
+            {
+                "s3": {
+                    "bucket": {"name": "my-input-bucket"},
+                    "object": {"key": "domains/domains.txt"},
+                }
+            }
+        ]
+    }
+    with (
+        patch("lambda_handler.boto3.client", return_value=mock_s3),
+        patch("lambda_handler.LambdaEnvironmentManager", return_value=mock_env_manager),
+        patch("lambda_handler.TEMP_DIR", str(tmp_path)),
+        pytest.raises(ValueError, match="versionId is required"),
+    ):
+        from lambda_handler import _main
+
+        await _main(event)
+
+    mock_s3.download_file.assert_not_called()
 
 
 async def test_handler_uploads_results_after_run(tmp_path, mock_s3, mock_env_manager):
