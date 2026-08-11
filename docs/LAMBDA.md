@@ -4,6 +4,8 @@ This document covers the full Lambda deployment walkthrough for DNSResolver, mov
 
 DNSResolver can run as a Lambda function triggered by an S3 PutObject event. Upload a domains file to the input bucket to start a run; results are written back to S3 when it completes.
 
+The input bucket must have versioning enabled. The handler URL-decodes the event key and downloads the exact `versionId` carried by the S3 notification; unversioned events fail before DNS processing so an overwrite cannot silently change the run input.
+
 > **Where the deployment machinery lives.** This repository keeps `lambda_handler.py` as the
 > **reference entry point** only. The container image (`Dockerfile`) and the build-and-push pipeline
 > are maintained in a **separate deployment project**, so this repo stays a clean CLI tool. The steps
@@ -35,7 +37,7 @@ DNSResolver can run as a Lambda function triggered by an S3 PutObject event. Upl
 ### IAM permissions
 
 The Lambda execution role needs:
-- `s3:GetObject` on the input bucket
+- `s3:GetObjectVersion` on the versioned input bucket
 - `s3:PutObject` on the output bucket
 
 ### Step-by-step setup
@@ -95,7 +97,7 @@ aws iam put-role-policy \
     "Statement": [
       {
         "Effect": "Allow",
-        "Action": "s3:GetObject",
+        "Action": "s3:GetObjectVersion",
         "Resource": "arn:aws:s3:::<input-bucket>/*"
       },
       {
@@ -188,4 +190,3 @@ EventBridge (daily cron)
                 → S3: results/<timestamp>/
                     → downstream Lambda (claim dangling resources)
 ```
-
