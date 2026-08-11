@@ -143,6 +143,11 @@ Domain processing uses `asyncio.gather` with a `Semaphore` cap (`--max-threads`)
 
 ## Cloud IP attribution
 
+The current text files are the v2 CLI output. The versioned JSON handoff planned
+for provider-aware allocators is defined separately in the
+[allocator contract](docs/ALLOCATOR-CONTRACT.md); its schemas, examples, and
+documentation field tables are validated together in CI.
+
 Matching a resolved address to a cloud provider is only half an answer. `AWS` alone says
 little: of roughly 10,500 published AWS prefixes, over half carry the generic `AMAZON` tag,
 and the ones that matter operationally — `EC2` in a named region — look identical unless the

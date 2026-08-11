@@ -1,0 +1,38 @@
+[
+  {
+    "contract_version": "1.0",
+    "hostname": "aws.example.com",
+    "ip": "192.0.2.10",
+    "provider": "aws",
+    "region": "ap-southeast-1",
+    "services": ["AMAZON", "EC2"],
+    "prefixes": ["192.0.2.0/24"],
+    "network_border_groups": ["ap-southeast-1"],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "gcp.example.com",
+    "ip": "198.51.100.20",
+    "provider": "gcp",
+    "region": "asia-southeast1",
+    "services": ["Google Cloud"],
+    "prefixes": ["198.51.100.0/24"],
+    "network_border_groups": ["unknown"],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "azure.example.com",
+    "ip": "2001:db8::20",
+    "provider": "azure",
+    "region": "southeastasia",
+    "services": ["AzureCloud"],
+    "prefixes": ["2001:db8::/32"],
+    "network_border_groups": ["unknown"],
+    "dns_record_type": "AAAA",
+    "actionability": "actionable"
+  }
+]

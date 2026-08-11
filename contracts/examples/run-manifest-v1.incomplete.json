@@ -1,0 +1,34 @@
+{
+  "contract_version": "1.0",
+  "run_id": "example-incomplete-run",
+  "status": "incomplete",
+  "started_at": "2026-01-01T00:00:00Z",
+  "completed_at": "2026-01-01T00:01:00Z",
+  "provider_catalogs": {
+    "aws": {
+      "status": "complete",
+      "usable": true,
+      "source_url": "https://example.com/aws-ranges.json",
+      "retrieved_at": "2026-01-01T00:00:01Z",
+      "snapshot_id": "aws-example-1"
+    },
+    "gcp": {
+      "status": "failed",
+      "usable": false,
+      "source_url": "https://example.com/gcp-ranges.json",
+      "retrieved_at": null,
+      "snapshot_id": null
+    },
+    "azure": {
+      "status": "complete",
+      "usable": true,
+      "source_url": "https://example.com/azure-ranges.json",
+      "retrieved_at": "2026-01-01T00:00:03Z",
+      "snapshot_id": "azure-example-1"
+    }
+  },
+  "outputs": {
+    "actionable_targets": null,
+    "observations": "dns-observations-v1.json"
+  }
+}

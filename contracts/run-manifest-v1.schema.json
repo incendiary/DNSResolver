@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/dnsresolver/contracts/run-manifest-v1.schema.json",
+  "title": "DNSResolver run manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "run_id",
+    "status",
+    "started_at",
+    "completed_at",
+    "provider_catalogs",
+    "outputs"
+  ],
+  "properties": {
+    "contract_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["complete", "incomplete", "failed"]},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "provider_catalogs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aws", "gcp", "azure"],
+      "properties": {
+        "aws": {"$ref": "#/$defs/providerCatalog"},
+        "gcp": {"$ref": "#/$defs/providerCatalog"},
+        "azure": {"$ref": "#/$defs/providerCatalog"}
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actionable_targets", "observations"],
+      "properties": {
+        "actionable_targets": {"type": ["string", "null"]},
+        "observations": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"status": {"const": "complete"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "provider_catalogs": {
+            "properties": {
+              "aws": {"properties": {"usable": {"const": true}}},
+              "gcp": {"properties": {"usable": {"const": true}}},
+              "azure": {"properties": {"usable": {"const": true}}}
+            }
+          },
+          "outputs": {
+            "properties": {
+              "actionable_targets": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "outputs": {
+            "properties": {"actionable_targets": {"type": "null"}}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "providerCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "usable", "source_url", "retrieved_at", "snapshot_id"],
+      "properties": {
+        "status": {"enum": ["complete", "cached", "incomplete", "failed"]},
+        "usable": {"type": "boolean"},
+        "source_url": {"type": "string", "format": "uri"},
+        "retrieved_at": {"type": ["string", "null"], "format": "date-time"},
+        "snapshot_id": {"type": ["string", "null"]}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"enum": ["complete", "cached"]}},
+            "required": ["status"]
+          },
+          "then": {"properties": {"usable": {"const": true}}},
+          "else": {"properties": {"usable": {"const": false}}}
+        }
+      ]
+    }
+  }
+}
