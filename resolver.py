@@ -4,9 +4,12 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from classes.allocator_contract import publish_allocator_targets
+from classes.allocator_contract import (
+    clear_allocator_targets,
+    publish_allocator_targets,
+)
 from classes.csp_ip_addresses import CSPIPAddresses
-from classes.custom_exceptions import ProviderCatalogueError
+from classes.custom_exceptions import OutputWriteError, ProviderCatalogueError
 from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
 from classes.run_summary import RunSummary
@@ -25,6 +28,7 @@ async def run(env_manager):
     both the CLI entrypoint (resolver.py) and the Lambda entrypoint (lambda_handler.py)
     can share the same logic.
     """
+    clear_allocator_targets(env_manager.output_dir)
     catalogues = {
         "gcp": fetch_google_cloud_ip_ranges(
             env_manager.output_dir, env_manager.extreme
@@ -102,6 +106,11 @@ async def run(env_manager):
 
         failed = []
         for domain, result in zip(domains_to_process, results):
+            if isinstance(result, OutputWriteError):
+                env_manager.log_error(
+                    "Required output failure processing %s: %s", domain, result
+                )
+                raise result
             if isinstance(result, Exception):
                 env_manager.log_error(
                     "Unhandled exception processing %s: %s", domain, result

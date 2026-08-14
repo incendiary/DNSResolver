@@ -12,3 +12,7 @@ class InvalidNameserversError(Exception):
 
 class ProviderCatalogueError(RuntimeError):
     """One or more required cloud provider catalogues are unusable."""
+
+
+class OutputWriteError(RuntimeError):
+    """A required run output could not be created or written."""

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import resolver
-from classes.custom_exceptions import ProviderCatalogueError
+from classes.custom_exceptions import OutputWriteError, ProviderCatalogueError
 from imports.cloud_ip_ranges import ProviderCatalogue
 
 
@@ -110,3 +110,45 @@ async def test_run_fails_closed_before_processing_domains(run_environment):
     assert status["gcp"]["usable"] is False
     assert status["gcp"]["error"] == "TLS failure"
     assert not (Path(run_environment.output_dir) / "allocator-targets-v1.json").exists()
+
+
+async def test_run_aborts_before_publication_on_output_failure(run_environment):
+    stale_targets = Path(run_environment.output_dir) / "allocator-targets-v1.json"
+    stale_targets.write_text('[{"stale": true}]', encoding="utf-8")
+    failure = OutputWriteError("disk full")
+
+    def catalogue(provider):
+        return ProviderCatalogue(
+            provider,
+            ["192.0.2.0/24"],
+            [],
+            {"192.0.2.0/24": [("region", "service", "border-group")]},
+            "complete",
+            True,
+            f"https://example.com/{provider}.json",
+            "2026-01-01T00:00:00Z",
+            f"{provider}-1",
+        )
+
+    with (
+        patch("resolver.fetch_google_cloud_ip_ranges", return_value=catalogue("gcp")),
+        patch("resolver.fetch_aws_ip_ranges", return_value=catalogue("aws")),
+        patch("resolver.fetch_azure_ip_ranges", return_value=catalogue("azure")),
+        patch("resolver.DNSHandler"),
+        patch(
+            "resolver.process_domain_async",
+            new_callable=AsyncMock,
+            side_effect=failure,
+        ),
+        patch("resolver.publish_allocator_targets") as publish,
+        pytest.raises(OutputWriteError, match="disk full"),
+    ):
+        await resolver.run(run_environment)
+
+    publish.assert_not_called()
+    assert not stale_targets.exists()
+    run_environment.log_error.assert_called_once_with(
+        "Required output failure processing %s: %s",
+        "example.com",
+        failure,
+    )

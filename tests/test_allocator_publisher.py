@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from classes.allocator_contract import publish_allocator_targets
+from classes.custom_exceptions import OutputWriteError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = json.loads(
@@ -93,3 +95,40 @@ def test_publisher_preserves_distinct_provider_regions(tmp_path):
         "ap-southeast-1",
         "us-east-1",
     }
+
+
+@pytest.mark.parametrize("failure", ["open", "write", "replace"])
+def test_publication_failure_removes_stale_and_temporary_files(tmp_path, failure):
+    matches = write_matches(
+        tmp_path,
+        [
+            "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/24|ap-southeast-1"
+        ],
+    )
+    destination = tmp_path / "allocator-targets-v1.json"
+    temporary = tmp_path / "allocator-targets-v1.json.tmp"
+    destination.write_text('[{"stale": true}]', encoding="utf-8")
+
+    if failure == "open":
+        real_open = open
+
+        def fail_output_open(path, mode="r", *args, **kwargs):
+            if Path(path) == temporary and "w" in mode:
+                raise OSError("disk full")
+            return real_open(path, mode, *args, **kwargs)
+
+        failure_patch = patch("builtins.open", side_effect=fail_output_open)
+    elif failure == "write":
+        failure_patch = patch(
+            "classes.allocator_contract.json.dump", side_effect=OSError("disk full")
+        )
+    else:
+        failure_patch = patch(
+            "classes.allocator_contract.os.replace", side_effect=OSError("read only")
+        )
+
+    with failure_patch, pytest.raises(OutputWriteError):
+        publish_allocator_targets(matches, tmp_path)
+
+    assert not destination.exists()
+    assert not temporary.exists()

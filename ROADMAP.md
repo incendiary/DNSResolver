@@ -31,9 +31,9 @@ then confirm GitHub jobs `test`, `gitleaks`, and `trufflehog` before squash merg
 | 4 | Fail closed on incomplete provider catalogues | Merged, PR 163 | AWS/GCP/Azure use bounded retries, validation, provenance, freshness-limited integrity-checked snapshots, and explicit states; no DNS processing occurs with an unusable provider. |
 | 5 | Publish the versioned allocator target document | Merged, PR 164 | A successful run atomically publishes schema-valid provider-aware JSON, groups repeated metadata, excludes wildcard observations, and retains the legacy pipe output. |
 | 6 | Pin Lambda input to the triggering object version | Merged, PR 165 | The reference handler reads the exact S3 object version from the event and rejects incomplete version information. This does not reopen Lambda expansion. |
-| 7 | Preserve every provider attribution | Implemented on `fix/preserve-cloud-attribution`; PR pending | Duplicate services, overlapping prefixes, identical CIDRs across providers, and multiple provider-published regions survive catalogue parsing, matching, pipe output, and JSON publication without changing the schema. Legacy scalar cache snapshots remain readable. |
+| 7 | Preserve every provider attribution | Merged, PR 169 | Duplicate services, overlapping prefixes, identical CIDRs across providers, and multiple provider-published regions survive catalogue parsing, matching, pipe output, and JSON publication without changing the schema. Legacy scalar cache snapshots remain readable. |
 | 8 | Replace linear cloud-range matching with an indexed matcher | Deferred until measured need | A deterministic benchmark is defined before implementation; outputs are byte-for-byte equivalent to item 7; measured runtime and memory are reported at representative scale. |
-| 9 | Make output publication atomic and observable | Deferred; not an initial-workability gate | Required writes cannot be swallowed; partial runs cannot leave a stale actionable document; injected open/write/replace failures produce a nonzero, explicit failure with regression tests. |
+| 9 | Fail explicitly on required output errors | Implemented on `fix/fail-on-output-errors`; PR pending | Required writes cannot be swallowed; partial runs cannot leave a stale actionable document; injected open/write/replace failures produce a nonzero, explicit failure with regression tests. |
 | 10 | Complete observation/run-manifest publication | Deferred; not an initial-workability gate | The checked observation and manifest contracts are emitted by real runs; manifest state reflects provider completeness and publication outcome; actionable output is null for incomplete/failed runs. |
 | 11 | Validate the real allocator consumer end to end | Planned, cross-repository | The AWS consumer ingests a current DNSResolver document unchanged; GCP/Azure route only to provider-aware implementations or are explicitly rejected; a synthetic authorized fixture proves no provider is misrouted. |
 | 12 | Measure and calibrate large-run behavior | Planned last | A repeatable representative benchmark replaces the unmeasured README scalability claim; resource limits and operational guidance reflect measured results. |
@@ -46,15 +46,16 @@ then confirm GitHub jobs `test`, `gitleaks`, and `trufflehog` before squash merg
   individual work-item PR.
 - No matcher-performance refactor inside attribution item 7; correctness is frozen
   first so optimisation has a trustworthy equivalence oracle.
-- No separate security-hardening phase. Items 8-10 are optional reliability and
-  performance follow-ups, deferred until measured operational need.
+- No standalone security-hardening phase is planned here. Items 9-10 are
+  operational reliability improvements; item 8 is a performance change that
+  remains deferred until measured need.
 - No claim that unit coverage proves resolver behavior; real DNS, real provider
   catalogues, consumer validation, and actual merge CI remain separate gates.
 
 ### Delivery state — 2026-08-14
 
-Item 7 is implemented on `fix/preserve-cloud-attribution` and ready for its
-focused pull request.
+Item 7 was squash-merged in PR 169. Item 9 is implemented on
+`fix/fail-on-output-errors` and ready for its focused pull request.
 
 - Focused suite: 91 tests passed.
 - Full local CI: Ruff and format passed; baseline 5 passed; full suite 310 passed
@@ -75,6 +76,11 @@ focused pull request.
 - The live gate may be delegated using `docs/EXTERNAL-ACCEPTANCE.md`; its report
   must keep automated, catalogue, system-resolver, public-resolver, and allocator
   evidence separate.
+- Item 9 focused suite: 55 tests passed. Full local CI: 315 tests passed at 95%
+  coverage for `classes` and `imports`; Ruff and formatting passed. A production
+  system-resolver run fetched all three current catalogues, resolved both public
+  inputs, emitted 45 attribution records, and published 20 schema-valid targets
+  without leaving a temporary allocator document.
 
 > **On its derivation.** The plan below came from [`REVIEW.md`](REVIEW.md) (2026-07-15), which
 > assessed the tool against a misread goal — cloud attribution treated as a supporting attribute

@@ -3,6 +3,8 @@ import os
 
 import aiofiles
 
+from classes.custom_exceptions import OutputWriteError
+
 
 class OutputManager:
     """Creates the output directory structure and handles async file writes."""
@@ -44,12 +46,16 @@ class OutputManager:
             else:
                 with open(path, "w", encoding="utf-8"):
                     pass
-        except (IOError, OSError) as e:
-            self._logger.error("Unable to create %s: %s", path, e)
+        except OSError as error:
+            message = f"Unable to create required output {path}: {error}"
+            self._logger.error(message)
+            raise OutputWriteError(message) from error
 
     async def write_to_file(self, file_path, content):
         try:
             async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
                 await f.write(content + "\n")
-        except Exception as e:
-            self._logger.error("Failed to write to %s: %s", file_path, e)
+        except OSError as error:
+            message = f"Failed to write required output {file_path}: {error}"
+            self._logger.error(message)
+            raise OutputWriteError(message) from error

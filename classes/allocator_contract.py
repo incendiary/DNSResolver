@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+from classes.custom_exceptions import OutputWriteError
+
 CONTRACT_VERSION = "1.0"
 SUPPORTED_PROVIDERS = {"aws", "gcp", "azure"}
 WILDCARD_PREFIXES = ("WILDCARD|", "WILDCARD_ZONE|")
@@ -13,7 +15,7 @@ WILDCARD_PREFIXES = ("WILDCARD|", "WILDCARD_ZONE|")
 def publish_allocator_targets(csp_path, output_dir):
     """Write allocator-targets-v1.json atomically and return its records."""
     destination = Path(output_dir) / "allocator-targets-v1.json"
-    destination.unlink(missing_ok=True)
+    clear_allocator_targets(output_dir)
     grouped = {}
     for line_number, line in enumerate(_lines(csp_path), start=1):
         if line.startswith(WILDCARD_PREFIXES):
@@ -56,10 +58,27 @@ def publish_allocator_targets(csp_path, output_dir):
             json.dump(targets, handle, indent=2)
             handle.write("\n")
         os.replace(temporary, destination)
+    except OSError as error:
+        raise OutputWriteError(
+            f"Unable to publish allocator targets to {destination}: {error}"
+        ) from error
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        _remove_output(temporary)
     return targets
+
+
+def clear_allocator_targets(output_dir):
+    """Remove actionable output and its temporary file before a run starts."""
+    destination = Path(output_dir) / "allocator-targets-v1.json"
+    _remove_output(destination)
+    _remove_output(destination.with_suffix(".json.tmp"))
+
+
+def _remove_output(path):
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as error:
+        raise OutputWriteError(f"Unable to remove output {path}: {error}") from error
 
 
 def _lines(path):

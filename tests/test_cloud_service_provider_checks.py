@@ -11,6 +11,7 @@ import ipaddress
 import pytest
 
 from classes.allocator_contract import publish_allocator_targets
+from classes.custom_exceptions import OutputWriteError
 from classes.domain_processing_context import DomainProcessingContext
 from imports.cloud_service_provider_checks import (
     get_ip_matches,
@@ -290,6 +291,26 @@ def test_log_and_write_no_full_file_read(tmp_path, ctx, monkeypatch):
     )
 
     assert "example.com|34.1.2.3|gcp|" in out_file.read_text()
+
+
+def test_log_and_write_raises_explicit_output_error(tmp_path, ctx, monkeypatch):
+    out_file = tmp_path / "csp.txt"
+    output_files = {"standard": {"csp": str(out_file)}}
+
+    def fail_open(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("builtins.open", fail_open)
+
+    with pytest.raises(OutputWriteError, match="Failed to write CSP attribution"):
+        log_and_write(
+            "gcp",
+            {"34.1.2.3": {"34.0.0.0/8"}},
+            "example.com",
+            output_files,
+            ctx,
+            set(),
+        )
 
 
 def test_log_and_write_substring_line_not_suppressed(tmp_path, ctx):
