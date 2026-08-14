@@ -1,6 +1,8 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from tqdm import tqdm
 
@@ -12,6 +14,11 @@ from classes.csp_ip_addresses import CSPIPAddresses
 from classes.custom_exceptions import OutputWriteError, ProviderCatalogueError
 from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
+from classes.run_contract import (
+    clear_run_documents,
+    publish_dns_observations,
+    publish_run_manifest,
+)
 from classes.run_summary import RunSummary
 from imports.cloud_ip_ranges import (
     fetch_aws_ip_ranges,
@@ -28,14 +35,47 @@ async def run(env_manager):
     both the CLI entrypoint (resolver.py) and the Lambda entrypoint (lambda_handler.py)
     can share the same logic.
     """
+    run_id = str(uuid4())
+    started_at = _timestamp()
+    catalogues = {}
     clear_allocator_targets(env_manager.output_dir)
-    catalogues = {
+    clear_run_documents(env_manager.output_dir)
+    try:
+        await _run(env_manager, run_id, started_at, catalogues)
+    except ProviderCatalogueError:
+        raise
+    except Exception:
+        try:
+            clear_allocator_targets(env_manager.output_dir)
+            publish_dns_observations(
+                env_manager.output_files,
+                env_manager.output_dir,
+            )
+            if set(catalogues) == {"aws", "gcp", "azure"}:
+                publish_run_manifest(
+                    env_manager.output_dir,
+                    run_id=run_id,
+                    status="failed",
+                    started_at=started_at,
+                    completed_at=_timestamp(),
+                    catalogues=catalogues,
+                )
+        except Exception as contract_error:
+            env_manager.log_error(
+                "Unable to publish failed run state: %s", contract_error
+            )
+        raise
+
+
+async def _run(env_manager, run_id, started_at, catalogues):
+    fetched_catalogues = {
         "gcp": fetch_google_cloud_ip_ranges(
             env_manager.output_dir, env_manager.extreme
         ),
         "aws": fetch_aws_ip_ranges(env_manager.output_dir, env_manager.extreme),
         "azure": fetch_azure_ip_ranges(env_manager.output_dir, env_manager.extreme),
     }
+    catalogues.update(fetched_catalogues)
     status_path = Path(env_manager.output_dir) / "provider_catalogues.json"
     with open(status_path, "w", encoding="utf-8") as handle:
         json.dump(
@@ -49,9 +89,27 @@ async def run(env_manager):
 
     unusable = [name for name, catalogue in catalogues.items() if not catalogue.usable]
     if unusable:
+        env_manager.set_domains()
         details = "; ".join(
             f"{name}: {catalogues[name].error or catalogues[name].status}"
             for name in unusable
+        )
+        publish_dns_observations(
+            env_manager.output_files,
+            env_manager.output_dir,
+            provider_failures={
+                name: catalogues[name].error or catalogues[name].status
+                for name in unusable
+            },
+            hostnames=env_manager.domains,
+        )
+        publish_run_manifest(
+            env_manager.output_dir,
+            run_id=run_id,
+            status="incomplete",
+            started_at=started_at,
+            completed_at=_timestamp(),
+            catalogues=catalogues,
         )
         raise ProviderCatalogueError(
             "Required provider catalogue(s) unavailable; no domains were processed "
@@ -143,6 +201,7 @@ async def run(env_manager):
         "Published %d actionable target(s) to allocator-targets-v1.json",
         len(targets),
     )
+    publish_dns_observations(env_manager.output_files, env_manager.output_dir)
 
     RunSummary(env_manager.output_files, env_manager.output_dir, __version__).display(
         len(env_manager.domains), len(domains_to_process)
@@ -159,6 +218,19 @@ async def run(env_manager):
         )
         env_manager.log_info("Azure IPv4 Ranges: %s", csp_ip_addresses.get_azure_ipv4())
         env_manager.log_info("Azure IPv6 Ranges: %s", csp_ip_addresses.get_azure_ipv6())
+
+    publish_run_manifest(
+        env_manager.output_dir,
+        run_id=run_id,
+        status="complete",
+        started_at=started_at,
+        completed_at=_timestamp(),
+        catalogues=catalogues,
+    )
+
+
+def _timestamp():
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 async def main_async():
