@@ -1,6 +1,8 @@
 import functools
 import ipaddress
 
+from classes.custom_exceptions import OutputWriteError
+
 
 @functools.lru_cache(maxsize=None)
 def parse_network(cidr):
@@ -167,8 +169,13 @@ def log_and_write(
                 if message in written_lines:
                     continue
 
-                with open(file_path, "a", encoding="utf-8") as file:
-                    file.write(message + "\n")
+                try:
+                    with open(file_path, "a", encoding="utf-8") as file:
+                        file.write(message + "\n")
+                except OSError as error:
+                    raise OutputWriteError(
+                        f"Failed to write CSP attribution to {file_path}: {error}"
+                    ) from error
                 written_lines.add(message)
                 domain_context.log_info(message)
                 wrote_any = True

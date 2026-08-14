@@ -120,6 +120,12 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `{provider}_ip_ranges.json` | Validated provider ranges and provenance used by this run, from either a live source or a fresh cache |
 | `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
 
+Required output failures terminate the run instead of being logged and ignored.
+`allocator-targets-v1.json` is cleared when a run starts and published with an
+atomic replace only after processing succeeds, so a partial run cannot leave an
+older actionable document looking current. Non-actionable partial files may
+remain for diagnosis.
+
 ## AWS Lambda deployment
 
 DNSResolver can run as an S3-triggered Lambda. The full deployment walkthrough (ECR image, IAM, triggers) lives in [`docs/LAMBDA.md`](docs/LAMBDA.md). Note: the maintained Lambda packaging is produced in a separate project; the handler here is the reference entry point.

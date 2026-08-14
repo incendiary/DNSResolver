@@ -2,8 +2,7 @@
 Tests for OutputManager.
 
 Covers: output-dir creation, the evidence-dir-vs-file branch in _create,
-the write error path (aiofiles.open patched to raise), and evidence file
-layout when evidence=True.
+explicit create/write failures, and evidence file layout when evidence=True.
 """
 
 import os
@@ -11,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from classes.custom_exceptions import OutputWriteError
 from classes.output_manager import OutputManager
 
 
@@ -37,30 +37,33 @@ def test_no_evidence_key_when_evidence_disabled(tmp_path):
     assert "evidence" not in om.output_files
 
 
-def test_create_write_error_is_logged_not_raised(tmp_path):
+def test_create_write_error_is_raised(tmp_path):
     om = OutputManager(str(tmp_path), "20260101_000000")
-    with patch("builtins.open", side_effect=OSError("disk full")):
-        # Should not raise even though every _create call would fail internally.
-        om._create(str(tmp_path / "some_file.txt"))
-    # No assertion beyond "did not raise" is required by _create's contract,
-    # but confirm the logger recorded the failure.
+    target = str(tmp_path / "some_file.txt")
+    with (
+        patch("builtins.open", side_effect=OSError("disk full")),
+        pytest.raises(OutputWriteError, match="Unable to create"),
+    ):
+        om._create(target)
 
 
 def test_create_logs_error_on_failure(tmp_path):
     om = OutputManager(str(tmp_path), "20260101_000000")
     with patch("builtins.open", side_effect=OSError("disk full")):
         with patch.object(om._logger, "error") as mock_error:
-            om._create(str(tmp_path / "some_file.txt"))
+            with pytest.raises(OutputWriteError):
+                om._create(str(tmp_path / "some_file.txt"))
             mock_error.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_write_to_file_error_logged_not_raised(tmp_path):
+async def test_write_to_file_error_is_raised(tmp_path):
     om = OutputManager(str(tmp_path), "20260101_000000")
     target = str(tmp_path / "out.txt")
     with patch("classes.output_manager.aiofiles.open", side_effect=OSError("boom")):
         with patch.object(om._logger, "error") as mock_error:
-            await om.write_to_file(target, "some content")
+            with pytest.raises(OutputWriteError, match="Failed to write"):
+                await om.write_to_file(target, "some content")
             mock_error.assert_called_once()
 
 
