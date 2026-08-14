@@ -14,6 +14,7 @@ CONTRACT_DIR = REPO_ROOT / "contracts"
 EXAMPLE_DIR = CONTRACT_DIR / "examples"
 DOC_PATH = REPO_ROOT / "docs" / "ALLOCATOR-CONTRACT.md"
 README_PATH = REPO_ROOT / "README.md"
+EXTERNAL_ACCEPTANCE_PATH = REPO_ROOT / "docs" / "EXTERNAL-ACCEPTANCE.md"
 
 
 SCHEMA_EXAMPLES = {
@@ -194,3 +195,16 @@ def test_observations_are_never_actionable():
     observations = load_json(EXAMPLE_DIR / "dns-observations-v1.json")
     assert observations
     assert all(item["actionability"] == "excluded" for item in observations)
+
+
+def test_external_acceptance_tracks_live_contract_and_provider_scope():
+    document = EXTERNAL_ACCEPTANCE_PATH.read_text(encoding="utf-8")
+
+    assert "contracts/allocator-targets-v1.schema.json" in document
+    assert "allocator-targets-v1.json" in document
+    assert "csp_matches_*.txt" in document
+    assert "provider_catalogues.json" in document
+    assert "--nameservers 1.1.1.1,8.8.8.8" in document
+    assert "system resolver" in document
+    assert all(provider in document for provider in ("aws", "gcp", "azure"))
+    assert "must never make real DNS or HTTP requests" in document

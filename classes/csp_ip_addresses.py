@@ -7,7 +7,7 @@ class CSPIPAddresses:
         aws_ipv6,
         azure_ipv4,
         azure_ipv6,
-        metadata=None,
+        metadata_by_provider=None,
     ):
         self.gcp_ipv4 = gcp_ipv4
         self.gcp_ipv6 = gcp_ipv6
@@ -15,19 +15,20 @@ class CSPIPAddresses:
         self.aws_ipv6 = aws_ipv6
         self.azure_ipv4 = azure_ipv4
         self.azure_ipv6 = azure_ipv6
-        # CIDR -> (region, service). A match is only actionable downstream if the
-        # consumer knows where the address is allocated from and what it serves,
-        # so the publishers' own metadata is carried through rather than dropped.
-        self.metadata = metadata or {}
+        # Provider -> CIDR -> all published (region, service, border-group)
+        # attributions. Providers can publish the same CIDR, and one provider can
+        # publish a CIDR under multiple services, so neither dimension is scalar.
+        self.metadata_by_provider = metadata_by_provider or {}
 
-    def describe(self, cidr):
+    def describe(self, provider, cidr):
         """
-        Region, service and network border group for a matched prefix.
+        Every region, service and network border group for a provider prefix.
 
         Unpublished fields read 'unknown' rather than being inferred — only AWS
         publishes a border group, and not every prefix carries a region.
         """
-        return self.metadata.get(cidr, ("unknown", "unknown", "unknown"))
+        entries = self.metadata_by_provider.get(provider, {}).get(cidr)
+        return entries or [("unknown", "unknown", "unknown")]
 
     def get_gcp_ipv4(self):
         return self.gcp_ipv4

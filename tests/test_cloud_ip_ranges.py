@@ -68,8 +68,8 @@ def test_standard_parser_preserves_ranges_and_metadata():
 
     assert ipv4 == ["3.5.140.0/22"]
     assert ipv6 == ["2600:1900::/28"]
-    assert metadata["3.5.140.0/22"] == ("eu-west-2", "EC2", "eu-west-2")
-    assert metadata["2600:1900::/28"] == ("global", "Google Cloud", "unknown")
+    assert metadata["3.5.140.0/22"] == [("eu-west-2", "EC2", "eu-west-2")]
+    assert metadata["2600:1900::/28"] == [("global", "Google Cloud", "unknown")]
 
 
 def test_aws_separate_ipv6_prefix_collection_is_loaded():
@@ -87,7 +87,33 @@ def test_aws_separate_ipv6_prefix_collection_is_loaded():
     with patch("imports.cloud_ip_ranges.urlopen", return_value=_response(body=payload)):
         _ipv4, ipv6, metadata = fetch_ip_ranges("https://example.com/aws-ranges.json")
     assert ipv6 == ["2600:1f00::/40"]
-    assert metadata["2600:1f00::/40"] == ("us-east-1", "EC2", "us-east-1")
+    assert metadata["2600:1f00::/40"] == [("us-east-1", "EC2", "us-east-1")]
+
+
+def test_duplicate_prefix_preserves_every_published_service():
+    payload = {
+        "prefixes": [
+            {
+                "ip_prefix": "192.0.2.0/24",
+                "region": "ap-southeast-1",
+                "service": "AMAZON",
+                "network_border_group": "ap-southeast-1",
+            },
+            {
+                "ip_prefix": "192.0.2.0/24",
+                "region": "ap-southeast-1",
+                "service": "EC2",
+                "network_border_group": "ap-southeast-1",
+            },
+        ]
+    }
+    with patch("imports.cloud_ip_ranges.urlopen", return_value=_response(body=payload)):
+        _ipv4, _ipv6, metadata = fetch_ip_ranges("https://example.com/aws-ranges.json")
+
+    assert metadata["192.0.2.0/24"] == [
+        ("ap-southeast-1", "AMAZON", "ap-southeast-1"),
+        ("ap-southeast-1", "EC2", "ap-southeast-1"),
+    ]
 
 
 def test_azure_parser_preserves_ranges_and_metadata():
@@ -101,7 +127,7 @@ def test_azure_parser_preserves_ranges_and_metadata():
 
     assert ipv4 == ["20.26.0.0/16"]
     assert ipv6 == ["2603:1000::/24"]
-    assert metadata["20.26.0.0/16"] == ("uksouth", "AzureCloud", "unknown")
+    assert metadata["20.26.0.0/16"] == [("uksouth", "AzureCloud", "unknown")]
 
 
 def test_azure_global_region():
@@ -117,7 +143,7 @@ def test_azure_global_region():
         _ipv4, _ipv6, metadata = fetch_ip_ranges_for_azure(
             "https://example.com/azure.json", False
         )
-    assert metadata["13.64.0.0/16"] == ("global", "AzureCloud", "unknown")
+    assert metadata["13.64.0.0/16"] == [("global", "AzureCloud", "unknown")]
 
 
 @pytest.mark.parametrize(
@@ -159,7 +185,14 @@ def test_transient_http_failure_is_retried_then_succeeds():
 def test_successful_provider_fetch_records_provenance_and_snapshot(tmp_path):
     with patch(
         "imports.cloud_ip_ranges.fetch_ip_ranges",
-        return_value=(["34.0.0.0/8"], ["2600:1900::/28"], {}),
+        return_value=(
+            ["34.0.0.0/8"],
+            ["2600:1900::/28"],
+            {
+                "34.0.0.0/8": [("global", "Google Cloud", "unknown")],
+                "2600:1900::/28": [("global", "Google Cloud", "unknown")],
+            },
+        ),
     ):
         catalogue = fetch_google_cloud_ip_ranges(str(tmp_path))
 
@@ -181,13 +214,21 @@ def _write_cache(output_dir, provider, retrieved_at=None):
                 "provider": provider,
                 "ipv4_ranges": ["192.0.2.0/24"],
                 "ipv6_ranges": [],
-                "metadata": {},
+                "metadata": {
+                    "192.0.2.0/24": [["test-region", "test-service", "unknown"]]
+                },
                 "status": "complete",
                 "usable": True,
                 "source_url": f"https://example.com/{provider}.json",
                 "retrieved_at": retrieved_at
                 or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                "snapshot_id": _snapshot_id((["192.0.2.0/24"], [], {})),
+                "snapshot_id": _snapshot_id(
+                    (
+                        ["192.0.2.0/24"],
+                        [],
+                        {"192.0.2.0/24": [["test-region", "test-service", "unknown"]]},
+                    )
+                ),
                 "error": None,
             }
         )
@@ -206,6 +247,41 @@ def test_live_failure_uses_fresh_cache_with_explicit_cached_state(tmp_path):
     assert catalogue.usable is True
     assert catalogue.ipv4_ranges == ["192.0.2.0/24"]
     assert (tmp_path / "aws_ip_ranges.json").exists()
+
+
+def test_legacy_scalar_metadata_cache_is_upgraded(tmp_path):
+    cache = _cache_path(str(tmp_path), "aws")
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    ranges = (
+        ["192.0.2.0/24"],
+        [],
+        {"192.0.2.0/24": ["ap-southeast-1", "EC2", "ap-southeast-1"]},
+    )
+    cache.write_text(
+        json.dumps(
+            {
+                "provider": "aws",
+                "ipv4_ranges": ranges[0],
+                "ipv6_ranges": ranges[1],
+                "metadata": ranges[2],
+                "source_url": "https://example.com/aws.json",
+                "retrieved_at": datetime.now(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "snapshot_id": _snapshot_id(ranges),
+            }
+        )
+    )
+    with patch(
+        "imports.cloud_ip_ranges.fetch_ip_ranges",
+        side_effect=CatalogueFetchError("offline"),
+    ):
+        catalogue = fetch_aws_ip_ranges(str(tmp_path))
+
+    assert catalogue.status == "cached"
+    assert catalogue.metadata["192.0.2.0/24"] == [
+        ("ap-southeast-1", "EC2", "ap-southeast-1")
+    ]
 
 
 def test_live_failure_and_stale_cache_returns_unusable_state(tmp_path):
@@ -263,7 +339,11 @@ def test_azure_discovery_uses_current_download_url(tmp_path):
         patch("imports.cloud_ip_ranges.urlopen", return_value=_urlopen_html(html)),
         patch(
             "imports.cloud_ip_ranges.fetch_ip_ranges_for_azure",
-            return_value=(["20.0.0.0/8"], [], {}),
+            return_value=(
+                ["20.0.0.0/8"],
+                [],
+                {"20.0.0.0/8": [("global", "AzureCloud", "unknown")]},
+            ),
         ) as fetch,
     ):
         catalogue = fetch_azure_ip_ranges(str(tmp_path))
@@ -278,7 +358,11 @@ def test_azure_discovery_failure_uses_pinned_source(tmp_path):
         patch("imports.cloud_ip_ranges.sleep"),
         patch(
             "imports.cloud_ip_ranges.fetch_ip_ranges_for_azure",
-            return_value=(["20.0.0.0/8"], [], {}),
+            return_value=(
+                ["20.0.0.0/8"],
+                [],
+                {"20.0.0.0/8": [("global", "AzureCloud", "unknown")]},
+            ),
         ) as fetch,
     ):
         catalogue = fetch_azure_ip_ranges(str(tmp_path))

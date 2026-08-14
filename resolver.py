@@ -65,7 +65,7 @@ async def run(env_manager):
         aws_ipv6,
         azure_ipv4,
         azure_ipv6,
-        metadata={**gcp_meta, **aws_meta, **azure_meta},
+        metadata_by_provider={"gcp": gcp_meta, "aws": aws_meta, "azure": azure_meta},
     )
 
     env_manager.set_domains()

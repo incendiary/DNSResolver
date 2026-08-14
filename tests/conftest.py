@@ -29,15 +29,21 @@ AZURE_IPV6 = ["2603:1000::/24"]
 # CIDR -> (region, service, network_border_group). Only AWS publishes a border
 # group; it is the boundary an Elastic IP is actually allocated from.
 CSP_METADATA = {
-    "34.0.0.0/8": ("europe-west2", "Google Cloud", "unknown"),
-    "35.0.0.0/8": ("us-central1", "Google Cloud", "unknown"),
-    "2600:1900::/35": ("europe-west2", "Google Cloud", "unknown"),
-    "3.0.0.0/8": ("eu-west-2", "EC2", "eu-west-2"),
-    "52.0.0.0/8": ("us-east-1", "AMAZON", "us-east-1"),
-    "2600:1f00::/25": ("eu-west-2", "EC2", "eu-west-2"),
-    "13.0.0.0/8": ("uksouth", "AzureCloud", "unknown"),
-    "20.0.0.0/8": ("global", "AzureCloud", "unknown"),
-    "2603:1000::/24": ("uksouth", "AzureCloud", "unknown"),
+    "gcp": {
+        "34.0.0.0/8": [("europe-west2", "Google Cloud", "unknown")],
+        "35.0.0.0/8": [("us-central1", "Google Cloud", "unknown")],
+        "2600:1900::/35": [("europe-west2", "Google Cloud", "unknown")],
+    },
+    "aws": {
+        "3.0.0.0/8": [("eu-west-2", "EC2", "eu-west-2")],
+        "52.0.0.0/8": [("us-east-1", "AMAZON", "us-east-1")],
+        "2600:1f00::/25": [("eu-west-2", "EC2", "eu-west-2")],
+    },
+    "azure": {
+        "13.0.0.0/8": [("uksouth", "AzureCloud", "unknown")],
+        "20.0.0.0/8": [("global", "AzureCloud", "unknown")],
+        "2603:1000::/24": [("uksouth", "AzureCloud", "unknown")],
+    },
 }
 
 
@@ -51,7 +57,7 @@ def csp_ips():
         AWS_IPV6,
         AZURE_IPV4,
         AZURE_IPV6,
-        metadata=CSP_METADATA,
+        metadata_by_provider=CSP_METADATA,
     )
 
 

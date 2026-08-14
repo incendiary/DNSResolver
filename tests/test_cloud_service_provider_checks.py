@@ -10,6 +10,7 @@ import ipaddress
 
 import pytest
 
+from classes.allocator_contract import publish_allocator_targets
 from classes.domain_processing_context import DomainProcessingContext
 from imports.cloud_service_provider_checks import (
     get_ip_matches,
@@ -92,8 +93,16 @@ def test_match_ip_with_vendors_records_match(ctx):
 
     assert "34.1.2.3" in matches["gcp"]
     # The matched prefix is retained — it is the key to region and service.
-    assert matches["gcp"]["34.1.2.3"] == "34.0.0.0/8"
+    assert matches["gcp"]["34.1.2.3"] == {"34.0.0.0/8"}
     assert matches["aws"] == {}
+
+
+def test_match_keeps_every_overlapping_prefix(ctx):
+    ip_obj = ipaddress.IPv4Address("192.0.2.10")
+    vendor_ips = {"aws": ["192.0.2.0/24", "192.0.2.0/25"]}
+    matches = {"aws": {}}
+    match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
+    assert matches["aws"]["192.0.2.10"] == {"192.0.2.0/24", "192.0.2.0/25"}
 
 
 def test_match_ip_with_vendors_no_match(ctx):
@@ -124,13 +133,13 @@ def test_match_ip_with_vendors_ignores_invalid_range(ctx):
 
 def test_merge_matches_combines_ipv4_and_ipv6():
     """Both families merge, each address keeping the prefix it matched."""
-    v4 = {"gcp": {"1.2.3.4": "1.2.0.0/16"}, "aws": {}}
-    v6 = {"gcp": {"::1": "::/64"}, "aws": {}}
+    v4 = {"gcp": {"1.2.3.4": {"1.2.0.0/16"}}, "aws": {}}
+    v6 = {"gcp": {"::1": {"::/64"}}, "aws": {}}
     vendor_context = {"gcp": [], "aws": []}
 
     result = merge_matches(v4, v6, vendor_context)
 
-    assert result["gcp"] == {"1.2.3.4": "1.2.0.0/16", "::1": "::/64"}
+    assert result["gcp"] == {"1.2.3.4": {"1.2.0.0/16"}, "::1": {"::/64"}}
     assert result["aws"] == {}
 
 
@@ -149,7 +158,7 @@ def test_merge_matches_empty_sets():
 def test_get_ip_matches_finds_gcp_ipv4(ctx, csp_ips):
     # 34.1.2.3 falls in GCP's 34.0.0.0/8 range (from conftest)
     result = get_ip_matches(["34.1.2.3"], get_vendor_ips(ctx, 4), ctx, ip_version=4)
-    assert result["gcp"]["34.1.2.3"] == "34.0.0.0/8"
+    assert result["gcp"]["34.1.2.3"] == {"34.0.0.0/8"}
 
 
 def test_get_ip_matches_skips_wrong_ip_version(ctx):
@@ -169,7 +178,7 @@ def test_log_and_write_creates_entry(tmp_path, ctx):
     output_files = {"standard": {"csp": str(out_file)}}
 
     result = log_and_write(
-        "gcp", {"34.1.2.3": "34.0.0.0/8"}, "example.com", output_files, ctx, set()
+        "gcp", {"34.1.2.3": {"34.0.0.0/8"}}, "example.com", output_files, ctx, set()
     )
 
     assert result is True
@@ -190,7 +199,7 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
 
     first = log_and_write(
         "gcp",
-        {"34.1.2.3": "34.0.0.0/8"},
+        {"34.1.2.3": {"34.0.0.0/8"}},
         "example.com",
         output_files,
         ctx,
@@ -198,7 +207,7 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
     )
     second = log_and_write(
         "gcp",
-        {"34.1.2.3": "34.0.0.0/8"},
+        {"34.1.2.3": {"34.0.0.0/8"}},
         "example.com",
         output_files,
         ctx,
@@ -209,6 +218,50 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
     assert second is False
     lines = [ln for ln in out_file.read_text().splitlines() if ln]
     assert len(lines) == 1
+
+
+def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager):
+    from classes.csp_ip_addresses import CSPIPAddresses
+
+    csp = CSPIPAddresses(
+        [],
+        [],
+        ["192.0.2.0/24", "192.0.2.0/25"],
+        [],
+        [],
+        [],
+        metadata_by_provider={
+            "aws": {
+                "192.0.2.0/24": [
+                    ("ap-southeast-1", "AMAZON", "ap-southeast-1"),
+                    ("ap-southeast-1", "EC2", "ap-southeast-1"),
+                ],
+                "192.0.2.0/25": [("ap-southeast-1", "EC2", "ap-southeast-1")],
+            }
+        },
+    )
+    context = DomainProcessingContext(mock_env_manager, csp)
+    context.set_domain("api.example.com")
+    output = tmp_path / "csp.txt"
+    output.touch()
+    wrote = log_and_write(
+        "aws",
+        {"192.0.2.10": {"192.0.2.0/24", "192.0.2.0/25"}},
+        "api.example.com",
+        {"standard": {"csp": str(output)}},
+        context,
+        set(),
+    )
+    assert wrote is True
+    assert output.read_text().splitlines() == [
+        "api.example.com|192.0.2.10|aws|ap-southeast-1|AMAZON|192.0.2.0/24|ap-southeast-1",
+        "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/24|ap-southeast-1",
+        "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/25|ap-southeast-1",
+    ]
+
+    targets = publish_allocator_targets(output, tmp_path)
+    assert targets[0]["services"] == ["AMAZON", "EC2"]
+    assert targets[0]["prefixes"] == ["192.0.2.0/24", "192.0.2.0/25"]
 
 
 def test_log_and_write_no_full_file_read(tmp_path, ctx, monkeypatch):
@@ -229,7 +282,7 @@ def test_log_and_write_no_full_file_read(tmp_path, ctx, monkeypatch):
 
     log_and_write(
         "gcp",
-        {"34.1.2.3": "34.0.0.0/8"},
+        {"34.1.2.3": {"34.0.0.0/8"}},
         "example.com",
         output_files,
         ctx,
@@ -252,14 +305,14 @@ def test_log_and_write_substring_line_not_suppressed(tmp_path, ctx):
     # (example.com = exam + ple.com), but they are different domains/lines.
     first = log_and_write(
         "gcp",
-        {"34.1.2.3": "34.0.0.0/8"},
+        {"34.1.2.3": {"34.0.0.0/8"}},
         "example.com",
         output_files,
         ctx,
         written_lines,
     )
     second = log_and_write(
-        "gcp", {"34.1.2.3": "34.0.0.0/8"}, "ple.com", output_files, ctx, written_lines
+        "gcp", {"34.1.2.3": {"34.0.0.0/8"}}, "ple.com", output_files, ctx, written_lines
     )
 
     assert first is True
@@ -351,7 +404,11 @@ def test_parse_network_equivalence_ip_inside_and_outside_range(ctx):
     match_ip_with_vendors(inside_ip, vendor_ips, ctx, matches)
     match_ip_with_vendors(outside_ip, vendor_ips, ctx, matches)
 
-    assert matches == {"gcp": {"34.1.2.3": "34.0.0.0/8"}, "aws": {}, "azure": {}}
+    assert matches == {
+        "gcp": {"34.1.2.3": {"34.0.0.0/8"}},
+        "aws": {},
+        "azure": {},
+    }
 
 
 def test_parse_network_is_memoised_across_calls():

@@ -105,14 +105,16 @@ def match_ip_with_vendors(ip_obj, vendor_ips_context, domain_context, matches):
                 )
                 # Keep the prefix that matched — it is the key to the region and
                 # service the provider published for it.
-                matches[vendor][str(ip_obj)] = ip_range
+                matches[vendor].setdefault(str(ip_obj), set()).add(ip_range)
 
 
 def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):
-    return {
-        vendor: {**matches_ipv4[vendor], **matches_ipv6[vendor]}
-        for vendor in vendor_ips_context
-    }
+    merged = {vendor: {} for vendor in vendor_ips_context}
+    for vendor in vendor_ips_context:
+        for family_matches in (matches_ipv4[vendor], matches_ipv6[vendor]):
+            for address, prefixes in family_matches.items():
+                merged[vendor].setdefault(address, set()).update(prefixes)
+    return merged
 
 
 def log_and_write(
@@ -125,13 +127,15 @@ def log_and_write(
     wildcard_verdict=None,
 ):
     """
-    Write one line per matched address, as a handoff record for downstream
+    Write one line per published attribution, as a handoff record for downstream
     tooling:
 
         domain|ip|provider|region|service|prefix|border_group
 
-    One address per line, pipe-delimited, because this file is consumed by
-    another tool rather than read as prose. Region, service and border group
+    Each line is pipe-delimited because this file is consumed by another tool
+    rather than read as prose. One address can produce several lines when it
+    matches overlapping prefixes or a prefix has several published attributions.
+    Region, service and border group
     come from the provider's own published ranges and are what make a match
     actionable — an address is only worth pursuing if you know where it is
     allocated from and what it belongs to.
@@ -148,22 +152,25 @@ def log_and_write(
     line_prefix = f"{wildcard_verdict}|" if wildcard_verdict else ""
     wrote_any = False
 
-    for ip, prefix in sorted(matched_ips.items()):
-        region, service, border_group = csp_ip_addresses.describe(prefix)
-        message = (
-            f"{line_prefix}{domain}|{ip}|{vendor}|{region}|{service}"
-            f"|{prefix}|{border_group}"
-        )
+    for ip, prefixes in sorted(matched_ips.items()):
+        for prefix in sorted(prefixes):
+            for region, service, border_group in sorted(
+                csp_ip_addresses.describe(vendor, prefix)
+            ):
+                message = (
+                    f"{line_prefix}{domain}|{ip}|{vendor}|{region}|{service}"
+                    f"|{prefix}|{border_group}"
+                )
 
-        # Deduplicate against an in-memory, run-scoped set of lines already
-        # written — avoids re-reading the whole output file on every call.
-        if message in written_lines:
-            continue
+                # Deduplicate against an in-memory, run-scoped set of lines already
+                # written — avoids re-reading the whole output file on every call.
+                if message in written_lines:
+                    continue
 
-        with open(file_path, "a", encoding="utf-8") as file:
-            file.write(message + "\n")
-        written_lines.add(message)
-        domain_context.log_info(message)
-        wrote_any = True
+                with open(file_path, "a", encoding="utf-8") as file:
+                    file.write(message + "\n")
+                written_lines.add(message)
+                domain_context.log_info(message)
+                wrote_any = True
 
     return wrote_any

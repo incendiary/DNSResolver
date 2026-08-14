@@ -65,3 +65,24 @@ def test_ranges_are_returned_by_reference():
     csp = CSPIPAddresses(original, [], [], [], [], [])
     csp.get_gcp_ipv4().append("192.168.0.0/16")
     assert len(original) == 2
+
+
+def test_identical_cidr_metadata_is_isolated_by_provider():
+    shared = "192.0.2.0/24"
+    csp = CSPIPAddresses(
+        [shared],
+        [],
+        [shared],
+        [],
+        [],
+        [],
+        metadata_by_provider={
+            "gcp": {shared: [("asia-southeast1", "Google Cloud", "unknown")]},
+            "aws": {shared: [("ap-southeast-1", "EC2", "ap-southeast-1")]},
+        },
+    )
+
+    assert csp.describe("gcp", shared) == [
+        ("asia-southeast1", "Google Cloud", "unknown")
+    ]
+    assert csp.describe("aws", shared) == [("ap-southeast-1", "EC2", "ap-southeast-1")]
