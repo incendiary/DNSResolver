@@ -34,7 +34,7 @@ then confirm GitHub jobs `test`, `gitleaks`, and `trufflehog` before squash merg
 | 7 | Preserve every provider attribution | Merged, PR 169 | Duplicate services, overlapping prefixes, identical CIDRs across providers, and multiple provider-published regions survive catalogue parsing, matching, pipe output, and JSON publication without changing the schema. Legacy scalar cache snapshots remain readable. |
 | 8 | Replace linear cloud-range matching with an indexed matcher | Deferred until measured need | A deterministic benchmark is defined before implementation; outputs are byte-for-byte equivalent to item 7; measured runtime and memory are reported at representative scale. |
 | 9 | Fail explicitly on required output errors | Merged, PR 170 | Required writes cannot be swallowed; partial runs cannot leave a stale actionable document; injected open/write/replace failures produce a nonzero, explicit failure with regression tests. |
-| 10 | Publish observations and the run manifest | Implemented on `feat/publish-run-contracts`; PR pending | The checked observation and manifest contracts are emitted by real runs; manifest state reflects provider completeness and publication outcome; actionable output is null for incomplete/failed runs. |
+| 10 | Publish observations and the run manifest | Merged, PR 171 | The checked observation and manifest contracts are emitted by real runs; manifest state reflects provider completeness and publication outcome; actionable output is null for incomplete/failed runs. |
 | 11 | Validate the real allocator consumer end to end | Planned, cross-repository | The AWS consumer ingests a current DNSResolver document unchanged; GCP/Azure route only to provider-aware implementations or are explicitly rejected; a synthetic authorized fixture proves no provider is misrouted. |
 | 12 | Measure and calibrate large-run behavior | Planned last | A repeatable representative benchmark replaces the unmeasured README scalability claim; resource limits and operational guidance reflect measured results. |
 
@@ -54,8 +54,10 @@ then confirm GitHub jobs `test`, `gitleaks`, and `trufflehog` before squash merg
 
 ### Delivery state — 2026-08-14
 
-Items 7 and 9 were squash-merged in PRs 169 and 170. Item 10 is implemented on
-`feat/publish-run-contracts` and ready for its focused pull request.
+Items 7, 9, and 10 were squash-merged in PRs 169, 170, and 171. The planned
+in-repository operational reliability work is complete. Real allocator-consumer
+validation remains item 11; matcher optimisation and scale calibration remain
+deferred until measured need.
 
 - Focused suite: 91 tests passed.
 - Full local CI: Ruff and format passed; baseline 5 passed; full suite 310 passed
