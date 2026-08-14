@@ -33,8 +33,8 @@ then confirm GitHub jobs `test`, `gitleaks`, and `trufflehog` before squash merg
 | 6 | Pin Lambda input to the triggering object version | Merged, PR 165 | The reference handler reads the exact S3 object version from the event and rejects incomplete version information. This does not reopen Lambda expansion. |
 | 7 | Preserve every provider attribution | Merged, PR 169 | Duplicate services, overlapping prefixes, identical CIDRs across providers, and multiple provider-published regions survive catalogue parsing, matching, pipe output, and JSON publication without changing the schema. Legacy scalar cache snapshots remain readable. |
 | 8 | Replace linear cloud-range matching with an indexed matcher | Deferred until measured need | A deterministic benchmark is defined before implementation; outputs are byte-for-byte equivalent to item 7; measured runtime and memory are reported at representative scale. |
-| 9 | Fail explicitly on required output errors | Implemented on `fix/fail-on-output-errors`; PR pending | Required writes cannot be swallowed; partial runs cannot leave a stale actionable document; injected open/write/replace failures produce a nonzero, explicit failure with regression tests. |
-| 10 | Complete observation/run-manifest publication | Deferred; not an initial-workability gate | The checked observation and manifest contracts are emitted by real runs; manifest state reflects provider completeness and publication outcome; actionable output is null for incomplete/failed runs. |
+| 9 | Fail explicitly on required output errors | Merged, PR 170 | Required writes cannot be swallowed; partial runs cannot leave a stale actionable document; injected open/write/replace failures produce a nonzero, explicit failure with regression tests. |
+| 10 | Publish observations and the run manifest | Implemented on `feat/publish-run-contracts`; PR pending | The checked observation and manifest contracts are emitted by real runs; manifest state reflects provider completeness and publication outcome; actionable output is null for incomplete/failed runs. |
 | 11 | Validate the real allocator consumer end to end | Planned, cross-repository | The AWS consumer ingests a current DNSResolver document unchanged; GCP/Azure route only to provider-aware implementations or are explicitly rejected; a synthetic authorized fixture proves no provider is misrouted. |
 | 12 | Measure and calibrate large-run behavior | Planned last | A repeatable representative benchmark replaces the unmeasured README scalability claim; resource limits and operational guidance reflect measured results. |
 
@@ -54,8 +54,8 @@ then confirm GitHub jobs `test`, `gitleaks`, and `trufflehog` before squash merg
 
 ### Delivery state — 2026-08-14
 
-Item 7 was squash-merged in PR 169. Item 9 is implemented on
-`fix/fail-on-output-errors` and ready for its focused pull request.
+Items 7 and 9 were squash-merged in PRs 169 and 170. Item 10 is implemented on
+`feat/publish-run-contracts` and ready for its focused pull request.
 
 - Focused suite: 91 tests passed.
 - Full local CI: Ruff and format passed; baseline 5 passed; full suite 310 passed
@@ -81,6 +81,13 @@ Item 7 was squash-merged in PR 169. Item 9 is implemented on
   system-resolver run fetched all three current catalogues, resolved both public
   inputs, emitted 45 attribution records, and published 20 schema-valid targets
   without leaving a temporary allocator document.
+- Item 10 focused suite: 32 tests passed. Full local CI: 320 tests passed at 95%
+  coverage for `classes` and `imports`. A production system-resolver run published
+  20 actionable targets, an empty but schema-valid observation document, and a
+  schema-valid complete manifest referencing both documents; no temporary run
+  document remained. A reserved `example.com` negative control separately
+  published one schema-valid unresolved observation, an empty actionable array,
+  and a complete manifest.
 
 > **On its derivation.** The plan below came from [`REVIEW.md`](REVIEW.md) (2026-07-15), which
 > assessed the tool against a misread goal — cloud attribution treated as a supporting attribute

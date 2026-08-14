@@ -115,6 +115,8 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|` lines for unresolvable nameservers |
 | `csp_matches_*.txt` | One handoff record per provider-published attribution: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. One address can produce several records. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
 | `allocator-targets-v1.json` | Versioned provider-aware allocator handoff. Groups service, prefix, and border-group metadata per provider/hostname/address/region and excludes wildcard observations; one address may produce multiple records when a provider publishes multiple regions. |
+| `dns-observations-v1.json` | Versioned excluded-observation feed for wildcard, dangling CNAME, NS, unresolved, and provider-catalogue-incomplete results. |
+| `run-manifest-v1.json` | Final completion marker recording run status, provider catalogue provenance, and the published contract documents. |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `provider_catalogues.json` | AWS, GCP, and Azure catalogue status, source, retrieval time, snapshot identifier, and any failure reason |
 | `{provider}_ip_ranges.json` | Validated provider ranges and provenance used by this run, from either a live source or a fresh cache |
@@ -145,6 +147,7 @@ lambda_handler.py        — Lambda entry point → run(env_manager)
 ├── DomainProcessingContext  — per-domain state (domain name, resolver, CSP IPs)
 ├── CSPIPAddresses           — value object holding fetched AWS/GCP/Azure IP ranges
 ├── DomainCategoriser        — regex-based classification of dangling CNAME targets
+├── run_contract.py          — excluded-observation and final run-manifest publisher
 └── domain_processor.py     — orchestrates DNS → CSP checks per domain
 ```
 
@@ -157,8 +160,8 @@ to the unresolved output only after both resolvers fail on the final configured 
 
 ## Cloud IP attribution
 
-The current text files are the v2 CLI output. The versioned JSON handoff planned
-for provider-aware allocators is defined separately in the
+The current text files are the v2 CLI output. The published versioned JSON
+handoff for provider-aware allocators is defined separately in the
 [allocator contract](docs/ALLOCATOR-CONTRACT.md); its schemas, examples, and
 documentation field tables are validated together in CI.
 

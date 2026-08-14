@@ -66,6 +66,17 @@ async def test_run_marks_only_last_attempt_as_final(run_environment):
         )
         == []
     )
+    assert (
+        json.loads(
+            (Path(run_environment.output_dir) / "dns-observations-v1.json").read_text()
+        )
+        == []
+    )
+    manifest = json.loads(
+        (Path(run_environment.output_dir) / "run-manifest-v1.json").read_text()
+    )
+    assert manifest["status"] == "complete"
+    assert manifest["outputs"]["actionable_targets"] == "allocator-targets-v1.json"
 
 
 async def test_run_fails_closed_before_processing_domains(run_environment):
@@ -102,7 +113,9 @@ async def test_run_fails_closed_before_processing_domains(run_environment):
     ):
         await resolver.run(run_environment)
 
-    run_environment.set_domains.assert_not_called()
+    # Input names are loaded only so each excluded hostname can carry the
+    # provider-catalogue reason; no DNS processing begins.
+    run_environment.set_domains.assert_called_once_with()
     process.assert_not_awaited()
     status = json.loads(
         (Path(run_environment.output_dir) / "provider_catalogues.json").read_text()
@@ -110,11 +123,24 @@ async def test_run_fails_closed_before_processing_domains(run_environment):
     assert status["gcp"]["usable"] is False
     assert status["gcp"]["error"] == "TLS failure"
     assert not (Path(run_environment.output_dir) / "allocator-targets-v1.json").exists()
+    observations = json.loads(
+        (Path(run_environment.output_dir) / "dns-observations-v1.json").read_text()
+    )
+    assert observations[0]["kind"] == "provider_catalog_incomplete"
+    manifest = json.loads(
+        (Path(run_environment.output_dir) / "run-manifest-v1.json").read_text()
+    )
+    assert manifest["status"] == "incomplete"
+    assert manifest["outputs"]["actionable_targets"] is None
 
 
 async def test_run_aborts_before_publication_on_output_failure(run_environment):
     stale_targets = Path(run_environment.output_dir) / "allocator-targets-v1.json"
     stale_targets.write_text('[{"stale": true}]', encoding="utf-8")
+    stale_observations = Path(run_environment.output_dir) / "dns-observations-v1.json"
+    stale_observations.write_text('[{"stale": true}]', encoding="utf-8")
+    stale_manifest = Path(run_environment.output_dir) / "run-manifest-v1.json"
+    stale_manifest.write_text('{"status": "complete"}', encoding="utf-8")
     failure = OutputWriteError("disk full")
 
     def catalogue(provider):
@@ -152,3 +178,9 @@ async def test_run_aborts_before_publication_on_output_failure(run_environment):
         "example.com",
         failure,
     )
+    manifest = json.loads(
+        (Path(run_environment.output_dir) / "run-manifest-v1.json").read_text()
+    )
+    assert manifest["status"] == "failed"
+    assert manifest["outputs"]["actionable_targets"] is None
+    assert json.loads(stale_observations.read_text()) == []

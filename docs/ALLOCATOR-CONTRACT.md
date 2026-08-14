@@ -28,6 +28,12 @@ provider-published region, and excludes
 unusable, or a CSP record is malformed, no allocator-target document is
 published.
 
+Every run also publishes `dns-observations-v1.json` and writes
+`run-manifest-v1.json` last as its completion marker. A complete manifest points
+to the actionable document. Incomplete or failed manifests set that path to
+`null`; a failed-state manifest is best effort when the underlying failure also
+prevents output writes.
+
 ## Documents
 
 | Document | Schema | Purpose |
