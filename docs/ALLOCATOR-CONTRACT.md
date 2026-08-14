@@ -22,7 +22,8 @@ breaking schema change when those allocators arrive.
 
 The shared resolver pipeline publishes `allocator-targets-v1.json` after a
 successful run while retaining the pipe-delimited `csp_matches_*.txt` interface.
-The JSON publisher groups provider metadata for identical targets and excludes
+The JSON publisher groups provider metadata by provider, hostname, IP, and
+provider-published region, and excludes
 `WILDCARD` and `WILDCARD_ZONE` observations. If any provider catalogue is
 unusable, or a CSP record is malformed, no allocator-target document is
 published.
@@ -54,7 +55,10 @@ published.
 
 The array form and the `hostname`, `ip`, and `region` names are the compatibility
 surface used by the current AWS consumer. Consumers should deduplicate by the
-combination of provider, hostname, and IP rather than assuming IP alone is unique.
+combination of provider, hostname, IP, and region rather than assuming IP alone
+is unique. One address may have multiple provider-published regions, particularly
+when Azure publishes both a global service tag and a regional tag for the same
+prefix; each region remains a separate target record.
 
 See the checked [AWS compatibility example](../contracts/examples/allocator-targets-v1.aws.json)
 and [multi-cloud example](../contracts/examples/allocator-targets-v1.multicloud.json).

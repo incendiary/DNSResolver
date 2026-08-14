@@ -78,7 +78,7 @@ def test_malformed_match_input_fails_without_publishing(line, tmp_path):
     assert not (tmp_path / "allocator-targets-v1.json").exists()
 
 
-def test_conflicting_provider_regions_fail_closed(tmp_path):
+def test_publisher_preserves_distinct_provider_regions(tmp_path):
     matches = write_matches(
         tmp_path,
         [
@@ -86,6 +86,10 @@ def test_conflicting_provider_regions_fail_closed(tmp_path):
             "api.example.com|192.0.2.10|aws|us-east-1|EC2|192.0.2.0/24|us-east-1",
         ],
     )
-    with pytest.raises(ValueError, match="Conflicting regions"):
-        publish_allocator_targets(matches, tmp_path)
-    assert not (tmp_path / "allocator-targets-v1.json").exists()
+    targets = publish_allocator_targets(matches, tmp_path)
+
+    assert len(targets) == 2
+    assert {target["region"] for target in targets} == {
+        "ap-southeast-1",
+        "us-east-1",
+    }

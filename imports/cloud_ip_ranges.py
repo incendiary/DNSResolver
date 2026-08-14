@@ -39,7 +39,7 @@ class ProviderCatalogue:
     provider: str
     ipv4_ranges: List[str]
     ipv6_ranges: List[str]
-    metadata: Dict[str, Tuple[str, str, str]]
+    metadata: Dict[str, List[Tuple[str, str, str]]]
     status: str
     usable: bool
     source_url: str
@@ -112,6 +112,39 @@ def _validate_ranges(ipv4_ranges: List[str], ipv6_ranges: List[str]) -> None:
             raise CatalogueFetchError(f"invalid IPv6 prefix: {cidr}")
 
 
+def _add_metadata(metadata, cidr, attribution):
+    entries = metadata.setdefault(cidr, [])
+    if attribution not in entries:
+        entries.append(attribution)
+
+
+def _normalise_metadata(metadata, ranges):
+    if not isinstance(metadata, dict):
+        raise CatalogueFetchError("catalogue metadata is not an object")
+    normalised = {}
+    for cidr in ranges:
+        entries = metadata.get(cidr)
+        # Snapshots written before multi-valued metadata used one three-item
+        # list: [region, service, border_group].
+        if (
+            isinstance(entries, list)
+            and len(entries) == 3
+            and all(isinstance(value, str) for value in entries)
+        ):
+            entries = [entries]
+        if not isinstance(entries, list) or not entries:
+            raise CatalogueFetchError(f"catalogue has no metadata for prefix: {cidr}")
+        for entry in entries:
+            if not (
+                isinstance(entry, (list, tuple))
+                and len(entry) == 3
+                and all(isinstance(value, str) and value for value in entry)
+            ):
+                raise CatalogueFetchError(f"invalid metadata for prefix: {cidr}")
+            _add_metadata(normalised, cidr, tuple(entry))
+    return normalised
+
+
 def _parse_standard(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
     prefixes = data.get("prefixes")
     if not isinstance(prefixes, list):
@@ -133,12 +166,12 @@ def _parse_standard(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
             if keyword in prefix:
                 cidr = prefix[keyword]
                 ipv4_ranges.append(cidr)
-                metadata[cidr] = (region, service, border_group)
+                _add_metadata(metadata, cidr, (region, service, border_group))
         for keyword in IPV6_KEYWORDS:
             if keyword in prefix:
                 cidr = prefix[keyword]
                 ipv6_ranges.append(cidr)
-                metadata[cidr] = (region, service, border_group)
+                _add_metadata(metadata, cidr, (region, service, border_group))
     _validate_ranges(ipv4_ranges, ipv6_ranges)
     if extreme:
         print("IPv4 Ranges:", ipv4_ranges)
@@ -165,7 +198,7 @@ def _parse_azure(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
         service = props.get("systemService") or value.get("name") or "unknown"
         for cidr in prefixes:
             (ipv6_ranges if ":" in cidr else ipv4_ranges).append(cidr)
-            metadata[cidr] = (region, service, "unknown")
+            _add_metadata(metadata, cidr, (region, service, "unknown"))
     _validate_ranges(ipv4_ranges, ipv6_ranges)
     if extreme:
         print("IPv4 Ranges:", ipv4_ranges)
@@ -217,13 +250,18 @@ def _load_cached_catalogue(
         raise CatalogueFetchError(f"cached catalogue has a future timestamp ({path})")
     if now - retrieved_at > MAX_CACHE_AGE[provider]:
         raise CatalogueFetchError(f"cached catalogue is stale ({path})")
-    ranges = (data["ipv4_ranges"], data["ipv6_ranges"], data["metadata"])
-    _validate_ranges(ranges[0], ranges[1])
-    calculated_snapshot = _snapshot_id(ranges)
+    raw_ranges = (data["ipv4_ranges"], data["ipv6_ranges"], data["metadata"])
+    _validate_ranges(raw_ranges[0], raw_ranges[1])
+    calculated_snapshot = _snapshot_id(raw_ranges)
     if data.get("snapshot_id") not in (None, calculated_snapshot):
         raise CatalogueFetchError(
             f"cached catalogue snapshot ID does not match ({path})"
         )
+    ranges = (
+        raw_ranges[0],
+        raw_ranges[1],
+        _normalise_metadata(raw_ranges[2], raw_ranges[0] + raw_ranges[1]),
+    )
     catalogue = ProviderCatalogue(
         provider=provider,
         ipv4_ranges=ranges[0],
@@ -233,7 +271,7 @@ def _load_cached_catalogue(
         usable=True,
         source_url=data.get("source_url") or source_url,
         retrieved_at=data["retrieved_at"],
-        snapshot_id=calculated_snapshot,
+        snapshot_id=_snapshot_id(ranges),
     )
     _write_catalogue(Path(output_dir) / f"{provider}_ip_ranges.json", catalogue)
     return catalogue
@@ -264,6 +302,11 @@ def _fetch_catalogue(
         if len(ranges) != 3:
             raise CatalogueFetchError("parser returned an incomplete catalogue")
         _validate_ranges(ranges[0], ranges[1])
+        ranges = (
+            ranges[0],
+            ranges[1],
+            _normalise_metadata(ranges[2], ranges[0] + ranges[1]),
+        )
         catalogue = ProviderCatalogue(
             provider=provider,
             ipv4_ranges=ranges[0],

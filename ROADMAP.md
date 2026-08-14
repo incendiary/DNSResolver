@@ -2,6 +2,80 @@
 
 Single source of truth for planned work.
 
+## Goal-aligned roadmap — agreed August 2026
+
+This section supersedes the priority claims in the historical roadmap below. The
+older material remains as delivery history, but it was largely derived from a
+review performed against the wrong product goal.
+
+### Confirmed goal
+
+DNSResolver is the DNS-only front end for a separate cloud-address reclaim
+allocator. Cloud IP candidates are the primary product; dangling CNAME and NS
+findings are secondary observations. AWS, GCP, and Azure are required providers.
+The tool retains complete DNS observations, excludes wildcard, uncertain, and
+incomplete results from actionable output, and fails closed. It must work
+correctly before it is optimised. Lambda expansion is shelved.
+
+### Delivery sequence
+
+Each item is one independently verifiable PR. Branch from current `main`, run the
+exact local CI workflow, validate resolver changes against real DNS/provider data,
+then confirm GitHub jobs `test`, `gitleaks`, and `trufflehog` before squash merge.
+
+| # | Work item | State | Done when |
+|---|---|---|---|
+| 1 | Scope secret scans to changed commits | Merged, PR 160 | New-branch push and PR scans use a valid merge-base range; all actions are SHA-pinned; both event paths pass. |
+| 2 | Define the resolver-to-allocator contract | Merged, PR 159 | Schemas, examples, fail-closed invariants, current AWS consumer compatibility, and documentation drift tests pass. |
+| 3 | Make DNS resolution reliable | Merged, PR 161 | Timeouts/nameservers reach both resolver libraries; A and AAAA fallback results survive; final retry state is correct; public dual-stack, IPv6-only, and negative controls behave correctly. |
+| 4 | Fail closed on incomplete provider catalogues | Merged, PR 163 | AWS/GCP/Azure use bounded retries, validation, provenance, freshness-limited integrity-checked snapshots, and explicit states; no DNS processing occurs with an unusable provider. |
+| 5 | Publish the versioned allocator target document | Merged, PR 164 | A successful run atomically publishes schema-valid provider-aware JSON, groups repeated metadata, excludes wildcard observations, and retains the legacy pipe output. |
+| 6 | Pin Lambda input to the triggering object version | Merged, PR 165 | The reference handler reads the exact S3 object version from the event and rejects incomplete version information. This does not reopen Lambda expansion. |
+| 7 | Preserve every provider attribution | Implemented on `fix/preserve-cloud-attribution`; PR pending | Duplicate services, overlapping prefixes, identical CIDRs across providers, and multiple provider-published regions survive catalogue parsing, matching, pipe output, and JSON publication without changing the schema. Legacy scalar cache snapshots remain readable. |
+| 8 | Replace linear cloud-range matching with an indexed matcher | Deferred until measured need | A deterministic benchmark is defined before implementation; outputs are byte-for-byte equivalent to item 7; measured runtime and memory are reported at representative scale. |
+| 9 | Make output publication atomic and observable | Deferred; not an initial-workability gate | Required writes cannot be swallowed; partial runs cannot leave a stale actionable document; injected open/write/replace failures produce a nonzero, explicit failure with regression tests. |
+| 10 | Complete observation/run-manifest publication | Deferred; not an initial-workability gate | The checked observation and manifest contracts are emitted by real runs; manifest state reflects provider completeness and publication outcome; actionable output is null for incomplete/failed runs. |
+| 11 | Validate the real allocator consumer end to end | Planned, cross-repository | The AWS consumer ingests a current DNSResolver document unchanged; GCP/Azure route only to provider-aware implementations or are explicitly rejected; a synthetic authorized fixture proves no provider is misrouted. |
+| 12 | Measure and calibrate large-run behavior | Planned last | A repeatable representative benchmark replaces the unmeasured README scalability claim; resource limits and operational guidance reflect measured results. |
+
+### Explicitly not doing
+
+- No cloud allocation or reclaim API calls in DNSResolver.
+- No HTTP probing, TLS inspection, screenshots, or active takeover confirmation.
+- No Lambda expansion, deployment machinery, release, tag, or version bump in an
+  individual work-item PR.
+- No matcher-performance refactor inside attribution item 7; correctness is frozen
+  first so optimisation has a trustworthy equivalence oracle.
+- No separate security-hardening phase. Items 8-10 are optional reliability and
+  performance follow-ups, deferred until measured operational need.
+- No claim that unit coverage proves resolver behavior; real DNS, real provider
+  catalogues, consumer validation, and actual merge CI remain separate gates.
+
+### Delivery state — 2026-08-14
+
+Item 7 is implemented on `fix/preserve-cloud-attribution` and ready for its
+focused pull request.
+
+- Focused suite: 91 tests passed.
+- Full local CI: Ruff and format passed; baseline 5 passed; full suite 310 passed
+  at 95% coverage for `classes` and `imports`.
+- Live catalogues: 4,826 AWS prefixes and 44,225 Azure prefixes have multiple
+  attributions; Azure has 44,101 prefixes with multiple published regions.
+- Live end-to-end synthetic-address acceptance used current provider catalogues:
+  AWS preserved `AMAZON`, `EC2`, and `S3`; Azure preserved `global` and
+  `southeastasia` as separate schema-valid targets.
+- A production run through the host system resolver processed `s3.amazonaws.com`
+  and `aws.amazon.com` using current AWS, GCP, and Azure catalogues. It emitted 43
+  pipe attributions and 20 schema-valid allocator targets; one current S3 address
+  retained `AMAZON`, `EC2`, and `S3`. Direct public-resolver transport and the real
+  allocator consumer remain external acceptance gates.
+- Before delivery: review the diff, run TruffleHog v3.96.0 on the intended commit
+  range, commit, push, open one focused PR, and verify push, PR, and post-merge
+  `main` checks.
+- The live gate may be delegated using `docs/EXTERNAL-ACCEPTANCE.md`; its report
+  must keep automated, catalogue, system-resolver, public-resolver, and allocator
+  evidence separate.
+
 > **On its derivation.** The plan below came from [`REVIEW.md`](REVIEW.md) (2026-07-15), which
 > assessed the tool against a misread goal — cloud attribution treated as a supporting attribute
 > rather than as one of two co-equal products. That review now carries a correction, and the work

@@ -23,14 +23,11 @@ def publish_allocator_targets(csp_path, output_dir):
             target["provider"],
             target["hostname"],
             target["ip"],
+            target["region"],
         )
         if identity not in grouped:
             grouped[identity] = target
             continue
-        if grouped[identity]["region"] != target["region"]:
-            raise ValueError(
-                f"Conflicting regions for one allocator target at line {line_number}"
-            )
         for field in ("services", "prefixes", "network_border_groups"):
             grouped[identity][field].update(target[field])
 
@@ -44,7 +41,14 @@ def publish_allocator_targets(csp_path, output_dir):
                 "network_border_groups": sorted(target["network_border_groups"]),
             }
         )
-    targets.sort(key=lambda item: (item["provider"], item["hostname"], item["ip"]))
+    targets.sort(
+        key=lambda item: (
+            item["provider"],
+            item["hostname"],
+            item["ip"],
+            item["region"],
+        )
+    )
 
     temporary = destination.with_suffix(".json.tmp")
     try:
