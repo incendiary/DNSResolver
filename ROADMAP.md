@@ -11,7 +11,7 @@ boundaries are firm.
 
 DNSResolver produces cloud-address targets (primary) and takeover observations (secondary) from a
 list of domains, DNS only, with output files that are contracts. This plan does three things:
-**remove what is not needed** (about 1,400 lines of code and tests, about 900 of docs, 4 runtime
+**remove what is not needed** (about 1,750 lines of code and tests, about 900 of docs, 4 runtime
 dependencies), **make the structure honest** (records stay structured in memory instead of being
 written as text and re-parsed), and **add a compact Markdown view** for agent and human readers.
 
@@ -92,6 +92,7 @@ Phase 2  structure    R-07 R-08 R-09 R-10 R-11 R-12   (all after R-03; R-09 befo
 Phase 3  config+view  R-19 -> R-13              (R-19 after R-11a; both edit environment_manager.py)
 Phase 4  scale + CI   R-14 -> R-15 (conditional), R-16
 Phase 5  external     R-17 R-18
+Tests    R-20             (after R-05a, R-07, R-12)
 ```
 
 Items inside a phase touch different files unless noted and can run in parallel in separate
@@ -339,6 +340,29 @@ user. **Verify:** golden test; a test that a failing write raises `OutputWriteEr
    `shutil.which(x) is not None` (hardening only: removes a blocking call from the event loop).
 **Verify:** golden test; suite; coverage not lower. **PR:** `refactor: remove unused state and a
 blocking call`.
+
+### R-20 Reorganise and shrink the DNS tests
+**Tier:** T2 (Sonnet). **Depends on:** R-03, R-05a, R-12 (they delete tests in the same files).
+**Context:** `tests/test_dns_handler.py`, `test_dns_handler_extended.py` and
+`test_dns_handler_resolution.py` hold 43 tests on two classes; most test `TakeoverDetector`.
+Six near-identical fixtures are repeated across them.
+**Steps:**
+1. List every test and the class it exercises (`grep -n "def test_" tests/test_dns_handler*.py`).
+2. Move the fixtures that appear in two or more of these files into `tests/conftest.py`; keep
+   names, so test bodies do not change.
+3. Create `tests/test_takeover_detector.py`; move the tests whose subject is `TakeoverDetector`
+   there, unchanged. Merge the remainder into `tests/test_dns_handler.py` and delete the
+   `_extended` and `_resolution` files. Do not edit test bodies in this step; moves only.
+4. Remove tutorial prose from test module docstrings (`tests/test_csp_ip_addresses.py` is deleted
+   by R-07; `tests/test_dns_handler.py`).
+5. Separate commit: in `tests/test_wildcard_detector.py` and
+   `tests/test_cloud_service_provider_checks.py`, collapse sets of tests that differ only by input
+   and expected value into `pytest.mark.parametrize`. Convert only where the bodies are genuinely
+   identical; if unsure, leave it.
+**Verify:** the number of collected tests does not fall (`pytest --collect-only -q | tail -1`
+before and after; parametrize cases count individually); coverage not lower; golden test green.
+**Do not:** delete a test because it looks redundant; every test removed must have an identical
+twin. **PR:** `test: split DNS tests by class and share fixtures`.
 
 ---
 

@@ -18,7 +18,7 @@ back and re-parse them to build the JSON contracts and the end-of-run summary. T
 the source of most avoidable code, most `ValueError("Malformed ...")` paths, and the reason a
 Markdown output (which the maintainer wants) would currently mean a fourth parser.
 
-Second, about 1,400 lines of source and tests (plus about 900 lines of documentation) can go
+Second, about 1,750 lines of source and tests (plus about 900 lines of documentation) can go
 without changing a byte of output: the shelved Lambda stack, dead helpers, a 49-line class that
 repacks data the catalogue objects already hold, and duplicated atomic-write helpers.
 
@@ -211,12 +211,29 @@ Ranked by lines removed. Line counts are approximate.
     `stdlib:` `subprocess.run(["which", ...])` in `classes/evidence_collector.py` is
     `shutil.which(...)`. **About -12 lines.**
 
+11. `reuse:` tests (added after a second pass over `tests/`, 4,852 lines). The three files
+    `tests/test_dns_handler.py` (414), `test_dns_handler_extended.py` (238) and
+    `test_dns_handler_resolution.py` (337) are 43 tests on two classes, and most of them
+    (`check_dangling_cname_async`, `check_ns_takeover`, `handle_takeover_checks`, evidence) exercise
+    `TakeoverDetector`, not `DNSHandler`. Each file re-declares near-identical fixtures (six
+    between them) that `tests/conftest.py` could hold once. Split by class under test into
+    `test_dns_handler.py` and `test_takeover_detector.py`, share fixtures. Estimate **-150 lines**,
+    from fixture and mock-setup duplication. `delete:` tutorial prose in test headers
+    (`tests/test_csp_ip_addresses.py`, `tests/test_dns_handler.py`: "a good place to start if
+    you've never written tests", async primers), about -40 lines. `shrink:` only 13 `parametrize`
+    uses across 23 files; the near-identical error-case tests in `test_wildcard_detector.py` (21
+    tests, 285 lines) and `test_cloud_service_provider_checks.py` (33 tests, 578 lines) are
+    parametrize candidates. This last estimate (about -150 lines) is from test names and structure,
+    not a body-by-body read; treat it as a hypothesis for the agent to confirm.
+    About -340 lines in total, on top of the roughly 510 test lines that disappear with items 1,
+    4 and 5.
+
 Considered and kept: the 90-entry `config.json` pattern table (D-2), dnspython as a second
 resolver (PR 161 fixed real unreliability), `DomainCategoriser` (10 lines, one caller, but tested
 and cheap), the three-state wildcard verdicts (documented hard-won behaviour), `OutputManager`
 (61 lines, earns its keep).
 
-`net: about -1,400 lines of source and tests, about -900 lines of documentation, -4 runtime
+`net: about -1,750 lines of source and tests, about -900 lines of documentation, -4 runtime
 dependencies possible.`
 
 ## Addendum: `helper/find_authoritative_ns.py` (decision D-6)
