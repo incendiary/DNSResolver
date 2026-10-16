@@ -149,7 +149,7 @@ installs both.
 `pre-commit` slot chains gitleaks and ruff.
 
 ```bash
-bash ~/.claude/skills/local-ci/local-ci.sh --workflow ci.yml
+bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml
 .venv/bin/pytest --cov=classes --cov=imports
 ```
 

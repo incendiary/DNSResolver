@@ -46,7 +46,7 @@ python -c "import aiodns, dns, tqdm, boto3; print('deps OK')"
 - **Squash merge to main.** History stays linear.
 - **End every commit message with:**
   ```
-  Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+  (use the attribution line your harness gives you)
   ```
 - **Do NOT commit or push unless the human asked you to.** Default: leave the work on a branch and
   report. If told to push, open a PR with a conventional title and a body that references the
@@ -72,7 +72,7 @@ This project went red in CI from a change that looked green locally. Prevent a r
 
 ```bash
 # 1. Lint + format + tests exactly as CI runs them
-bash ~/.claude/skills/local-ci/local-ci.sh --workflow ci.yml
+bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml
 
 # 2. Full test suite with coverage — coverage must be >= the number before your change
 pytest --cov=classes --cov=imports --cov-report=term-missing
