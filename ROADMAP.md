@@ -32,7 +32,13 @@ written as text and re-parsed), and **add a compact Markdown view** for agent an
 | D-6 | Delete `helper/find_authoritative_ns.py` (unwired, untested, known defect). The underlying idea is kept as unscheduled item I-1 | 2026-10-16 | R-05b, I-1 |
 | D-11 | Every option is settable from the environment (`DNSRESOLVER_*`), loaded by direnv from a git-ignored `.envrc`; a committed `.envrc.example` is the template. Precedence: CLI flag, then environment, then `config.json`, then built-in default | 2026-10-16 | R-19 |
 
-There are no open decisions.
+### Open decisions
+
+An item that depends on one says so; do not guess.
+
+| ID | Question | Recommended | Blocks |
+|---|---|---|---|
+| D-12 | `NS_TAKEOVER` does not name the failing nameserver. Add it as a fourth field (breaking for strict parsers, ships in v3.0.0), or only correct the observation wording (no contract change)? | Add the field | R-21 |
 
 ## Delivery rules for every item
 
@@ -102,6 +108,7 @@ CI, and run `/ponytail:ponytail-review` on it (report findings, apply nothing wi
 Phase 0  gates        R-01 R-02 R-03
 Phase 1  deletions    R-04 R-05 R-06            (after R-03 for code; R-06 any time)
 Phase 2  structure    R-07 R-08 R-09 R-10 R-11 R-12   (all after R-03; R-09 before R-13)
+Phase 2b output       R-22 R-21                         (after R-09; R-21 needs D-12)
 Phase 3  config+view  R-19 -> R-13              (R-19 after R-11a; both edit environment_manager.py)
 Phase 4  scale + CI   R-14 -> R-15 (conditional), R-16
 Phase 5  external     R-17 R-18
@@ -510,6 +517,45 @@ output format.
 **Done when:** verification passes.
 **PR:** `refactor: remove unused state and a blocking call`
 (bundle with R-07, R-08 and R-10).
+
+### R-21 Record the failing nameserver in NS_TAKEOVER (needs D-12)
+**Tier:** T2 (Sonnet) builds, T3 reviews the contract change. Why: the code change is small, but it alters a documented output record, so a strong reviewer must confirm the fields before merge.
+**Depends on:** R-09 (records own the formatting), R-03, and decision D-12.
+**Files:** `classes/takeover_detector.py`, `classes/records.py` (from R-09), `classes/run_contract.py` or its R-09 replacement, `classes/run_summary.py`, `AGENTS.md` (section 4), `README.md` (output table), `tests/test_dns_handler_extended.py` (or `tests/test_takeover_detector.py` after R-20), `tests/golden/expected/` (affected files only).
+**Context:** the golden test (R-03) showed that `NS_TAKEOVER|origin|domain` does not say which nameserver is the problem, so the observation reads "Nameserver did not resolve: <the queried domain>", which is wrong. Two different conditions share the tag. `classes/takeover_detector.py:47`: an NS record's host (`ns_domain`) fails an A query with NXDOMAIN or SERVFAIL, which is the real NS-takeover signal, but only the queried domain is written and `ns_domain` is dropped. `classes/takeover_detector.py:137`: a name returns NXDOMAIN for A, AAAA and MX, yet an NS query on it succeeds, which means a delegated zone with no address records. That is a different finding that currently looks identical. Also, SERVFAIL from a nameserver lookup is treated as takeover evidence; a transient failure and an unregistered domain are not the same, but this item does not change that rule (secondary side, hardening only, D-2).
+**Steps:**
+1. Wait for D-12. Recommended: append a fourth field to the record, `NS_TAKEOVER|origin|domain|nameserver`, where `nameserver` is the failing NS host at line 47, and the literal `-` at line 137 (no nameserver implicated). Tag the second case distinctly only if the maintainer chooses so in D-12; do not invent a new tag.
+2. In `takeover_detector.py` pass `ns_domain` into the line-47 record; leave line 137's meaning unchanged.
+3. Update the observation reason text: line 47 case becomes `Nameserver did not resolve: <nameserver>`; the `-` case becomes `Name has NS records but no address records`.
+4. Update the console summary line so it shows the nameserver when present.
+5. Update the format tables in `AGENTS.md` section 4 and `README.md`, state that the field count changed, and mark it in the release notes.
+6. Regenerate only the affected golden files (`UPDATE_GOLDEN=1`), read the diff line by line, and confirm nothing else moved.
+**Verify:**
+- `pytest tests/test_golden_run.py` passes after regeneration, and `git diff tests/golden/expected/` shows changes only to `takeover_candidates.txt`, `dns-observations-v1.json` and `console_summary.txt`.
+- Full suite and `bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml` pass; coverage not lower.
+- Negative check: temporarily drop `ns_domain` from the record and confirm a new unit test (assert the fourth field equals the failing nameserver) fails, then restore.
+**Do not:** change the rule that decides when a record is written (SERVFAIL handling stays); add a new tag; touch the `DANGLING` format; ship before the release is planned as a major (D-10).
+**Done when:** the record names the failing nameserver, the observation text is accurate, the docs match, and the verification passes.
+**PR:** `fix!: record the failing nameserver in NS_TAKEOVER`
+
+### R-22 Deterministic output order
+**Tier:** T2 (Sonnet). Why: it touches the order of every output file, but the golden test proves content is unchanged and one regression test proves stability.
+**Depends on:** R-09 (records in memory), R-03.
+**Files:** `classes/environment_manager.py`, `classes/output_manager.py` or the R-09 record store, `resolver.py`, `tests/test_golden_run.py`, `tests/golden/expected/` (affected files only), `AGENTS.md` (section 4), `README.md`.
+**Context:** two things make output order vary between runs of identical input. First, `EnvironmentManager.set_domains` builds `set(self.clean_domains(...))` (`classes/environment_manager.py:154`), and set order varies with `PYTHONHASHSEED`. Second, domains finish in DNS-latency order under the semaphore, so even with ordered input the write order is a race. The JSON documents are already sorted (`allocator-targets-v1.json`, `dns-observations-v1.json`), but the pipe files (`resolution_results_*`, `csp_matches_*`, `takeover_candidates_*`, `unresolved_results_*`) are not. A consumer or reviewer diffing two runs sees noise, and the golden test had to patch `set_domains` to get stable bytes.
+**Steps:**
+1. In `set_domains`, replace `set(...)` with an order-preserving de-duplicate (`list(dict.fromkeys(...))`); keep the attribute type consumers expect (check `grep -rn "\.domains" classes imports resolver.py`; if a caller needs set semantics, convert at that call site).
+2. Make the pipe files stable: after all domains finish and before the JSON documents are published, write each pipe file sorted by line, atomically (temporary file then `os.replace`), using the records from R-09. Keep progress writes as they are during the run, so a crashed run still leaves partial output.
+3. Sort key is the full line text. State in `AGENTS.md` section 4 that line order is sorted and stable, and that consumers must still not depend on it beyond stability.
+4. Remove the `set_domains` patch from `tests/test_golden_run.py`, regenerate only the expected pipe files, and read the diff: the lines must be the same set, reordered.
+**Verify:**
+- Run the golden test under `PYTHONHASHSEED=0`, `1`, `7`, `99` with no `set_domains` patch: all pass.
+- Run the golden harness twice with different seeds, keep both output directories, and `diff -r` them: the diff is empty.
+- Full suite, local CI, coverage not lower.
+- Negative check: temporarily comment out the final sort and confirm the seeded golden runs disagree or fail, then restore.
+**Do not:** change any line's content or any JSON document; sort during the run in a way that holds all lines in memory beyond what R-09 already keeps; change concurrency or retry behaviour.
+**Done when:** identical input yields byte-identical files under any hash seed and any completion order, with the verification above passing.
+**PR:** `fix: make output file order deterministic`
 
 ### R-20 Reorganise and shrink the DNS tests
 **Tier:** T2 (Sonnet). Why: test moves across files need judgement about which class each test exercises, and the collected-count gate catches mistakes.
