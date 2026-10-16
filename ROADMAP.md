@@ -30,15 +30,10 @@ written as text and re-parsed), and **add a compact Markdown view** for agent an
 | D-9 | External-IP lookup becomes opt-in (`DNSRESOLVER_RECORD_EXTERNAL_IP` / `--record-external-ip`); configurable like every other option | 2026-10-16 | R-19 |
 | D-10 | One release at the end (v3.0.0): Lambda removal is a removed entry point | 2026-10-16 | R-18 |
 | D-6 | Delete `helper/find_authoritative_ns.py` (unwired, untested, known defect). The underlying idea is kept as unscheduled item I-1 | 2026-10-16 | R-05b, I-1 |
+| D-12 | `NS_TAKEOVER` gains a fourth field naming the failing nameserver (`NS_TAKEOVER\|origin\|domain\|nameserver`, `-` where no nameserver is implicated); breaking for strict parsers, ships in v3.0.0 | 2026-10-16 | R-21 |
 | D-11 | Every option is settable from the environment (`DNSRESOLVER_*`), loaded by direnv from a git-ignored `.envrc`; a committed `.envrc.example` is the template. Precedence: CLI flag, then environment, then `config.json`, then built-in default | 2026-10-16 | R-19 |
 
-**Open decisions**
-
-An item that depends on one says so; do not guess.
-
-| ID | Question | Recommended | Blocks |
-|---|---|---|---|
-| D-12 | `NS_TAKEOVER` does not name the failing nameserver. Add it as a fourth field (breaking for strict parsers, ships in v3.0.0), or only correct the observation wording (no contract change)? | Add the field | R-21 |
+There are no open decisions.
 
 ## Delivery rules for every item
 
@@ -108,7 +103,7 @@ CI, and run `/ponytail:ponytail-review` on it (report findings, apply nothing wi
 Phase 0  gates        R-01 R-02 R-03
 Phase 1  deletions    R-04 R-05 R-06            (after R-03 for code; R-06 any time)
 Phase 2  structure    R-07 R-08 R-09 R-10 R-11 R-12   (all after R-03; R-09 before R-13)
-Phase 2b output       R-22 R-21                         (after R-09; R-21 needs D-12)
+Phase 2b output       R-22 R-21                         (after R-09)
 Phase 3  config+view  R-19 -> R-13              (R-19 after R-11a; both edit environment_manager.py)
 Phase 4  scale + CI   R-14 -> R-15 (conditional), R-16
 Phase 5  external     R-17 R-18
@@ -518,13 +513,13 @@ output format.
 **PR:** `refactor: remove unused state and a blocking call`
 (bundle with R-07, R-08 and R-10).
 
-### R-21 Record the failing nameserver in NS_TAKEOVER (needs D-12)
+### R-21 Record the failing nameserver in NS_TAKEOVER (D-12)
 **Tier:** T2 (Sonnet) builds, T3 reviews the contract change. Why: the code change is small, but it alters a documented output record, so a strong reviewer must confirm the fields before merge.
-**Depends on:** R-09 (records own the formatting), R-03, and decision D-12.
+**Depends on:** R-09 (records own the formatting) and R-03. Decision D-12 is made: add the field.
 **Files:** `classes/takeover_detector.py`, `classes/records.py` (from R-09), `classes/run_contract.py` or its R-09 replacement, `classes/run_summary.py`, `AGENTS.md` (section 4), `README.md` (output table), `tests/test_dns_handler_extended.py` (or `tests/test_takeover_detector.py` after R-20), `tests/golden/expected/` (affected files only).
 **Context:** the golden test (R-03) showed that `NS_TAKEOVER|origin|domain` does not say which nameserver is the problem, so the observation reads "Nameserver did not resolve: <the queried domain>", which is wrong. Two different conditions share the tag. `classes/takeover_detector.py:47`: an NS record's host (`ns_domain`) fails an A query with NXDOMAIN or SERVFAIL, which is the real NS-takeover signal, but only the queried domain is written and `ns_domain` is dropped. `classes/takeover_detector.py:137`: a name returns NXDOMAIN for A, AAAA and MX, yet an NS query on it succeeds, which means a delegated zone with no address records. That is a different finding that currently looks identical. Also, SERVFAIL from a nameserver lookup is treated as takeover evidence; a transient failure and an unregistered domain are not the same, but this item does not change that rule (secondary side, hardening only, D-2).
 **Steps:**
-1. Wait for D-12. Recommended: append a fourth field to the record, `NS_TAKEOVER|origin|domain|nameserver`, where `nameserver` is the failing NS host at line 47, and the literal `-` at line 137 (no nameserver implicated). Tag the second case distinctly only if the maintainer chooses so in D-12; do not invent a new tag.
+1. Per D-12, append a fourth field to the record, `NS_TAKEOVER|origin|domain|nameserver`, where `nameserver` is the failing NS host at line 47, and the literal `-` at line 137 (no nameserver implicated). Do not invent a new tag; if the two cases need distinct tags, stop and report.
 2. In `takeover_detector.py` pass `ns_domain` into the line-47 record; leave line 137's meaning unchanged.
 3. Update the observation reason text: line 47 case becomes `Nameserver did not resolve: <nameserver>`; the `-` case becomes `Name has NS records but no address records`.
 4. Update the console summary line so it shows the nameserver when present.
