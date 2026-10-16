@@ -25,15 +25,17 @@ written as text and re-parsed), and **add a compact Markdown view** for agent an
 | D-4 | Consumers are both a program (JSON) and an agent or human (Markdown) | 2026-10-16 | Markdown is sized for context windows |
 | D-5 | Plan lives here; history archived | 2026-10-16 | Done |
 
+| D-7 | `--format`: `md` (default) writes `run-report.md` in addition to the JSON documents; `json` skips the Markdown | 2026-10-16 | R-13 |
+| D-8 | Lock runtime dependencies with hashes | 2026-10-16 | R-16b |
+| D-9 | External-IP lookup becomes opt-in (`DNSRESOLVER_RECORD_EXTERNAL_IP` / `--record-external-ip`); configurable like every other option | 2026-10-16 | R-19 |
+| D-10 | One release at the end (v3.0.0): Lambda removal is a removed entry point | 2026-10-16 | R-18 |
+| D-11 | Every option is settable from the environment (`DNSRESOLVER_*`), loaded by direnv from a git-ignored `.envrc`; a committed `.envrc.example` is the template. Precedence: CLI flag, then environment, then `config.json`, then built-in default | 2026-10-16 | R-19 |
+
 ### Open decisions (an item that depends on one says so; do not guess)
 
 | ID | Question | Recommended | Blocks |
 |---|---|---|---|
-| D-6 | Delete `helper/find_authoritative_ns.py` (174 lines, referenced nowhere)? | Yes | R-05b |
-| D-7 | `--format` semantics: `md` (default) writes `run-report.md` in addition to the JSON documents; `json` skips the Markdown. Confirm. | As stated | R-13 |
-| D-8 | Lock runtime dependencies with hashes (`pip-compile --generate-hashes`)? | Yes | R-16b |
-| D-9 | Make the `ifconfig.io` external-IP lookup opt-in (`--record-external-ip`)? It is a third-party call on every start. | Yes, breaking for the environment JSON | R-11b |
-| D-10 | Release shape: Lambda removal is a removed entry point (major). Ship R-04 to R-13 as v3.0.0? | Yes, one release at the end | R-18 |
+| D-6 | `helper/find_authoritative_ns.py` (174 lines, referenced nowhere, no tests, present since the initial release): fix and integrate, or delete? Discussed with the maintainer; assessment in `REVIEW.md` addendum below. | Delete | R-05b |
 
 ## Delivery rules for every item
 
@@ -87,7 +89,7 @@ CI, and run `/ponytail:ponytail-review` on it (report findings, apply nothing wi
 Phase 0  gates        R-01 R-02 R-03
 Phase 1  deletions    R-04 R-05 R-06            (after R-03 for code; R-06 any time)
 Phase 2  structure    R-07 R-08 R-09 R-10 R-11 R-12   (all after R-03; R-09 before R-13)
-Phase 3  new view     R-13
+Phase 3  config+view  R-19 -> R-13              (R-19 after R-11a; both edit environment_manager.py)
 Phase 4  scale + CI   R-14 -> R-15 (conditional), R-16
 Phase 5  external     R-17 R-18
 ```
@@ -190,8 +192,11 @@ file. If any production hit exists, leave that item and report.
 **Done when:** suite and CI green; coverage not lower. **PR:** `chore: remove unused code`.
 
 ### R-05b Delete the unreferenced helper (needs D-6)
-**Tier:** T1. Delete `helper/find_authoritative_ns.py` only after the maintainer answers D-6.
-Check `README.md` still lists only `helper/crtsh_domains.sh`.
+**Tier:** T1. Delete `helper/find_authoritative_ns.py` only after the maintainer answers D-6
+(see the assessment in the D-6 discussion: it is a standalone script with no callers, no tests and
+a known defect, and its idea does not serve the primary job). Check `README.md` still lists only
+`helper/crtsh_domains.sh`. If D-6 instead becomes "integrate", do not do this item; open a design
+item for per-zone authoritative querying.
 
 ### R-06 Archive delivered per-PR plans
 **Tier:** T1 (Haiku). **Why:** deletion verified by link checks; history keeps the files.
@@ -316,8 +321,8 @@ works; CI green. **PR:** `chore: drop requests and urllib3`.
 **Steps:** `write_to_file` becomes a plain synchronous append (`open(path, "a")`, same
 `OutputWriteError` text). It stays `async def` so no caller changes. Single-threaded event loop,
 one small write per call, same as the CSP writer. Remove `aiofiles` after grep confirms no other
-user. **Verify:** golden test; a test that a failing write raises `OutputWriteError`. Optional,
-needs D-9: `--record-external-ip` flag; do not add it without the decision.
+user. **Verify:** golden test; a test that a failing write raises `OutputWriteError`.
+(The opt-in external-IP lookup, D-9, is delivered by R-19, not here.)
 **PR:** `chore: drop aiofiles`.
 
 ### R-12 Small simplifications
@@ -339,13 +344,69 @@ blocking call`.
 
 ## Phase 3: New capability
 
-### R-13 Markdown run report (D-3, D-4, needs D-7)
-**Tier:** T2 (Sonnet) after T3 sketches the table. **Depends on:** R-09. **Additive**, minor.
+### R-19 Configuration layer: environment variables, direnv template, flag fix (D-9, D-11)
+**Tier:** T2 (Sonnet), spec below is complete. **Depends on:** R-03, and run it **before R-13** so
+`--format` is added to the table once. **Files:** `classes/config_resolver.py`,
+`classes/environment_manager.py`, `.envrc.example` (new), `.gitignore`, `README.md`,
+`tests/test_config_resolver.py`, `config.json` (comments only if absent; see step 6).
+**Context:** options can today come from the CLI or the `config` block of `config.json`. There is
+a real bug: `store_true` flags default to `False`, but the merge only fills values that are `None`,
+so `evidence`, `verbose` and `extreme` in `config.json` are silently ignored (`config.json` sets
+`"evidence": true`; the effective value is `False`; confirmed 2026-10-16). The maintainer runs
+other projects with direnv loading a git-ignored `.envrc`; this tool should work the same way.
+**Design:** the tool reads **environment variables only**. direnv (or `set -a; source .envrc`, or
+a CI secret store) is what loads the file; the tool never parses `.envrc` itself (it is a shell
+script, and a Python parser for it would be wrong or a new dependency). Precedence, highest first:
+CLI flag, `DNSRESOLVER_*` environment variable, `config.json` `config` block, built-in default.
+**Steps:**
+1. Add a table in `config_resolver.py` mapping every option to its variable and type, and
+   resolve each option through one function. Variables (all optional):
+   `DNSRESOLVER_DOMAINS_FILE`, `DNSRESOLVER_OUTPUT_DIR`, `DNSRESOLVER_NAMESERVERS`,
+   `DNSRESOLVER_MAX_THREADS`, `DNSRESOLVER_TIMEOUT`, `DNSRESOLVER_RETRIES`,
+   `DNSRESOLVER_VERBOSE`, `DNSRESOLVER_EXTREME`, `DNSRESOLVER_EVIDENCE`,
+   `DNSRESOLVER_CONFIG_FILE`, `DNSRESOLVER_RECORD_EXTERNAL_IP`. R-13 adds `DNSRESOLVER_FORMAT`.
+2. Booleans accept `1/true/yes/on` and `0/false/no/off` (case-insensitive); anything else is an
+   error that names the variable and exits non-zero (fail closed, no silent default). Integers
+   that do not parse are an error naming the variable.
+3. Make `domains_file` optional on the CLI (`nargs="?"`) so it can come from
+   `DNSRESOLVER_DOMAINS_FILE`; if neither is given, exit with a clear usage error.
+4. Boolean flags need tri-state so "not given on the CLI" is distinguishable from "false":
+   use `default=None` with `action=argparse.BooleanOptionalAction` (`--evidence` /
+   `--no-evidence`, same for `--verbose`, `--extreme`). Keep the existing short flags working.
+   This is the fix for the silent-ignore bug.
+5. Add `--record-external-ip` (default **off**, per D-9). When off, `fetch_external_ip` is not
+   called and `environment_results_*.json` records `"external_ip": null`. This changes the
+   environment JSON value (documented in the release notes).
+6. Create `.envrc.example` at the repo root: every variable above, each commented out with its
+   default and a one-line description, plus a first-line comment `# copy to .envrc, then
+   direnv allow`. Add `.envrc` and `.env` to `.gitignore`. Do not create a real `.envrc`.
+   Do not put secrets in the template; this tool has none.
+7. README: replace the Options table with one table of option, flag, variable, default, and add a
+   short "Configuration" section: precedence, direnv usage (`cp .envrc.example .envrc && direnv
+   allow`), and that `config.json` remains for defaults and for `domain_categorisation`.
+8. Tests (no real environment leakage: use `monkeypatch`): each variable applies; CLI beats env;
+   env beats `config.json`; `config.json` beats built-in default; bad boolean and bad integer exit
+   with a message naming the variable; **regression for the bug**: `config.json` with
+   `"evidence": true` and no flag yields `evidence is True`; `--no-evidence` beats it.
+**Verify:** golden test unchanged except for the new `external_ip: null` in the environment
+fixture (update that one expected file and say so in the PR); suite and CI green; run
+`python resolver.py --help` and confirm every option shows. Manually: with `direnv` installed,
+`cp .envrc.example .envrc`, set `DNSRESOLVER_TIMEOUT=3`, confirm the logged "Effective
+Configuration" shows 3.
+**Do not:** add `python-dotenv` or any parser dependency; read `.envrc` from Python; store
+secrets; change the meaning of any existing flag; remove `--config-file`.
+**Also note for the maintainer (not part of this item):** the committed `config.json` defaults are
+`timeout: 1` and `max_threads: 2`, while the README says the concurrency default is 50. A 1 second
+timeout can classify slow answers as unresolved. Decide the intended defaults separately.
+**PR:** `feat: configure every option from the environment (direnv) and fix boolean config`.
+
+### R-13 Markdown run report (D-3, D-4, D-7)
+**Tier:** T2 (Sonnet) after T3 sketches the table. **Depends on:** R-09, R-19. **Additive**, minor.
 **Context:** an agent or human should be able to read a run in few tokens. JSON stays canonical
 and is always written; Markdown is a view rendered from the same in-memory records and is never
 parsed back.
 **Spec:**
-- New CLI flag `--format {md,json}`, default `md`. `md` additionally writes `run-report.md` in the
+- New CLI flag `--format {md,json}` (variable `DNSRESOLVER_FORMAT`, via the R-19 table), default `md`. `md` additionally writes `run-report.md` in the
   output directory; `json` skips it. Add to `classes/config_resolver.py` (and README table).
 - `run-report.md` sections, in order: a header (run id, status, version, counts); **Actionable
   targets** grouped by provider then region, one table per provider with columns `hostname | ip |
@@ -399,10 +460,10 @@ the oracle); R-14 numbers before and after in the PR. **PR:** `perf: index provi
 first; if the real figure is below 95, set the floor to the current whole-number figure and say so.
 Update `AGENTS.md` section 8 ("enforced by CI").
 
-### R-16b Lock runtime dependencies (needs D-8)
+### R-16b Lock runtime dependencies (D-8)
 **Tier:** T2. Use the `deps-integrity` skill's Python route: `pip-compile --generate-hashes`
 for `requirements.txt`, install with `--require-hashes` in CI, add a scheduled `pip-audit` step.
-Keep Dependabot enabled. Do not start before D-8 is answered.
+Keep Dependabot enabled.
 
 ---
 
@@ -415,7 +476,7 @@ provider-aware implementations or are rejected; a synthetic authorised fixture p
 is misrouted. The Markdown report is not an input to the allocator.
 
 ### R-18 Release
-**Owner:** main session, after R-04 to R-13 (and D-10). Use the `release` skill (release-please);
+**Owner:** main session, after R-04 to R-13 (and D-10). Use the `release` skill (release-please), D-10;
 never `git tag` by hand. Expect v3.0.0: Lambda removal is a removed entry point, and the
 environment JSON changes if D-9 is accepted. Update `docs/ALLOCATOR-CONTRACT.md` only if a
 contract changed (none is planned).

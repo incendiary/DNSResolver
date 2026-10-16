@@ -79,6 +79,7 @@ Scores 1 to 5 (5 critical). Ponytail findings are in Phase 8 and are not repeate
 | F-7 | Test | No end-to-end golden-output test. `tests/test_resolver.py` has 3 tests about control flow. Refactoring output code is currently gated only by unit tests, which AGENTS.md section 8 says do not catch the defects that matter | 4 | `tests/` |
 | F-8 | Docs | About 3,100 lines of Markdown against 2,650 lines of source; delivered PR plans and a handover duplicate `AGENTS.md`; three docs cite a removed path (`~/.claude/skills/local-ci/`) | 2 | `docs/roadmap/PR-*.md`, `HANDOVER.md` |
 | F-9 | Reliability | `EvidenceCollector.check_tools_availability` runs blocking `subprocess.run(["which", ...])` inside the event loop on every flagged domain | 2 | `classes/evidence_collector.py` |
+| F-10 | Reliability | Boolean options in `config.json` are silently ignored: `store_true` flags default to `False`, the merge only fills `None`. `config.json` sets `"evidence": true`; effective value is `False` (verified 2026-10-16). Configuration is also not settable from the environment | 3 | `classes/config_resolver.py:104` |
 
 Python-specific checklist: no `eval`/`exec`/`pickle`/`shell=True`; subprocess uses exec form;
 `requests` and `urlopen` calls have timeouts; no bare `except:`; no mutable defaults found. Clean.
@@ -154,7 +155,7 @@ Snippet for the coverage gap (R-16):
 
 ## Phase 7: Summary of action items
 
-See [`ROADMAP.md`](ROADMAP.md), items R-01 to R-18, each written to be executed by a named model
+See [`ROADMAP.md`](ROADMAP.md), items R-01 to R-19, each written to be executed by a named model
 tier with explicit steps, verification commands, and stop conditions.
 
 ## Phase 8: Ponytail audit
@@ -217,6 +218,20 @@ and cheap), the three-state wildcard verdicts (documented hard-won behaviour), `
 
 `net: about -1,400 lines of source and tests, about -900 lines of documentation, -4 runtime
 dependencies possible.`
+
+## Addendum: `helper/find_authoritative_ns.py` (decision D-6)
+
+Intent (from its docstring): walk the delegation from the root servers down to the zone and print
+the authoritative name servers for a subdomain, so an operator could pass them as `--nameservers`
+and bypass recursive-resolver caches. Assessment: it does not serve the primary job (a cached
+recursive answer is adequate for mapping a hostname to a cloud prefix), the secondary NS-takeover
+check already lives in `takeover_detector`, and the script is not wired in: no caller, no tests,
+absent from the README, unchanged since the initial release. It also has a defect: it takes the
+last two labels as the registrable domain, which is wrong for multi-label suffixes such as
+`example.co.uk`, and it resolves nameserver addresses through the system resolver rather than the
+delegation chain. Integrating it properly would mean per-zone authoritative querying with
+public-suffix handling, which is a new feature, not a fix. Recommendation: delete (R-05b); if
+authoritative-fresh answers become a requirement, design that as its own item.
 
 ## What this review deliberately did not do
 
