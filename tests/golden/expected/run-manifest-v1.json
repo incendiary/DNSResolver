@@ -1,0 +1,34 @@
+{
+  "contract_version": "1.0",
+  "run_id": "00000000-0000-0000-0000-000000000001",
+  "status": "complete",
+  "started_at": "2026-01-01T00:00:00Z",
+  "completed_at": "2026-01-01T00:00:05Z",
+  "provider_catalogs": {
+    "aws": {
+      "status": "complete",
+      "usable": true,
+      "source_url": "https://example.com/aws.json",
+      "retrieved_at": "2026-01-01T00:00:00Z",
+      "snapshot_id": "aws-1"
+    },
+    "gcp": {
+      "status": "complete",
+      "usable": true,
+      "source_url": "https://example.com/gcp.json",
+      "retrieved_at": "2026-01-01T00:00:00Z",
+      "snapshot_id": "gcp-1"
+    },
+    "azure": {
+      "status": "complete",
+      "usable": true,
+      "source_url": "https://example.com/azure.json",
+      "retrieved_at": "2026-01-01T00:00:00Z",
+      "snapshot_id": "azure-1"
+    }
+  },
+  "outputs": {
+    "actionable_targets": "allocator-targets-v1.json",
+    "observations": "dns-observations-v1.json"
+  }
+}

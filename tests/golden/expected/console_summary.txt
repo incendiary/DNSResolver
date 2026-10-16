@@ -1,0 +1,37 @@
+
+================================================================
+  DNSResolver v<VERSION> — Run Summary
+================================================================
+  Input domains        :     11
+  Resolved             :      9
+    confirmed catch-all:      1  (matched the zone's wildcard answer)
+    in catch-all zone  :      1  (zone answers for anything — unverifiable)
+  Unresolved errors    :      1
+  Failed (all retries) :      1
+
+  [>] 8 CLOUD-HOSTED ADDRESS(ES) — candidate reclaim targets
+  CSP matches — AWS: 2  GCP: 4  Azure: 2
+    excluded (wildcard) :    2  (catch-all zones — cannot attribute to the domain)
+    by region and service:
+         4  gcp  europe-west2  Google Cloud
+         2  aws  eu-west-2  EC2
+         1  azure  uksouth  AzureCloud
+         1  azure  ukwest  AzureCloud
+----------------------------------------------------------------
+  [!] 2 TAKEOVER CANDIDATE(S) DETECTED — REVIEW IMMEDIATELY [!]
+
+  Classified dangling CNAMEs (1)
+    [s3]
+      old-bucket.s3.amazonaws.com.
+        Recommendation : Delete the CNAME record or recreate the bucket
+        Evidence       : https://example.com/takeover-evidence
+        Chain (1 hop)  : dangle.example.com -> old-bucket.s3.amazonaws.com
+
+  NS Takeover candidates (1)
+    nstake.example.com -> NS: nstake.example.com
+          Why    : Nameserver does not resolve — registering it gives
+                   an attacker DNS control over nstake.example.com and all its subdomains
+----------------------------------------------------------------
+  Output : <OUTPUT_DIR>
+================================================================
+

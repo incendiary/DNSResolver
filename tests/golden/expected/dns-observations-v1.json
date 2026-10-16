@@ -1,0 +1,56 @@
+[
+  {
+    "contract_version": "1.0",
+    "hostname": "dangle.example.com",
+    "kind": "dangling_cname",
+    "ips": [],
+    "reasons": [
+      "CNAME target did not resolve: old-bucket.s3.amazonaws.com."
+    ],
+    "actionability": "excluded"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "gone.example.com",
+    "kind": "unresolved",
+    "ips": [],
+    "reasons": [
+      "(4, 'Domain name not found')"
+    ],
+    "actionability": "excluded"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "host1.wild.example.com",
+    "kind": "wildcard",
+    "ips": [
+      "198.18.0.50"
+    ],
+    "reasons": [
+      "DNS answer matched the zone wildcard probe"
+    ],
+    "actionability": "excluded"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "host2.rot.example.com",
+    "kind": "wildcard_zone",
+    "ips": [
+      "198.18.0.61"
+    ],
+    "reasons": [
+      "Parent zone answered random-label probes"
+    ],
+    "actionability": "excluded"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "nstake.example.com",
+    "kind": "ns_takeover",
+    "ips": [],
+    "reasons": [
+      "Nameserver did not resolve: nstake.example.com"
+    ],
+    "actionability": "excluded"
+  }
+]

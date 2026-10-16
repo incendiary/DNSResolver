@@ -1,0 +1,146 @@
+[
+  {
+    "contract_version": "1.0",
+    "hostname": "aws.example.com",
+    "ip": "198.18.0.10",
+    "provider": "aws",
+    "region": "eu-west-2",
+    "services": [
+      "EC2"
+    ],
+    "prefixes": [
+      "198.18.0.0/24"
+    ],
+    "network_border_groups": [
+      "eu-west-2"
+    ],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "v6.example.com",
+    "ip": "2001:db8:a::1",
+    "provider": "aws",
+    "region": "eu-west-2",
+    "services": [
+      "EC2"
+    ],
+    "prefixes": [
+      "2001:db8:a::/48"
+    ],
+    "network_border_groups": [
+      "eu-west-2"
+    ],
+    "dns_record_type": "AAAA",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "azure.example.com",
+    "ip": "203.0.113.30",
+    "provider": "azure",
+    "region": "uksouth",
+    "services": [
+      "AzureCloud"
+    ],
+    "prefixes": [
+      "203.0.113.0/24"
+    ],
+    "network_border_groups": [
+      "unknown"
+    ],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "azure.example.com",
+    "ip": "203.0.113.30",
+    "provider": "azure",
+    "region": "ukwest",
+    "services": [
+      "AzureCloud"
+    ],
+    "prefixes": [
+      "203.0.113.0/24"
+    ],
+    "network_border_groups": [
+      "unknown"
+    ],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "gcp.example.com",
+    "ip": "198.51.100.20",
+    "provider": "gcp",
+    "region": "europe-west2",
+    "services": [
+      "Google Cloud"
+    ],
+    "prefixes": [
+      "198.51.100.0/24"
+    ],
+    "network_border_groups": [
+      "unknown"
+    ],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "gcp.example.com",
+    "ip": "2001:db8:b::20",
+    "provider": "gcp",
+    "region": "europe-west2",
+    "services": [
+      "Google Cloud"
+    ],
+    "prefixes": [
+      "2001:db8:b::/48"
+    ],
+    "network_border_groups": [
+      "unknown"
+    ],
+    "dns_record_type": "AAAA",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "shared-a.example.com",
+    "ip": "198.51.100.77",
+    "provider": "gcp",
+    "region": "europe-west2",
+    "services": [
+      "Google Cloud"
+    ],
+    "prefixes": [
+      "198.51.100.0/24"
+    ],
+    "network_border_groups": [
+      "unknown"
+    ],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "shared-b.example.com",
+    "ip": "198.51.100.77",
+    "provider": "gcp",
+    "region": "europe-west2",
+    "services": [
+      "Google Cloud"
+    ],
+    "prefixes": [
+      "198.51.100.0/24"
+    ],
+    "network_border_groups": [
+      "unknown"
+    ],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  }
+]
