@@ -128,18 +128,12 @@ atomic replace only after processing succeeds, so a partial run cannot leave an
 older actionable document looking current. Non-actionable partial files may
 remain for diagnosis.
 
-## AWS Lambda deployment
-
-DNSResolver can run as an S3-triggered Lambda. The full deployment walkthrough (ECR image, IAM, triggers) lives in [`docs/LAMBDA.md`](docs/LAMBDA.md). Note: the maintained Lambda packaging is produced in a separate project; the handler here is the reference entry point.
-
 ## Architecture
 
 ```
 resolver.py              — CLI entry point → run(env_manager)
-lambda_handler.py        — Lambda entry point → run(env_manager)
     └── run()            — shared async pipeline (retry loop, concurrency cap)
 ├── EnvironmentManager       — CLI: argparse, config, logging, local file I/O
-├── LambdaEnvironmentManager — Lambda: env vars, stdout logging, /tmp file I/O
 ├── DNSHandler               — async DNS resolution (aiodns primary, dnspython fallback)
 │   ├── TakeoverDetector     — dangling CNAME detection, NS takeover checks, depth-limited CNAME chain following
 │   ├── WildcardDetector     — per-zone wildcard DNS detection, cached probe results
