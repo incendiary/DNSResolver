@@ -32,7 +32,7 @@ written as text and re-parsed), and **add a compact Markdown view** for agent an
 | D-6 | Delete `helper/find_authoritative_ns.py` (unwired, untested, known defect). The underlying idea is kept as unscheduled item I-1 | 2026-10-16 | R-05b, I-1 |
 | D-11 | Every option is settable from the environment (`DNSRESOLVER_*`), loaded by direnv from a git-ignored `.envrc`; a committed `.envrc.example` is the template. Precedence: CLI flag, then environment, then `config.json`, then built-in default | 2026-10-16 | R-19 |
 
-### Open decisions
+**Open decisions**
 
 An item that depends on one says so; do not guess.
 
