@@ -66,6 +66,14 @@ There are no open decisions.
 9. Final message of every item: files changed, commands run with pass or fail, coverage before and
    after, anything skipped, anything you were unsure of.
 
+### The standard for every item
+
+Every item, scheduled or idea, carries all of these, in this order, so a lesser agent can run it
+cold without asking: **Tier and why**, **Depends on**, **Files**, **Context** (what is wrong and
+where, with names and line references), **Steps** (numbered, exact commands or edits),
+**Verify** (commands whose output proves it), **Do not** (the tempting wrong moves), **Done when**,
+and **PR** (the conventional title). An item missing any of these is not ready to hand out.
+
 ## Model tiers
 
 Tier is chosen on verifiability (can a gate prove it right cheaply?) and blast radius. Once R-03
@@ -101,11 +109,19 @@ at once: R-07, R-09, R-12 and R-15 conflict, so run them one at a time in that o
 ## Phase 0: Gates
 
 ### R-01 Land the dependency batch
-**Status:** PR 203 open, all checks green (`test`, `gitleaks`, `trufflehog`). **Tier:** main session.
-**Done when:** PR 203 is squash-merged; the eight superseded Dependabot PRs (202, 201, 200, 199,
-198, 190, 187, 166) are closed with a comment pointing at PR 203 (the maintainer confirms the
-closures). Also update the stale TruffleHog version in the prose of the archived roadmap only if
-a later edit touches it; do not edit history otherwise.
+**Status:** done 2026-10-16. **Owner:** main session. **Depends on:** nothing.
+**Context:** eight Dependabot PRs (202, 201, 200, 199, 198, 190, 187, 166) each bumped one
+dependency. They were combined into one PR so one set of checks proved them together, including
+ruff 0.17.0 (lint and format clean, no code changes needed) and the TruffleHog action pinned by
+SHA (`action.yml` unchanged since v3.96.0).
+**Steps taken:** combined the bumps on one branch, resolved the one conflict in
+`requirements-dev.txt`, ran the local CI (5 of 5 steps) and the full suite, opened PR 203, merged
+it with squash, closed the eight PRs with a pointer to PR 203.
+**Verify:** `gh pr view 203 --json state` reports MERGED; `gh pr list --state open` shows none of
+the eight.
+**Do not:** edit the TruffleHog version in archived documents (history stays as written).
+**PR:** `chore(deps): batch dependabot updates` (PR 203, merged).
+**Tier:** none (done by the main session). **Done when:** PR 203 shows MERGED and none of the eight superseded Dependabot PRs is open.
 
 ### R-02 Repair stale tool paths in docs
 **Tier:** T1 (Haiku). **Why:** find and replace, verified by grep.
@@ -122,6 +138,9 @@ skill is `ci-local`. The git hooks were already repaired and verified on 2026-10
    `docs/roadmap/REVIEW-2026-07.md` (history; leave those alone).
 **Files:** `AGENTS.md`, `docs/roadmap/AGENT-GUIDE.md`.
 **Done when:** grep shows no live-doc hits; CI green. **PR:** `docs: correct local-ci path`.
+**Depends on:** nothing.
+**Verify:** `grep -rn "skills/local-ci/" --include='*.md' .` (excluding `.venv`, `.git`) shows hits only in `ROADMAP.md`, `REVIEW.md` and the two archive files, and those describe the stale path rather than cite it; local CI passes.
+**Do not:** edit the archive files, or `ROADMAP.md`/`REVIEW.md` prose; change any wording on the touched lines beyond the path and the attribution line.
 
 ### R-03 Golden end-to-end characterisation test
 **Tier:** T2 (Sonnet), reviewed by T3. **Why:** this is the gate for every later refactor, so it
@@ -152,62 +171,111 @@ output file byte for byte against checked-in expected files.
 **Files:** `tests/test_golden_run.py`, `tests/golden/**`. No source changes.
 **Done when:** test passes; breaking a format fails it; full suite and CI green; coverage unchanged
 or higher. **PR:** `test: add golden end-to-end output test`.
+**Depends on:** nothing (first code item; everything after it depends on this).
+**Verify:** run `PYTHONHASHSEED=0`, `1`, `7` and `99` with `UPDATE_GOLDEN` unset and confirm the test passes each time; make one deliberate record-format change, confirm the test fails, then revert; full suite and local CI pass; coverage not lower.
 
 ---
 
 ## Phase 1: Deletions
 
 ### R-04 Remove the shelved Lambda stack (D-1)
-**Tier:** T1 (Haiku) with a mandatory grep sweep. **Depends on:** R-03. **Breaking:** yes (removed
-entry point; release as a major, see D-10).
+**Tier:** T1 (Haiku) with a mandatory grep sweep. **Why:** the deletions are mechanical and the
+grep plus the golden test prove nothing live was broken. **Depends on:** R-03.
+**Breaking:** yes (a removed entry point; released as a major, D-10).
+**Context:** the Lambda deployment idea is shelved (`AGENTS.md` section 2). Its code, tests,
+documentation and the `boto3` dependency (about 746 lines) are carried and kept green for no
+consumer. The shared `run()` pipeline in `resolver.py` stays; only the Lambda entry and its
+environment manager go. Everything is restorable from tag `v2.0.0`.
+**Files:** delete `lambda_handler.py`, `classes/lambda_environment_manager.py`,
+`tests/test_lambda_handler.py`, `tests/test_lambda_environment_manager.py`, `docs/LAMBDA.md`,
+`requirements-lambda.txt`. Edit `.github/workflows/ci.yml`, `README.md`, `AGENTS.md`,
+`docs/roadmap/AGENT-GUIDE.md`, and `tests/baseline/test_baseline.py` only if it names Lambda files.
 **Steps:**
-1. Delete: `lambda_handler.py`, `classes/lambda_environment_manager.py`,
-   `tests/test_lambda_handler.py`, `tests/test_lambda_environment_manager.py`, `docs/LAMBDA.md`,
-   `requirements-lambda.txt`.
-2. `grep -rn -i "lambda\|boto3" . --include='*' --exclude-dir=.venv --exclude-dir=.git
-   --exclude-dir=worktrees -I` and handle every remaining hit outside the two archive files:
+1. Run `git rm` on the six files above.
+2. `grep -rn -i "lambda\|boto3" . -I --exclude-dir=.venv --exclude-dir=.git --exclude-dir=worktrees`
+   and handle every remaining hit outside `docs/roadmap/ARCHIVE.md` and
+   `docs/roadmap/REVIEW-2026-07.md` (history; leave alone):
    - `.github/workflows/ci.yml`: change `pip install -r requirements-dev.txt -r
      requirements-lambda.txt` to `pip install -r requirements-dev.txt`.
-   - `requirements-dev.txt`: ensure nothing includes the lambda file.
+   - `requirements-dev.txt`: confirm nothing includes the lambda file.
    - `README.md`, `AGENTS.md` (sections 2 and 5): remove Lambda rows and the "install both
      requirements files" advice; keep a one-line note that the shared `run()` entry point remains.
-   - `docs/roadmap/AGENT-GUIDE.md`: same advice, remove.
-   - `tests/baseline/test_baseline.py`: if it references Lambda files, remove only those checks.
-3. Confirm `resolver.run(env_manager)` is untouched.
-**Done when:** the second grep shows only archive hits; `pytest` passes; coverage figure noted
-(it may rise slightly because untested-ratio changes; it must not fall); CI green.
+   - `docs/roadmap/AGENT-GUIDE.md`: remove the same advice.
+   - `tests/baseline/test_baseline.py`: remove only checks that name Lambda files.
+3. Re-run the grep; only the two archive files may remain.
+4. Confirm `resolver.run(env_manager)` is unchanged: `git diff origin/main -- resolver.py` is empty.
+**Verify:** in a fresh venv built from `requirements-dev.txt` only, `.venv/bin/pytest
+--cov=classes --cov=imports` passes and coverage is not lower than before; the golden test (R-03)
+is unchanged; `bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml` passes.
+**Do not:** touch `resolver.py`, any output format, or `VERSION`; delete history in the archive
+files; remove anything the grep shows a non-Lambda caller for (stop and report instead).
+**Done when:** the verification passes and the grep shows only archive hits.
 **PR:** `chore!: remove the shelved Lambda entry point` (the `!` marks the breaking change).
 
 ### R-05a Delete confirmed dead code
-**Tier:** T1 (Haiku). **Depends on:** R-03.
-**Targets (grep each per rule 7 first):** `WildcardDetector.is_wildcard_resolution`
-(`classes/wildcard_detector.py`), `FileDoesNotExistError`, `NotAnIntegerError`,
-`InvalidNameserversError` (`classes/custom_exceptions.py`), `EnvironmentManager.get_random_nameserver`
-and `get_config_file` (`classes/environment_manager.py`).
-**Steps:** for each target, grep; if the only hits are its own definition and tests of it, delete
-the definition and those tests; if `tests/test_custom_exceptions.py` becomes empty, delete the
-file. If any production hit exists, leave that item and report.
-**Done when:** suite and CI green; coverage not lower. **PR:** `chore: remove unused code`.
+**Tier:** T1 (Haiku). **Why:** each deletion is proved by a grep and the existing suite.
+**Depends on:** R-03. **Files:** `classes/wildcard_detector.py`, `classes/custom_exceptions.py`,
+`classes/environment_manager.py`, and the tests that cover only the deleted symbols
+(`tests/test_wildcard_detector.py`, `tests/test_custom_exceptions.py`,
+`tests/test_environment_manager.py`).
+**Context:** the 2026-10-16 audit found symbols with no production caller (tests only):
+`WildcardDetector.is_wildcard_resolution` (superseded by `classify`), the exceptions
+`FileDoesNotExistError`, `NotAnIntegerError` and `InvalidNameserversError`, and the methods
+`EnvironmentManager.get_random_nameserver` and `get_config_file`. They look supported and are not.
+**Steps:** for each of the six targets:
+1. Run the rule 7 grep for its name across source, tests, docs and workflows.
+2. If every hit is its own definition or a test of it, delete the definition and those tests.
+   If any production or documentation hit exists, leave the target and note it in your report.
+3. If `tests/test_custom_exceptions.py` is left with no tests, delete the file.
+4. Remove any import your deletion orphans, and nothing else.
+**Verify:** `.venv/bin/pytest --cov=classes --cov=imports` passes, collected-test count falls only
+by the tests you deleted (state the numbers), coverage is not lower, golden test unchanged, local
+CI passes.
+**Do not:** delete a symbol with a production caller; "tidy" adjacent code; remove
+`FileDoesNotExistError` and friends from documentation that describes behaviour still present.
+**Done when:** the verification passes. **PR:** `chore: remove unused code`.
 
 ### R-05b Delete the unreferenced helper (D-6)
-**Tier:** T1. Delete `helper/find_authoritative_ns.py` (no callers, no tests, absent from the
-README, wrong for multi-label suffixes such as `example.co.uk`). Run the rule 7 grep first.
-Check `README.md` still lists only `helper/crtsh_domains.sh`. The idea behind it is kept as I-1.
+**Tier:** T1 (Haiku). **Why:** one file, proved unused by grep. **Depends on:** R-03.
+**Files:** `helper/find_authoritative_ns.py` (delete); `README.md` only if it mentions it.
+**Context:** the script walks DNS delegation by hand to print authoritative name servers. It has
+no callers, no tests, is not in the README, has been unchanged since the initial release, and
+assumes the registrable domain is the last two labels (wrong for `example.co.uk`). The maintainer
+decided to delete it and keep the idea as unscheduled item I-1, which carries the full design.
+**Steps:**
+1. Run the rule 7 grep for `find_authoritative_ns` and `helper/` across the repo.
+2. If the only hits are the file itself and archived history, `git rm` it.
+3. Confirm `README.md` lists only `helper/crtsh_domains.sh` under the helpers.
+**Verify:** the grep finds no live references; suite and local CI pass; `ls helper` shows only
+`crtsh_domains.sh`.
+**Do not:** delete `helper/crtsh_domains.sh`; port any of the script's code elsewhere (I-1 is a
+fresh design, not a port).
+**Done when:** the file is gone and CI is green. **PR:** `chore: remove the unwired authoritative-NS
+helper`. May be bundled with R-05a in the same PR (same type).
 
 ### R-06 Archive delivered per-PR plans
-**Tier:** T1 (Haiku). **Why:** deletion verified by link checks; history keeps the files.
+**Tier:** T1 (Haiku). **Why:** deletions verified by a link check; git history keeps every file.
+**Depends on:** nothing (docs only; can run any time).
+**Files:** delete `docs/roadmap/PR-A-ci-reliability.md` through `PR-H-dependencies.md` and
+`docs/roadmap/README.md`; edit `README.md` and `HANDOVER.md` pointers only. Keep
+`docs/roadmap/AGENT-GUIDE.md`, `ARCHIVE.md` and `REVIEW-2026-07.md`.
+**Context:** the A to H plans (about 670 lines) describe work that was delivered long ago. They
+are noise for a new agent and now partly wrong (stale paths, old model names). History retains
+them.
 **Steps:**
-1. Delete `docs/roadmap/PR-A-ci-reliability.md` through `PR-H-dependencies.md` and
-   `docs/roadmap/README.md`.
-2. Fix every reference found by `grep -rn "docs/roadmap/PR-\|roadmap/README" . --include='*.md'
-   --exclude-dir=.venv --exclude-dir=.git` outside the two archive files. Keep
-   `docs/roadmap/AGENT-GUIDE.md`, `ARCHIVE.md`, `REVIEW-2026-07.md`.
-3. In `README.md` (roadmap pointer, around line 349) and `HANDOVER.md` (lines referencing
-   `REVIEW.md` and `ROADMAP.md`) make the pointers accurate: the 2026-07 review is at
-   `docs/roadmap/REVIEW-2026-07.md`, the current review is `REVIEW.md`. Do not rewrite
-   `HANDOVER.md` otherwise (its fate is a separate maintainer decision).
-**Done when:** a markdown link check by eye (`grep -o "](.*\.md" ` and confirm each target exists)
-finds no dead links; CI green. **PR:** `docs: archive delivered per-PR plans`.
+1. `git rm` the nine files named above.
+2. Find references: `grep -rn "docs/roadmap/PR-\|roadmap/README" . --include='*.md'
+   --exclude-dir=.venv --exclude-dir=.git`. Fix each hit outside the two archive files.
+3. In `README.md` (the roadmap pointer, near the end) and `HANDOVER.md` (the lines naming
+   `REVIEW.md` and `ROADMAP.md`) make sure pointers are accurate: the 2026-07 review is
+   `docs/roadmap/REVIEW-2026-07.md`; the current review is `REVIEW.md`.
+4. Link check: for every `](...md)` target in `README.md`, `AGENTS.md`, `HANDOVER.md`,
+   `ROADMAP.md`, `REVIEW.md` and `docs/`, confirm the file exists
+   (`grep -o "](\([^)]*\.md\)" file` then `ls`).
+**Verify:** the link check finds no dead links; local CI passes.
+**Do not:** rewrite `HANDOVER.md` beyond pointers (its fate is a separate decision); edit the two
+archive files.
+**Done when:** verification passes. **PR:** `docs: archive delivered per-PR plans`.
 
 ---
 
@@ -235,22 +303,29 @@ finds no dead links; CI green. **PR:** `docs: archive delivered per-PR plans`.
 **Verify:** R-03 golden test unchanged, byte for byte. Suite and CI green; coverage not lower.
 **Do not:** change output text, the order of records, or any contract.
 **PR:** `refactor: match against provider catalogues directly`.
+**Done when:** verification passes and `classes/csp_ip_addresses.py` no longer exists.
 
 ### R-08 One home for atomic output helpers
-**Tier:** T1 (Haiku) **Depends on:** R-03. **Files:** `classes/run_contract.py`,
-`classes/allocator_contract.py`, `resolver.py`, `imports/cloud_ip_ranges.py`.
+**Tier:** T1 (Haiku). **Why:** moves identical code; the golden test proves no output changed.
+**Depends on:** R-03. **Files:** `classes/run_contract.py`, `classes/allocator_contract.py`,
+`resolver.py`, `imports/cloud_ip_ranges.py`.
+**Context:** `_remove_output`, the atomic JSON write, `_lines` and `CONTRACT_VERSION` are each
+defined in both contract modules, and `_timestamp` in `resolver.py` and
+`imports/cloud_ip_ranges.py`. Four copies of the same safety logic drift apart.
 **Steps:**
-1. `_remove_output`, `_write_json_atomic`, `CONTRACT_VERSION`, `_lines` are defined in both
-   contract modules. Keep the `classes/run_contract.py` versions; in `allocator_contract.py`
-   `from classes.run_contract import ...` them and delete its copies. Make `publish_allocator_targets`
-   use `_write_json_atomic` (its inline temp-file block is the same logic; keep the same
-   `.json.tmp` temp name and the same error message text, since tests may assert it).
-2. Define `_timestamp` once (in `imports/cloud_ip_ranges.py` it takes a datetime; in `resolver.py`
-   it takes none). Keep the datetime-taking one, and in `resolver.py` call it with
-   `datetime.now(timezone.utc)`.
-**Verify:** golden test unchanged; suite green. If the golden test or a test about error text
-fails, stop and report (rule 8) rather than editing expected text.
-**PR:** `refactor: share atomic output helpers`.
+1. In `classes/allocator_contract.py`, `from classes.run_contract import _remove_output,
+   _write_json_atomic, CONTRACT_VERSION` (and `_lines` if signatures match; if they differ, stop
+   and report). Delete its local copies.
+2. Make `publish_allocator_targets` call `_write_json_atomic`. Its inline temp-file block is the
+   same logic; keep the `.json.tmp` temporary name and the exact `OutputWriteError` message text,
+   because tests may assert it.
+3. `_timestamp`: keep the datetime-taking version in `imports/cloud_ip_ranges.py`; in
+   `resolver.py` delete the local one and call it with `datetime.now(timezone.utc)`.
+**Verify:** golden test byte-identical; suite and local CI pass; coverage not lower. If a test
+about error text fails, stop and report (rule 8) rather than editing expected text.
+**Do not:** rename the helpers' behaviour, change any message, or touch the pipe formats.
+**Done when:** verification passes. **PR:** `refactor: share atomic output helpers` (bundle with
+R-07, R-10 and R-12 per the PR table).
 
 ### R-09 Keep records structured in memory
 **Tier:** T2 (Sonnet), design reviewed by T3 before coding. **Depends on:** R-03, R-07, R-08.
@@ -279,6 +354,7 @@ dead re-parse code and its tests. One commit per step.
 **Do not:** change a pipe line, a JSON field, or a schema. Do not make `Observation` a class
 hierarchy; one dataclass with a `kind` string is enough.
 **PR:** `refactor: stop re-parsing our own output files`.
+**Done when:** verification passes at every step, `_parse_target`, the `startswith` ladder in `run_contract.py` and the line-splitting in `run_summary.py` are gone, and no `ValueError("Malformed ...")` remains for our own output.
 
 ### R-10 Trim `cloud_ip_ranges.py`
 **Tier:** T2 (Sonnet): fail-closed cache validation is subtle. **Depends on:** R-03.
@@ -299,42 +375,77 @@ hierarchy; one dataclass with a `kind` string is enough.
 **Verify:** every existing fail-closed test passes unmodified except those deleted in steps 1 and
 2; golden test unchanged. **Do not** change any freshness limit, retry count, or error text.
 **PR:** `refactor: simplify provider catalogue loading`.
+**Context:** `imports/cloud_ip_ranges.py` (408 lines) carries code that no longer earns its place: a migration for snapshot formats that expired within 14 days of August, one-line wrappers around the parsers, range dumps that duplicate `--extreme` logging in `resolver.py`, and copy-pasted validation and exception tuples. Each makes the fail-closed logic harder to read, and that logic is the part that must stay correct.
+**Done when:** verification passes and each of the five steps is its own commit.
 
 ### R-11a Replace `requests` and `urllib3` with `urllib.request`
-**Tier:** T2. **Depends on:** R-03. **Files:** `classes/environment_manager.py`,
-`requirements.txt`, `tests/test_environment_manager.py`.
-**Steps:** rewrite `fetch_external_ip` with `urllib.request.urlopen(..., timeout=timeout)`, keeping
-the same return text on error (including the `An error occurred ...` string, because it is written
-to the environment JSON). Catch `OSError` (covers `URLError`, timeouts). Remove `requests` and
-`urllib3` from `requirements.txt` after `grep -rn "import requests\|urllib3"` shows no other user.
-Update the mocks in tests (mock `urlopen`, not `requests.get`).
-**Done when:** golden test and suite green; `pip install -r requirements-dev.txt` in a fresh venv
-works; CI green. **PR:** `chore: drop requests and urllib3`.
+**Tier:** T2 (Sonnet). **Why:** small, but the error-path text is written to a contract file and
+tests mock the old library. **Depends on:** R-03.
+**Files:** `classes/environment_manager.py`, `requirements.txt`, `tests/test_environment_manager.py`.
+**Context:** `requests` and its `urllib3` pin exist only for one call, `fetch_external_ip`
+(`classes/environment_manager.py:27`). `urllib.request.urlopen` is already used in
+`imports/cloud_ip_ranges.py`. Removing both ends two dependencies and their Dependabot churn.
+**Steps:**
+1. Rewrite `fetch_external_ip` with `urllib.request.urlopen(url, timeout=timeout)`, decode and
+   strip the body.
+2. Catch `OSError` (covers `URLError` and timeouts) and return the same text as today:
+   `An error occurred while trying to retrieve the external ip: {error}`, because it is written
+   to `environment_results_*.json`.
+3. Confirm no other user: `grep -rn "import requests\|from requests\|urllib3" --include='*.py'
+   --include='*.txt' .` (excluding `.venv`). Then remove `requests` and `urllib3` from
+   `requirements.txt`.
+4. Update the test mocks: patch `urlopen`, not `requests.get`; keep one success and one failure
+   test and assert the returned text.
+**Verify:** golden test unchanged; suite and local CI pass; a fresh venv from
+`requirements-dev.txt` installs and runs the suite; coverage not lower.
+**Do not:** change the URL, the timeout default, or the error text; make the lookup opt-in here
+(that is R-19).
+**Done when:** verification passes. **PR:** `chore: drop requests and urllib3` (bundle with R-11b).
 
 ### R-11b Remove `aiofiles`
-**Tier:** T2. **Depends on:** R-09 (both touch the write path). **Files:** `classes/output_manager.py`,
-`requirements.txt`, tests.
-**Steps:** `write_to_file` becomes a plain synchronous append (`open(path, "a")`, same
-`OutputWriteError` text). It stays `async def` so no caller changes. Single-threaded event loop,
-one small write per call, same as the CSP writer. Remove `aiofiles` after grep confirms no other
-user. **Verify:** golden test; a test that a failing write raises `OutputWriteError`.
-(The opt-in external-IP lookup, D-9, is delivered by R-19, not here.)
-**PR:** `chore: drop aiofiles`.
+**Tier:** T2 (Sonnet). **Why:** touches the write path that every output uses. **Depends on:**
+R-09 (both edit the write path; do R-09 first). **Files:** `classes/output_manager.py`,
+`requirements.txt`, `tests/test_output_manager.py`.
+**Context:** `OutputManager.write_to_file` uses `aiofiles` to append one short line per call. The
+CSP writer in `imports/cloud_service_provider_checks.py` already appends with plain
+`open(path, "a")`, so the codebase has both. A single-threaded event loop and one small write per
+call gain nothing from `aiofiles`.
+**Steps:**
+1. Change the body of `write_to_file` to a synchronous `with open(file_path, "a",
+   encoding="utf-8") as f: f.write(content + "\n")`. Keep it `async def` so no caller changes.
+   Keep the same `OSError` handling and the same `OutputWriteError` message text.
+2. Confirm no other user: `grep -rn aiofiles --include='*.py' --include='*.txt' .` (excluding
+   `.venv`); remove it from `requirements.txt`.
+3. Add or keep a test that a failing write raises `OutputWriteError` with the message text.
+**Verify:** golden test unchanged; suite and local CI pass; coverage not lower.
+**Do not:** make `write_to_file` synchronous (callers `await` it); add buffering or locking; touch
+the opt-in external-IP lookup (R-19).
+**Done when:** verification passes. **PR:** `chore: drop aiofiles` (bundle with R-11a).
 
 ### R-12 Small simplifications
-**Tier:** T1 (Haiku). **Depends on:** R-07, R-09 (same files).
+**Tier:** T1 (Haiku). **Why:** three tiny, independent edits, each covered by the golden test.
+**Depends on:** R-07 and R-09 (same files; run after them). **Files:**
+`classes/domain_processing_context.py`, `imports/domain_processor.py`, `resolver.py`,
+`imports/cloud_service_provider_checks.py`, `classes/environment_manager.py`,
+`classes/evidence_collector.py`, `tests/conftest.py` and the affected tests.
+**Context:** (1) `dangling_domains` is collected, returned as the third value of
+`process_domain_async`, and ignored (`resolver.py` binds it to `_dangling`). (2)
+`perform_csp_checks` lazily creates `env_manager._csp_written_lines` with `hasattr`. (3)
+`EvidenceCollector.check_tools_availability` runs `subprocess.run(["which", ...])`, a blocking
+call inside the event loop, where `shutil.which` is the standard-library equivalent.
 **Steps (one commit each):**
-1. `classes/domain_processing_context.py`: `dangling_domains`, `add_dangling_domain_to_domains`
-   and the third return value of `process_domain_async` are never used (`resolver.py` binds it to
-   `_dangling`). Remove them; update the unpack in `resolver.py` and tests.
-2. `imports/cloud_service_provider_checks.py`: replace the `hasattr(env_manager,
-   "_csp_written_lines")` lazy init with `self._csp_written_lines = set()` in
-   `EnvironmentManager.__init__`; tests that build a bare env manager should set it too (check
-   `tests/conftest.py`).
-3. `classes/evidence_collector.py`: replace `subprocess.run(["which", x], ...)` with
-   `shutil.which(x) is not None` (hardening only: removes a blocking call from the event loop).
-**Verify:** golden test; suite; coverage not lower. **PR:** `refactor: remove unused state and a
-blocking call`.
+1. Remove `dangling_domains`, `add_dangling_domain_to_domains` and the third return value of
+   `process_domain_async`; update the unpack in `resolver.py` and the tests that asserted it.
+2. Replace the `hasattr` lazy init with `self._csp_written_lines = set()` in
+   `EnvironmentManager.__init__`; make any test that builds a bare environment manager set it
+   (check `tests/conftest.py`).
+3. Replace `subprocess.run(["which", tool], ...)` with `shutil.which(tool) is not None`; keep the
+   function's return shape.
+**Verify:** golden test unchanged; suite and local CI pass; coverage not lower.
+**Do not:** change `takeover_detector` behaviour (secondary side, D-2: hardening only); touch any
+output format.
+**Done when:** verification passes. **PR:** `refactor: remove unused state and a blocking call`
+(bundle with R-07, R-08 and R-10).
 
 ### R-20 Reorganise and shrink the DNS tests
 **Tier:** T2 (Sonnet). **Depends on:** R-03, R-05a, R-12 (they delete tests in the same files).
@@ -358,6 +469,7 @@ Six near-identical fixtures are repeated across them.
 before and after; parametrize cases count individually); coverage not lower; golden test green.
 **Do not:** delete a test because it looks redundant; every test removed must have an identical
 twin. **PR:** `test: split DNS tests by class and share fixtures`.
+**Done when:** verification passes, no `test_dns_handler_extended.py` or `test_dns_handler_resolution.py` remains, and the collected-test count is unchanged.
 
 ---
 
@@ -419,6 +531,7 @@ secrets; change the meaning of any existing flag; remove `--config-file`.
 `timeout: 1` and `max_threads: 2`, while the README says the concurrency default is 50. A 1 second
 timeout can classify slow answers as unresolved. Decide the intended defaults separately.
 **PRs:** 9a `fix: apply boolean options from config.json`; 9b `feat!: configure every option from the environment (direnv)`.
+**Done when:** verification passes for each PR (9a and 9b), the regression test for the `config.json` boolean bug exists, and `.envrc.example` is committed while `.envrc` is ignored.
 
 ### R-13 Markdown run report (D-3, D-4, D-7)
 **Tier:** T2 (Sonnet) after T3 sketches the table. **Depends on:** R-09, R-19. **Additive**, minor.
@@ -445,61 +558,163 @@ of the JSON bytes for the actionable section).
 **Do not:** add a Markdown parser, change any JSON schema, or put anything in the report that is
 not in the JSON documents.
 **PR:** `feat: add a compact Markdown run report`.
+**Steps:**
+1. Add `--format` (and `DNSRESOLVER_FORMAT`) through the R-19 option table; default `md`.
+2. Write `classes/markdown_report.py` with `render(records, manifest) -> str`, consuming the in-memory records from R-09 (never re-reading files).
+3. Call it from `run()` after the JSON documents are published; write `run-report.md` only when the format is `md`.
+4. Extend the golden test with the expected `run-report.md`; add the `--format json` and byte-identical-JSON tests; record the size comparison in the PR.
+**Done when:** verification passes and the report is at most 50% of the JSON bytes for the actionable section on the golden fixture.
 
 ---
 
 ## Phase 4: Scale and CI
 
 ### R-14 Benchmark harness
-**Tier:** T2. **Depends on:** R-07. **Replaces** archived items 8 and 12 (measure first).
-**Spec:** `bench/bench_matcher.py` (not run by pytest): build a deterministic synthetic catalogue
-of about 55,000 prefixes (seeded RNG, mixed /16 to /28, IPv4 and IPv6, shaped like AWS plus Azure),
-generate N addresses (N = 1,000; 10,000; 100,000) with a realistic repeat rate (a few CDN addresses
-shared by many hostnames), and time `perform_csp_checks` per address and in total. Also measure
-how long the event loop is blocked (record the maximum time between iterations of a 1 ms
-`asyncio.sleep` ticker running alongside). Print a small Markdown table. Store a baseline in
-`bench/BASELINE.md` with the machine description.
-**Done when:** the harness runs in under a minute at N = 10,000 and the baseline is committed.
-No source changes. **PR:** `test: add a matcher benchmark harness`.
+**Tier:** T2 (Sonnet). **Why:** new code with a written spec; measures, changes no behaviour.
+**Depends on:** R-07. **Replaces** archived items 8 and 12 (measure before optimising).
+**Files:** new `bench/bench_matcher.py` and `bench/BASELINE.md`. No source changes. Not collected
+by pytest.
+**Context:** `AGENTS.md` section 7 says scale is "reasoned, not measured". A synthetic micro-test
+(55,000 prefixes) already showed at least 8.4 ms per distinct address, synchronous inside the
+event loop and not memoised across hostnames. That is a lower bound; this item measures the real
+code path so R-15 is justified (or not) by numbers.
+**Steps:**
+1. Build a deterministic synthetic catalogue (seeded RNG) of about 55,000 prefixes, mixed /16 to
+   /28, IPv4 and IPv6, with metadata, shaped like AWS plus Azure.
+2. Generate N addresses for N = 1,000, 10,000 and 100,000 with a realistic repeat rate (a few
+   shared CDN addresses used by many hostnames), and run `perform_csp_checks` over them via the
+   same objects `resolver.run()` uses.
+3. Record: total time, mean time per address, and the maximum event-loop stall (run a task that
+   sleeps 1 ms in a loop alongside and record the largest gap between ticks).
+4. Print a Markdown table. Write the results, the machine description and the commit hash to
+   `bench/BASELINE.md`.
+**Verify:** `python bench/bench_matcher.py --n 10000` finishes in under a minute and is
+repeatable (two runs agree within 20%); the suite and local CI are unaffected.
+**Do not:** modify the matcher; use real provider data or any network; commit large generated
+fixtures (generate in memory).
+**Done when:** the baseline is committed. **PR:** `test: add a matcher benchmark harness`
+(bundle with R-16a, R-16b).
 
 ### R-15 Matcher speed-up (conditional on R-14)
-**Tier:** T2 build, T3 review. **Depends on:** R-09, R-14. **Run this item only if** R-14 shows more
-than 100 ms of event-loop blocking per address or more than 60 s for 10,000 distinct addresses;
-otherwise record the numbers in `AGENTS.md` section 7 (replacing "reasoned, not measured") and close.
-**Spec:** (1) memoise match results per address (`functools.lru_cache` on a function of
-`(ip, provider-set)` is enough); (2) if still over budget, index prefixes per family in sorted
-order by network address and `bisect`, handling overlapping prefixes (all matching prefixes must
-still be returned: overlap and multi-attribution are required, PR 169).
-**Verify:** golden test byte-identical; a property test comparing the indexed matcher with the old
-linear scan on random addresses over the benchmark catalogue (the linear scan stays in the test as
-the oracle); R-14 numbers before and after in the PR. **PR:** `perf: index provider prefixes`.
+**Tier:** T2 (Sonnet) builds, T3 reviews. **Why:** performance change on the primary path with
+an exact-equivalence requirement. **Depends on:** R-09, R-14.
+**Run this item only if** R-14 shows more than 100 ms of event-loop stall per address, or more than
+60 s for 10,000 distinct addresses. Otherwise record the measured numbers in `AGENTS.md` section 7
+(replacing "reasoned, not measured"), mark this item closed, and stop.
+**Files:** `imports/cloud_service_provider_checks.py`, tests, `bench/BASELINE.md`.
+**Context:** matching scans every published prefix for every address and family. Overlapping
+prefixes and multiple attributions per prefix are required output (PR 169), so the speed-up must
+return exactly the same matches.
+**Steps:**
+1. Memoise results per address with `functools.lru_cache` on a function of the address (the
+   catalogue is fixed for the run). Re-run R-14.
+2. If still over budget, index the prefixes per family sorted by network address and use `bisect`
+   to find candidates, then check containment, preserving overlap handling (every matching prefix
+   must still be returned).
+3. Keep the old linear scan in the test suite as the oracle: a property test over random
+   addresses against the benchmark catalogue asserts identical match sets.
+**Verify:** golden test byte-identical; the property test passes; R-14 numbers before and after
+are in the PR description; suite and local CI pass; coverage not lower.
+**Do not:** change output text or ordering; drop overlapping matches; add a dependency.
+**Done when:** verification passes and the numbers meet the thresholds above.
+**PR:** `perf: index provider prefixes`.
 
 ### R-16a CI coverage floor and scope
-**Tier:** T1. In `.github/workflows/ci.yml`, change the test step to
-`pytest --cov=classes --cov=imports --cov-fail-under=95 --cov-report=term-missing`. Run it locally
-first; if the real figure is below 95, set the floor to the current whole-number figure and say so.
-Update `AGENTS.md` section 8 ("enforced by CI").
+**Tier:** T1 (Haiku). **Why:** one workflow line and one doc edit, verified by running it.
+**Depends on:** nothing. **Files:** `.github/workflows/ci.yml`, `AGENTS.md` (section 8).
+**Context:** `AGENTS.md` says "coverage only goes up", but nothing enforces it, and CI measures
+`--cov=.` (which counts the tests themselves) instead of `classes` and `imports`.
+**Steps:**
+1. Locally run `.venv/bin/pytest --cov=classes --cov=imports --cov-report=term-missing` and note
+   the total (about 95%).
+2. In `ci.yml` change the test step to `pytest --cov=classes --cov=imports
+   --cov-fail-under=<floor> --cov-report=term-missing`, where `<floor>` is 95 if the measured
+   figure is 95 or higher, otherwise the measured whole-number figure (say so in the PR).
+3. In `AGENTS.md` section 8, change "Currently ~95%" to say the floor is enforced by CI.
+**Verify:** `bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml` passes; temporarily set
+the floor to 99 and confirm CI fails, then revert; the GitHub `test` job passes on the PR.
+**Do not:** lower an existing floor; add the floor before the code deletions land (run this after
+R-04 to R-12 so the figure is final).
+**Done when:** verification passes. **PR:** `ci: enforce a coverage floor` (bundle with R-14 and
+R-16b).
 
 ### R-16b Lock runtime dependencies (D-8)
-**Tier:** T2. Use the `deps-integrity` skill's Python route: `pip-compile --generate-hashes`
-for `requirements.txt`, install with `--require-hashes` in CI, add a scheduled `pip-audit` step.
-Keep Dependabot enabled.
+**Tier:** T2 (Sonnet). **Why:** supply-chain and CI behaviour change; wrong hashes break every
+build. **Depends on:** R-04, R-11a, R-11b (the dependency set must be final first).
+**Files:** `requirements.txt` (kept as the input), new `requirements.lock` (hashes),
+`.github/workflows/ci.yml`, possibly `requirements-dev.txt`.
+**Context:** runtime requirements use `>=` floors with no lock, while outputs are contracts. The
+same input can behave differently between two runs after a dependency release. A hash-locked file
+makes runs reproducible and detects tampering. Dependabot stays enabled and will propose lock
+updates.
+**Steps:**
+1. Use the `deps-integrity` skill's Python route. In a fresh venv:
+   `pip install pip-tools` then `pip-compile --generate-hashes --output-file requirements.lock
+   requirements.txt`. Do the same for `requirements-dev.txt` if you also want dev reproducibility
+   (`requirements-dev.lock`).
+2. In `ci.yml`, install with `pip install --require-hashes -r requirements.lock` for the runtime
+   set, plus the dev tools as today.
+3. Add a scheduled (weekly) `pip-audit` job or step that fails on known vulnerabilities; run it
+   once locally first and report any finding rather than suppressing it.
+4. Document in `README.md` how to regenerate the lock and why.
+**Verify:** a fresh venv built only from `requirements.lock` runs the suite; `local-ci` and the
+GitHub `test` job pass; changing one hash makes the install fail (prove it, then revert).
+**Do not:** drop Dependabot; pin by editing `requirements.txt` into `==`; commit a lock built on
+a different Python minor version than CI (CI uses 3.12).
+**Done when:** verification passes. **PR:** `ci: lock runtime dependencies with hashes and audit
+them` (bundle with R-14 and R-16a).
 
 ---
 
 ## Phase 5: External
 
 ### R-17 Validate the real allocator consumer end to end
-**Owner:** maintainer (cross-repository). Carried forward from archived item 11: the allocator
-ingests a current `allocator-targets-v1.json` unchanged; GCP and Azure route only to
-provider-aware implementations or are rejected; a synthetic authorised fixture proves no provider
-is misrouted. The Markdown report is not an input to the allocator.
+**Owner:** maintainer (cross-repository). **Tier:** not delegable to an in-repo agent.
+**Depends on:** nothing in this repo; run against the latest released contract (and again after
+R-18 if any contract changed).
+**Context:** the contracts in `contracts/` are tested here against schemas only. Nothing proves the
+real allocator accepts a current `allocator-targets-v1.json` unchanged, or that targets for each
+provider reach a provider-aware implementation. The Markdown report (R-13) is not an input to the
+allocator.
+**Steps:**
+1. Produce a document from a synthetic, authorised fixture (the golden fixture's output is
+   suitable: `tests/golden/expected/allocator-targets-v1.json`).
+2. Feed it unchanged to the allocator's ingest path.
+3. Confirm AWS targets reach the AWS implementation; GCP and Azure targets either reach a
+   provider-aware implementation or are explicitly rejected, never silently routed to AWS.
+4. Record the allocator version and result in `ROADMAP.md` (a dated line under this item).
+**Verify:** the allocator reports each target's provider correctly in its own output or logs.
+**Do not:** point the allocator at real client infrastructure for this check; change a contract
+here to satisfy the consumer without a roadmap item.
+**Done when:** the dated result is recorded. **PR:** none in this repo unless a defect is found.
 
 ### R-18 Release
-**Owner:** main session, after R-04 to R-13 (and D-10). This repo has no release-please config (v2.0.0 was cut by hand), so first decide with the maintainer whether to set it up via the `release` skill or release manually, D-10;
-never `git tag` by hand. Expect v3.0.0: Lambda removal is a removed entry point, and the
-environment JSON changes if D-9 is accepted. Update `docs/ALLOCATOR-CONTRACT.md` only if a
-contract changed (none is planned).
+**Owner:** main session with the maintainer. **Tier:** T3. **Depends on:** the PRs through PR 10
+(R-19 and R-13) merged and `main` green. Decision D-10: one release, expected v3.0.0.
+**Context:** Lambda removal is a removed entry point and the environment JSON changes when the
+external-IP lookup becomes opt-in, so a major bump is correct (`AGENTS.md` section 6: version
+centrally, once per batch). This repo has no release-please config; v2.0.0 was cut by hand as a
+`chore: release vX.Y.Z` PR that bumped the version files and added the README notes, followed by a
+GitHub release.
+**Steps:**
+1. Confirm `main` is green and the working tree is clean; run the full local CI.
+2. Decide with the maintainer: set up release-please via the `release` skill, or release by hand.
+   If by hand:
+3. Branch `chore/release-v3.0.0`. Set `VERSION` to `3.0.0` and `version.py` to `__version__ =
+   "3.0.0"` (a baseline test enforces they agree). Update the README version pin and breaking
+   changes notes using the `release-readme-pin` skill.
+4. Open the PR as `chore: release v3.0.0` with a body listing the breaking changes (removed Lambda
+   entry point; external IP now opt-in; any format change) and merge with squash.
+5. After merge, create the release and tag together: `gh release create v3.0.0 --target main
+   --title "..." --notes-file <notes>`. This is the only way a tag is created; never `git tag`.
+6. Run `/ponytail:ponytail-review` is not needed; instead verify the release: `gh release view
+   --json tagName` and the baseline test passes on `main`.
+**Verify:** `gh release list` shows v3.0.0 as Latest; `VERSION`, `version.py` and the tag agree
+(`tests/baseline/`); `main` CI is green afterwards.
+**Do not:** bump `VERSION` in any earlier PR; create the tag before the release PR merges; edit
+`docs/ALLOCATOR-CONTRACT.md` unless a contract changed (none is planned).
+**Done when:** the release exists and the verification passes.
+**PR:** `chore: release v3.0.0` (the release PR in step 4).
 
 ---
 
@@ -560,6 +775,9 @@ instead of following the delegation, printed instead of returning data, and was 
 lower; the real-domain run agrees with `dig +norecurse @<authoritative server>`.
 **Do not:** add a public-suffix dependency, send HTTP, put findings in the actionable feed, or
 make the check default-on.
+**Depends on:** R-09 (in-memory records) and R-19 (option table), and a maintainer decision lifting D-2 for this feature.
+**Done when:** the flag is off by default, the golden test is unchanged with it off, the real-domain run is attached, and the schema change is documented.
+**PR (if promoted):** `feat: optional authoritative cross-check of DNS answers`.
 
 ## Explicitly not doing
 
