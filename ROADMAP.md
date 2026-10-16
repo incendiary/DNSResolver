@@ -505,11 +505,7 @@ contract changed (none is planned).
 
 ## Ideas, not scheduled
 
-- **I-1 Authoritative cross-check (takeover side).** Query each zone's authoritative name servers
-  directly and compare with the recursive answer; disagreement flags stale caches, split-horizon
-  DNS and lame delegations. Needs public-suffix handling, delegation-chain address lookups,
-  retries and tests. Originated as `helper/find_authoritative_ns.py` (deleted in R-05b). Only
-  worth designing if stale-cache false candidates show up in real runs.
+- **I-1** Cross-check recursive answers against each zone's authoritative servers to catch stale caches and lame delegations (takeover side; only if stale-cache false candidates appear in real runs).
 
 ## Explicitly not doing
 
