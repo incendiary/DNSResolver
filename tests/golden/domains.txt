@@ -1,0 +1,11 @@
+aws.example.com
+gcp.example.com
+azure.example.com
+v6.example.com
+host1.wild.example.com
+host2.rot.example.com
+dangle.example.com
+nstake.example.com
+gone.example.com
+shared-a.example.com
+shared-b.example.com

@@ -1,0 +1,2 @@
+DANGLING|dangle.example.com|old-bucket.s3.amazonaws.com.|s3|Delete the CNAME record or recreate the bucket|https://example.com/takeover-evidence|1|dangle.example.com -> old-bucket.s3.amazonaws.com
+NS_TAKEOVER|nstake.example.com|nstake.example.com

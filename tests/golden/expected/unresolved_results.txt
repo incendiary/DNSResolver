@@ -1,0 +1,1 @@
+DNS resolution error for gone.example.com: (4, 'Domain name not found')

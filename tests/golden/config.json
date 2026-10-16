@@ -1,0 +1,9 @@
+{
+  "domain_categorisation": {
+    "s3": {
+      "regex": "\\.s3\\.amazonaws\\.com\\.",
+      "recommendation": "Delete the CNAME record or recreate the bucket",
+      "evidence": "https://example.com/takeover-evidence"
+    }
+  }
+}
