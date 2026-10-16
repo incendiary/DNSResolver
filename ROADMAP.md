@@ -505,7 +505,7 @@ contract changed (none is planned).
 
 ## Ideas, not scheduled
 
-- **I-1** Cross-check recursive answers against each zone's authoritative servers to catch stale caches and lame delegations (takeover side; only if stale-cache false candidates appear in real runs).
+- **I-1** Authoritative vs recursive DNS cross-check (stale caches, lame delegations).
 
 ## Explicitly not doing
 
