@@ -247,8 +247,8 @@ absent from the README, unchanged since the initial release. It also has a defec
 last two labels as the registrable domain, which is wrong for multi-label suffixes such as
 `example.co.uk`, and it resolves nameserver addresses through the system resolver rather than the
 delegation chain. Integrating it properly would mean per-zone authoritative querying with
-public-suffix handling, which is a new feature, not a fix. Recommendation: delete (R-05b); if
-authoritative-fresh answers become a requirement, design that as its own item.
+public-suffix handling, which is a new feature, not a fix. Decision D-6 (2026-10-16): delete (R-05b); the idea
+is kept as unscheduled item I-1 in the roadmap.
 
 ## What this review deliberately did not do
 

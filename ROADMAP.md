@@ -29,13 +29,10 @@ written as text and re-parsed), and **add a compact Markdown view** for agent an
 | D-8 | Lock runtime dependencies with hashes | 2026-10-16 | R-16b |
 | D-9 | External-IP lookup becomes opt-in (`DNSRESOLVER_RECORD_EXTERNAL_IP` / `--record-external-ip`); configurable like every other option | 2026-10-16 | R-19 |
 | D-10 | One release at the end (v3.0.0): Lambda removal is a removed entry point | 2026-10-16 | R-18 |
+| D-6 | Delete `helper/find_authoritative_ns.py` (unwired, untested, known defect). The underlying idea is kept as unscheduled item I-1 | 2026-10-16 | R-05b, I-1 |
 | D-11 | Every option is settable from the environment (`DNSRESOLVER_*`), loaded by direnv from a git-ignored `.envrc`; a committed `.envrc.example` is the template. Precedence: CLI flag, then environment, then `config.json`, then built-in default | 2026-10-16 | R-19 |
 
-### Open decisions (an item that depends on one says so; do not guess)
-
-| ID | Question | Recommended | Blocks |
-|---|---|---|---|
-| D-6 | `helper/find_authoritative_ns.py` (174 lines, referenced nowhere, no tests, present since the initial release): fix and integrate, or delete? Discussed with the maintainer; assessment in `REVIEW.md` addendum below. | Delete | R-05b |
+There are no open decisions.
 
 ## Delivery rules for every item
 
@@ -192,12 +189,10 @@ the definition and those tests; if `tests/test_custom_exceptions.py` becomes emp
 file. If any production hit exists, leave that item and report.
 **Done when:** suite and CI green; coverage not lower. **PR:** `chore: remove unused code`.
 
-### R-05b Delete the unreferenced helper (needs D-6)
-**Tier:** T1. Delete `helper/find_authoritative_ns.py` only after the maintainer answers D-6
-(see the assessment in the D-6 discussion: it is a standalone script with no callers, no tests and
-a known defect, and its idea does not serve the primary job). Check `README.md` still lists only
-`helper/crtsh_domains.sh`. If D-6 instead becomes "integrate", do not do this item; open a design
-item for per-zone authoritative querying.
+### R-05b Delete the unreferenced helper (D-6)
+**Tier:** T1. Delete `helper/find_authoritative_ns.py` (no callers, no tests, absent from the
+README, wrong for multi-label suffixes such as `example.co.uk`). Run the rule 7 grep first.
+Check `README.md` still lists only `helper/crtsh_domains.sh`. The idea behind it is kept as I-1.
 
 ### R-06 Archive delivered per-PR plans
 **Tier:** T1 (Haiku). **Why:** deletion verified by link checks; history keeps the files.
@@ -368,7 +363,8 @@ twin. **PR:** `test: split DNS tests by class and share fixtures`.
 
 ## Phase 3: New capability
 
-### R-19 Configuration layer: environment variables, direnv template, flag fix (D-9, D-11)
+### R-19 Configuration layer (D-9, D-11), delivered as two PRs
+**Split:** PR 9a `fix:` covers steps 4 (tri-state flags) and 8 (the regression tests for the bug) only. PR 9b `feat!:` covers the rest (environment variables, `.envrc.example`, opt-in external IP, README). Do 9a first.
 **Tier:** T2 (Sonnet), spec below is complete. **Depends on:** R-03, and run it **before R-13** so
 `--format` is added to the table once. **Files:** `classes/config_resolver.py`,
 `classes/environment_manager.py`, `.envrc.example` (new), `.gitignore`, `README.md`,
@@ -422,7 +418,7 @@ secrets; change the meaning of any existing flag; remove `--config-file`.
 **Also note for the maintainer (not part of this item):** the committed `config.json` defaults are
 `timeout: 1` and `max_threads: 2`, while the README says the concurrency default is 50. A 1 second
 timeout can classify slow answers as unresolved. Decide the intended defaults separately.
-**PR:** `feat: configure every option from the environment (direnv) and fix boolean config`.
+**PRs:** 9a `fix: apply boolean options from config.json`; 9b `feat!: configure every option from the environment (direnv)`.
 
 ### R-13 Markdown run report (D-3, D-4, D-7)
 **Tier:** T2 (Sonnet) after T3 sketches the table. **Depends on:** R-09, R-19. **Additive**, minor.
@@ -500,12 +496,20 @@ provider-aware implementations or are rejected; a synthetic authorised fixture p
 is misrouted. The Markdown report is not an input to the allocator.
 
 ### R-18 Release
-**Owner:** main session, after R-04 to R-13 (and D-10). Use the `release` skill (release-please), D-10;
+**Owner:** main session, after R-04 to R-13 (and D-10). This repo has no release-please config (v2.0.0 was cut by hand), so first decide with the maintainer whether to set it up via the `release` skill or release manually, D-10;
 never `git tag` by hand. Expect v3.0.0: Lambda removal is a removed entry point, and the
 environment JSON changes if D-9 is accepted. Update `docs/ALLOCATOR-CONTRACT.md` only if a
 contract changed (none is planned).
 
 ---
+
+## Ideas, not scheduled
+
+- **I-1 Authoritative cross-check (takeover side).** Query each zone's authoritative name servers
+  directly and compare with the recursive answer; disagreement flags stale caches, split-horizon
+  DNS and lame delegations. Needs public-suffix handling, delegation-chain address lookups,
+  retries and tests. Originated as `helper/find_authoritative_ns.py` (deleted in R-05b). Only
+  worth designing if stale-cache false candidates show up in real runs.
 
 ## Explicitly not doing
 
