@@ -505,7 +505,61 @@ contract changed (none is planned).
 
 ## Ideas, not scheduled
 
-- **I-1** Authoritative vs recursive DNS cross-check (stale caches, lame delegations).
+Not part of the sequence above. Each is written to the same standard as a scheduled item so it can
+be promoted without rework. Promotion needs a maintainer decision, because both touch the
+secondary (takeover) side, where D-2 currently says "harden only".
+
+### I-1 Authoritative cross-check
+**Status:** unscheduled. **Tier if promoted:** T3 designs the module and its output, then T2
+(Sonnet) builds it. **Origin:** `helper/find_authoritative_ns.py`, deleted in R-05b (D-6).
+**Promote when:** real runs show stale-cache false candidates (a dangling or NS finding that
+disappears on re-run) or a split-horizon or lame-delegation case that the recursive resolver
+hides. Until then it is unproven value.
+**Context:** every query today goes through a recursive resolver (`--nameservers` or the system
+one), which caches. For dangling-CNAME and NS-takeover findings a cached answer can be stale in
+either direction: a record removed minutes ago still resolves (missed candidate), or a negative
+answer outlives the fix (false candidate). Asking the zone's own authoritative servers returns the
+current truth. Disagreement between the two is itself a finding: stale cache, split-horizon DNS,
+or a lame delegation (a delegated nameserver that does not answer or does not exist).
+**Why the old script was not the answer:** it assumed the registrable domain is the last two
+labels (wrong for `example.co.uk`), looked nameserver addresses up through the system resolver
+instead of following the delegation, printed instead of returning data, and was never wired in.
+**Design (decide before building):**
+1. Find the zone cut by following referrals from the root, not by guessing labels. Start at a
+   root server, ask for the name's NS, follow the referral to the next set of servers, and stop
+   when a server answers authoritatively (AA flag). This needs no public-suffix list, so it needs
+   no new dependency; `dnspython` (`dns.query.udp`, `dns.message`) is already a dependency.
+2. Take nameserver addresses from the referral's additional section; if absent, resolve the NS
+   name, and record a lame delegation if it does not resolve.
+3. Query each authoritative server for the name's A, AAAA and CNAME, compare with the recursive
+   answer, and emit one observation per disagreement.
+4. Cache per zone (the same pattern as `WildcardDetector`: one lookup per zone, not per host),
+   bound concurrency with the existing semaphore, and cap referral depth (suggest 10).
+5. Output: a new observation `kind` (suggest `authoritative_mismatch`) in
+   `dns-observations-v1.json`, always `actionability: "excluded"`; it must never reach
+   `allocator-targets-v1.json`. This is an additive schema change: bump the observation schema
+   in `contracts/` deliberately and update `tests/test_allocator_contract.py` and
+   `docs/ALLOCATOR-CONTRACT.md`. Decision needed: additive minor bump or a new schema version.
+6. Opt-in: `--authoritative-check` / `DNSRESOLVER_AUTHORITATIVE_CHECK`, default off, because it
+   sends extra queries to third-party authoritative servers (DNS only; still inside the scope
+   boundary, but not free).
+**Steps for the builder (after the design is approved):**
+1. New `classes/authoritative_resolver.py` with one class and one public coroutine
+   `compare(domain, recursive_ips) -> list[Mismatch]`. Mock the network in tests; no test performs
+   a real DNS query. Follow the mocking pattern in `tests/test_wildcard_detector.py`.
+2. Tests: a delegation that resolves (agree, no observation); a record present in the
+   authoritative answer but absent from the recursive one (mismatch); a lame delegation; a referral
+   loop (stops at the depth cap, reports, does not hang); a multi-label suffix such as
+   `a.example.co.uk` (zone cut found without a suffix list); a CNAME at the authoritative server
+   that the recursive answer hides.
+3. Wire into `DNSHandler` behind the flag; extend the golden test (R-03) with one mismatch case
+   and update only the affected expected files.
+4. Run once against a real domain you are authorised to test and attach the output to the PR
+   (`AGENTS.md` section 8: unit tests cannot tell you the premise was wrong).
+**Verify:** golden test unchanged when the flag is off; full suite, local CI and coverage not
+lower; the real-domain run agrees with `dig +norecurse @<authoritative server>`.
+**Do not:** add a public-suffix dependency, send HTTP, put findings in the actionable feed, or
+make the check default-on.
 
 ## Explicitly not doing
 
