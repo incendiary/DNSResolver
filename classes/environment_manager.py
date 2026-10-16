@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import random
 import re
 import sys
 from datetime import datetime
@@ -99,11 +98,6 @@ class EnvironmentManager:
 
     def get_config_file(self):
         return self._config_file
-
-    def get_random_nameserver(self):
-        if self.nameservers:
-            return random.choice(self.nameservers)
-        return None
 
     def update_logger(self):
         for handler in self.logger.handlers:

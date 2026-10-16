@@ -130,60 +130,9 @@ async def test_probes_use_random_labels(env_manager):
 
 
 # ---------------------------------------------------------------------------
-# is_wildcard_resolution
+# Regression guards for the dual-stack and no-AAAA wildcard cases, asserted
+# through classify (the only verdict path left).
 # ---------------------------------------------------------------------------
-
-
-async def test_resolution_matching_wildcard_is_flagged(env_manager):
-    resolver = MagicMock()
-    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
-    detector = WildcardDetector(resolver, env_manager)
-
-    assert await detector.is_wildcard_resolution("ghost.example.com", ["192.0.2.1"])
-
-
-async def test_real_host_with_distinct_ip_is_not_flagged(env_manager):
-    """A host answering with its own address is real, even in a wildcarded zone."""
-    resolver = MagicMock()
-    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
-    detector = WildcardDetector(resolver, env_manager)
-
-    assert not await detector.is_wildcard_resolution(
-        "real.example.com", ["203.0.113.9"]
-    )
-
-
-async def test_host_sharing_one_wildcard_ip_but_not_all_is_not_flagged(env_manager):
-    """
-    Only a resolution wholly contained in the wildcard set is a catch-all answer.
-    Extra addresses mean a genuine host.
-    """
-    resolver = MagicMock()
-    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
-    detector = WildcardDetector(resolver, env_manager)
-
-    flagged = await detector.is_wildcard_resolution(
-        "real.example.com", ["192.0.2.1", "203.0.113.9"]
-    )
-
-    assert flagged is False
-
-
-async def test_non_wildcard_zone_never_flags(env_manager):
-    """The no-wildcard path must leave ordinary scans completely untouched."""
-    resolver = MagicMock()
-    resolver.query = AsyncMock(side_effect=make_nxdomain())
-    detector = WildcardDetector(resolver, env_manager)
-
-    assert not await detector.is_wildcard_resolution("host.example.com", ["192.0.2.1"])
-
-
-async def test_empty_resolution_is_not_flagged(env_manager):
-    resolver = MagicMock()
-    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
-    detector = WildcardDetector(resolver, env_manager)
-
-    assert not await detector.is_wildcard_resolution("host.example.com", [])
 
 
 async def test_wildcard_set_includes_both_address_families(env_manager):
@@ -202,11 +151,11 @@ async def test_wildcard_set_includes_both_address_families(env_manager):
     resolver.query = AsyncMock(side_effect=query_side_effect)
     detector = WildcardDetector(resolver, env_manager, probe_count=1)
 
-    flagged = await detector.is_wildcard_resolution(
+    verdict = await detector.classify(
         "ghost.example.com", ["185.199.108.153", "2606:50c0:8000::153"]
     )
 
-    assert flagged is True
+    assert verdict == "WILDCARD"
 
 
 async def test_zone_without_aaaa_still_detected(env_manager):
@@ -221,7 +170,7 @@ async def test_zone_without_aaaa_still_detected(env_manager):
     resolver.query = AsyncMock(side_effect=query_side_effect)
     detector = WildcardDetector(resolver, env_manager, probe_count=1)
 
-    assert await detector.is_wildcard_resolution("ghost.example.com", ["192.0.2.1"])
+    assert await detector.classify("ghost.example.com", ["192.0.2.1"]) == "WILDCARD"
 
 
 # ---------------------------------------------------------------------------
@@ -271,15 +220,3 @@ async def test_classify_reports_zone_for_empty_resolution_in_wildcard_zone(env_m
     detector = WildcardDetector(resolver, env_manager)
 
     assert await detector.classify("ghost.example.com", []) == "WILDCARD_ZONE"
-
-
-async def test_is_wildcard_resolution_still_means_confirmed_only(env_manager):
-    """The narrower helper must not start reporting the weaker verdict."""
-    resolver = MagicMock()
-    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
-    detector = WildcardDetector(resolver, env_manager)
-
-    assert await detector.is_wildcard_resolution("g.example.com", ["192.0.2.1"]) is True
-    assert (
-        await detector.is_wildcard_resolution("g.example.com", ["203.0.113.9"]) is False
-    )
