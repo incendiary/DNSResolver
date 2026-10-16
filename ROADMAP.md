@@ -74,6 +74,14 @@ where, with names and line references), **Steps** (numbered, exact commands or e
 **Verify** (commands whose output proves it), **Do not** (the tempting wrong moves), **Done when**,
 and **PR** (the conventional title). An item missing any of these is not ready to hand out.
 
+## Agent rules
+
+An executing agent **stops and reports** when:
+- a gate changes output unexpectedly;
+- a step fails twice;
+- a contract, schema or public interface would change;
+- an instruction contradicts the code.
+
 ## Model tiers
 
 Tier is chosen on verifiability (can a gate prove it right cheaply?) and blast radius. Once R-03
