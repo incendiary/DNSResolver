@@ -1,409 +1,226 @@
-# DNSResolver — Holistic Codebase Review
+# DNSResolver: Holistic Review and Ponytail Audit
 
-> Produced: 2026-07-15 · Reviewed at commit `a2d06fb` (v1.10.4) · Method: `codebase-holistic-review` (8 phases) + `karpathy` goal/verify framework.
-> Verification bar agreed with the maintainer: measured coverage %, a clean authorised live run against a client domain, and an honest feature-vs-goals gap analysis.
+> Reviewed at commit `86275b9` (v2.0.0 plus 10 unreleased commits), 2026-10-16.
+> Method: `review-codebase` (8 phases), then `ponytail-audit` calibrated to the intent in
+> [`AGENTS.md`](AGENTS.md), with the Karpathy goal-and-verify framing.
+> Supersedes the 2026-07 review, preserved unchanged (including its correction section) at
+> [`docs/roadmap/REVIEW-2026-07.md`](docs/roadmap/REVIEW-2026-07.md). The plan that follows from
+> this document is [`ROADMAP.md`](ROADMAP.md).
 
 ## Executive summary
 
-DNSResolver is a mature, well-structured passive DNS-reconnaissance and subdomain-takeover
-tool. The architecture is clean (small single-responsibility classes, a shared async
-pipeline behind both a CLI and a Lambda entry point), local tests are green (**144 passed**),
-lint/format are clean (ruff), overall **line coverage is 85%**, and dependencies have **no
-known CVEs** (pip-audit). For its stated DNS-only scope it substantially meets its goals.
+The tool does what it is for and the recent work (provider-aware attribution, fail-closed
+catalogues, schema'd contracts) is sound. The suite is 320 tests at 95% coverage, lint is clean, CI
+is green and SHA-pinned. The principal weakness is structural, not functional: **the program uses
+its own pipe-delimited text files as an internal message bus.** Every run writes records as text,
+then three separate modules (`allocator_contract`, `run_contract`, `run_summary`) read the files
+back and re-parse them to build the JSON contracts and the end-of-run summary. That round trip is
+the source of most avoidable code, most `ValueError("Malformed ...")` paths, and the reason a
+Markdown output (which the maintainer wants) would currently mean a fourth parser.
 
-The single most urgent problem is that **CI on `main` is red** and has been since the tooling
-modernisation. The cause is not application code — it is one environment-fragile baseline test
-(`test_version_tag_exists_in_git`) that asserts a git tag exists, while CI's shallow
-`actions/checkout` does not fetch tags. This test **passes locally** (your clone has the tags)
-and **fails in CI** (tags absent) — so running CI locally does *not* catch it, which is exactly
-the env-drift blind spot the baseline suite was meant to guard against. Fixing this unblocks the
-10 stalled dependabot PRs, all of which inherit the same red check.
+Second, about 1,400 lines of source and tests (plus about 900 lines of documentation) can go
+without changing a byte of output: the shelved Lambda stack, dead helpers, a 49-line class that
+repacks data the catalogue objects already hold, and duplicated atomic-write helpers.
 
-The authorised live run (see Phase 7) surfaced a **correctness bug** that
-matters for the field-ready bar: every dead (NXDOMAIN, no-CNAME) subdomain is mislabelled
-`self_referential` "points to itself", because that check is trivially true at recursion depth 0 —
-mislabelling real dead names and potentially masking genuine dangling candidates (RA-B3 / PF-6).
+Third, the only scale risk is real and cheap to size: matching costs at least 8.4 ms per distinct
+address (synthetic benchmark, 55,000 prefixes), runs synchronously inside the event loop, and is
+not memoised across domains. It is deferred in the old plan as "unmeasured"; the plan now
+measures it first.
 
-Beyond that, the highest-value work is: two reliability defects (an `sys.exit(1)` buried in the
-Azure fetch fallback that can hard-kill a run; an orphaned empty `timeout` output file), a
-coverage gap in `environment_manager.py` (35%, because its constructor makes a live HTTP call),
-and two scalability cliffs in CSP IP matching that will bite on large scans. None are
-show-stoppers for current use; all are cheap to fix and worth doing to hit the "field-ready"
-bar.
+**Overall health: A-.** Nothing here is urgent. The work is simplification and one new output view.
 
-**Overall health: B+.** Green the CI, close the two reliability defects, and lift the one weak
-coverage module, and this is an A-grade portfolio-and-field tool within its declared scope.
+## Intent used to calibrate the audit
 
----
+From `AGENTS.md`: the tool produces cloud-address targets for a separate allocation pipeline
+(primary) and retains takeover observations for a different consumer (secondary). It never
+claims, allocates, or makes HTTP requests. Output files are contracts. Maintainer decisions
+recorded in this review (2026-10-16):
 
-## Phase 1 — Architecture map
-
-**Layering.** Presentation/entry (`resolver.py` CLI, `lambda_handler.py`) → orchestration
-(`run()` shared pipeline) → environment/config (`EnvironmentManager` / `LambdaEnvironmentManager`,
-`ConfigResolver`, `OutputManager`) → domain logic (`DNSHandler`, `TakeoverDetector`,
-`DomainCategoriser`, CSP matching) → infrastructure (`cloud_ip_ranges` fetchers,
-`EvidenceCollector` subprocess capture).
-
-**Data flow.** Domains file → `EnvironmentManager.set_domains()` (regex validation) → per-domain
-`asyncio` task (Semaphore-capped) → `DNSHandler.resolve_domain_async` (aiodns primary, dnspython
-fallback) → on NXDOMAIN, `TakeoverDetector` (dangling CNAME + NS takeover, depth-limited chain
-follow) → resolved IPs matched against fetched AWS/GCP/Azure ranges → results written to 4 text
-files + 1 JSON under a timestamped directory.
-
-| Module / Path | Responsibility | Concerns |
+| # | Decision | Effect on the audit |
 |---|---|---|
-| `resolver.py` | CLI entry; builds `EnvironmentManager`, runs pipeline | Thin, fine |
-| `lambda_handler.py` | Lambda entry (S3 in/out) | Couples repo to `boto3`; scope decision (see RA-E) |
-| `classes/environment_manager.py` | CLI env: argparse glue, logging, domain I/O, external-IP probe | **Constructor does live HTTP** to ifconfig.io → untestable, 35% cov |
-| `classes/lambda_environment_manager.py` | Lambda env: env vars, stdout logging, `/tmp` I/O | 98% cov, fine |
-| `classes/config_resolver.py` | Parse CLI args, merge config.json | `sys.exit(1)` on bad args (acceptable at entry) |
-| `classes/output_manager.py` | Build output dir tree, async writes | Creates an **orphan `timeout` file** never written (RA-B2) |
-| `classes/dns_handler.py` | Async resolution, dnspython second opinion | A-record only (AAAA-only hosts read as unresolved — known limitation) |
-| `classes/takeover_detector.py` | Dangling CNAME, NS takeover, self-ref detection | Core logic; well covered (97%) |
-| `classes/domain_categoriser.py` | Regex classification of CNAME targets | First-match-wins → pattern order matters (document it) |
-| `classes/domain_processing_context.py` | Per-domain state | Clean value object |
-| `classes/csp_ip_addresses.py` | Holds fetched CSP ranges | Clean value object |
-| `imports/cloud_ip_ranges.py` | Fetch/parse AWS/GCP/Azure ranges | **`sys.exit(1)` in Azure fetch** (RA-B1); Azure 3-stage fallback good |
-| `imports/cloud_service_provider_checks.py` | Match resolved IPs to CSP ranges | **O(n²) dedupe + per-IP CIDR rebuild** (RA-C) |
-| `imports/domain_processor.py` | Per-domain orchestration | Clean |
+| D-1 | Lambda is shelved: **delete candidate** | Whole stack is listed as a cut |
+| D-2 | Takeover side: **harden only** | Not slimmed; only correctness and blocking-call fixes proposed |
+| D-3 | **JSON stays canonical; Markdown is a rendered view, default on**, JSON an alternative | New `--format` item; no parser for Markdown, ever |
+| D-4 | Consumers are **both a program and an agent/human** | Token cost matters for the Markdown view only |
+| D-5 | Plan lives in `ROADMAP.md`, history archived | Done in this change |
 
-No module has a genuinely muddled responsibility. `environment_manager.py` is the only one
-mixing concerns that hurt (network probe inside construction).
+## Phase 1: Architecture
 
----
+| Module | Responsibility | Concern |
+|---|---|---|
+| `resolver.py` | CLI entry and the shared `run()` pipeline | Unpacks three catalogues into six lists to repack them (`resolver.py:119`) |
+| `classes/dns_handler.py` | A and AAAA resolution, dnspython second opinion | Sound; fixed in PR 161 |
+| `classes/takeover_detector.py` | Dangling CNAME and NS takeover | Writes `NS_TAKEOVER` from two code paths; secondary, hardening only |
+| `classes/wildcard_detector.py` | Per-zone wildcard verdicts | `is_wildcard_resolution` has no production caller |
+| `imports/cloud_ip_ranges.py` | Fetch, validate, cache provider catalogues | 408 lines; carries migration and compatibility shims (see audit) |
+| `imports/cloud_service_provider_checks.py` | Match addresses to prefixes, write pipe records | Linear scan; `hasattr` state on `env_manager` |
+| `classes/allocator_contract.py` | Re-parse `csp_matches` pipe lines into JSON | Round trip |
+| `classes/run_contract.py` | Re-parse three pipe files into observations and manifest | Round trip |
+| `classes/run_summary.py` | Re-parse the same files again for the console summary | Round trip, third copy |
+| `lambda_handler.py`, `classes/lambda_environment_manager.py` | Shelved Lambda entry | Dead weight (D-1) |
 
-## Phase 2 — Risk inventory
+**Data flow.** domains file, then per-domain async task, then resolution, then takeover and
+wildcard checks, then `perform_csp_checks` appends pipe lines to files. At end of run those files
+are read back three times. The files are both the output contract and the internal bus; that
+coupling is the root of Findings F-1 and F-2.
+
+## Phase 2: Risk inventory
+
+Scores 1 to 5 (5 critical). Ponytail findings are in Phase 8 and are not repeated here.
 
 | # | Category | Finding | Score | Location |
 |---|---|---|---|---|
-| 1 | Reliability | **CI red on main**: baseline tag test fails in tagless shallow checkout; passes locally so shift-left misses it | 5 | `tests/baseline/test_baseline.py:52`, `.github/workflows/ci.yml:16` |
-| 2 | Reliability | `sys.exit(1)` on `RequestException` inside Azure fetch — can hard-kill a whole run even from the "resilient" fallback path | 4 | `imports/cloud_ip_ranges.py:48` |
-| 3 | Maintainability | Orphan `timeout` output file created every run, never written (leftover from #82 consolidation); contradicts README's 4-file story | 2 | `classes/output_manager.py:26` |
-| 4 | Maintainability | `environment_manager.py` 35% coverage — constructor makes live HTTP call to ifconfig.io, so it can't be unit-tested without a network | 3 | `classes/environment_manager.py:116` |
-| 5 | Scalability | CSP matching rebuilds `ipaddress.ip_network(range)` for every resolved IP × every prefix (AWS ~7k, Azure ~60k prefixes) | 4 | `imports/cloud_service_provider_checks.py:68` |
-| 6 | Scalability | `log_and_write` reads the entire CSP file on every write to dedupe (O(n²)); also a substring match that can false-dedupe | 3 | `imports/cloud_service_provider_checks.py:88` |
-| 7 | Reliability | Blocking `open()`/file read inside the async event loop (CSP writes) while the rest uses `aiofiles` — inconsistent, can stall the loop | 2 | `imports/cloud_service_provider_checks.py:93` |
-| 8 | Dependency | Test tooling (`pytest`, `pytest-asyncio`, `pytest-cov`) lives in runtime `requirements.txt`; mixed pin styles (`aiodns~=` vs `>=`) | 2 | `requirements.txt` |
-| 9 | CI/CD | CI does not pin `ruff` — a new ruff release can turn `main` red with no code change | 3 | `.github/workflows/ci.yml:28`, `requirements-dev.txt` |
-| 10 | Maintainability | 10 open dependabot PRs + 1 feature branch, all blocked behind the red check; 6 stale non-dependabot branches | 2 | GitHub |
-| 11 | Scope | Lambda deployment (handler, `requirements-lambda.txt`, `ecr-build.yml`, ~160 lines of README) lives here, but is produced elsewhere | 2 | repo-wide |
-| 12 | **Correctness** | **Self-referential misclassification** — any fully-unresolvable (NXDOMAIN, no CNAME) domain is labelled `self_referential` "points to itself", because the `current == original` check is trivially true at recursion depth 0. **Found by the live run** (9/9 dead hosts mislabelled) | 4 | `classes/takeover_detector.py:139` |
+| F-1 | Reliability | A formatting change to a pipe line (or the free-text `DNS resolution error for ...` prefix) makes a completed run raise `ValueError("Malformed ...")` after all DNS work is done, turning a good run into `failed` with no actionable output | 3 | `classes/run_contract.py:74`, `classes/allocator_contract.py:84` |
+| F-2 | Maintainability | Three parsers of one format; a fourth is implied by Markdown output | 3 | as above plus `classes/run_summary.py:7` |
+| F-3 | Scalability | Prefix match is a linear scan per address per family, synchronous inside async tasks (blocks DNS concurrency), no cross-domain memo for repeated CDN addresses | 4 | `imports/cloud_service_provider_checks.py:96` |
+| F-4 | Privacy/opsec | Every start calls a third-party service (`ifconfig.io`) with a 10 s timeout and records the result; surprising for a passive tool, slow offline | 3 | `classes/environment_manager.py:27` |
+| F-5 | Dependency | Runtime deps use `>=` floors with no lockfile or hashes, while outputs are contracts; Dependabot rewrites floors weekly | 3 | `requirements.txt` |
+| F-6 | CI | No coverage floor (AGENTS.md says "only goes up", nothing enforces it); CI measures `--cov=.` (includes tests) not `classes` and `imports`; no `pip-audit` | 3 | `.github/workflows/ci.yml:39` |
+| F-7 | Test | No end-to-end golden-output test. `tests/test_resolver.py` has 3 tests about control flow. Refactoring output code is currently gated only by unit tests, which AGENTS.md section 8 says do not catch the defects that matter | 4 | `tests/` |
+| F-8 | Docs | About 3,100 lines of Markdown against 2,650 lines of source; delivered PR plans and a handover duplicate `AGENTS.md`; three docs cite a removed path (`~/.claude/skills/local-ci/`) | 2 | `docs/roadmap/PR-*.md`, `HANDOVER.md` |
+| F-9 | Reliability | `EvidenceCollector.check_tools_availability` runs blocking `subprocess.run(["which", ...])` inside the event loop on every flagged domain | 2 | `classes/evidence_collector.py` |
 
----
+Python-specific checklist: no `eval`/`exec`/`pickle`/`shell=True`; subprocess uses exec form;
+`requests` and `urlopen` calls have timeouts; no bare `except:`; no mutable defaults found. Clean.
 
-## Phase 3 — Predicted failure scenarios (score ≥ 3)
+## Phase 3: Predicted failures (score 3 or more)
 
-### PF-1: CI stays red, PRs pile up (Reliability, 5)
-**What happens:** Every push and PR shows a failing "test" check; branch protection blocks merges;
-dependabot PRs accumulate unmerged.
-**Trigger:** Already occurring on every run since the tooling change.
-**Timeline:** Now.
-**Minimum fix:** Make the tag test tolerant of a tagless checkout **and** have CI fetch tags
-(`fetch-depth: 0`). See RA-A1.
+**PF-1 (F-3): event-loop stall on a large list.** Trigger: a list of tens of thousands of hosts
+resolving into cloud ranges. Each distinct address costs at least 8.4 ms of blocking CPU per
+family (synthetic: 55,000 /24 prefixes, `any(ip in n for n in nets)`; the real loop adds a
+memoised `parse_network` call per prefix, so the true figure is higher). At 100,000 distinct
+addresses that is at least 14 minutes of single-threaded blocking, during which no DNS reply is
+processed. Timeline: appears at roughly 10^4 addresses and grows linearly. Minimum fix: memoise
+per address. Full fix: indexed matcher (existing deferred item). Both are gated on a benchmark
+first (ROADMAP R-14).
 
-### PF-2: A run aborts mid-scan because Azure had a blip (Reliability, 4)
-**What happens:** During a large authorised scan, `requests.get` to the Azure JSON raises
-`RequestException`; `fetch_ip_ranges_for_azure` calls `sys.exit(1)`; the **entire process dies**,
-discarding all resolution/takeover results gathered so far.
-**Trigger:** Any transient network failure to the Azure download host — including from inside the
-pinned-URL fallback that exists specifically to survive Azure being unreachable.
-**Timeline:** Intermittent; more likely on long runs / flaky networks.
-**Minimum fix:** Return `([], [])` and let the caller skip Azure, matching the AWS/GCP path. RA-B1.
+**PF-2 (F-1): late failure on format drift.** Trigger: any future edit to a record format, or a
+resolver error string containing an unexpected shape. Effect: all DNS work completes, then
+`publish_allocator_targets` raises and the run is marked failed. Timeline: the next time anyone
+changes a record. Fix: records stay structured in memory (R-09).
 
-### PF-3: Large scan slows to a crawl on CSP matching (Scalability, 4)
-**What happens:** For a list of tens of thousands of domains, each resolved IP is tested against
-every CSP prefix with a fresh `ip_network()` construction; wall-clock time balloons.
-**Trigger:** Large domain lists (the tool's stated use case: "practical for large domain lists").
-**Timeline:** At ~10× current typical input, or any full-org enumeration.
-**Minimum fix:** Pre-build the CSP `ip_network` objects once at startup (they don't change during a
-run); optionally group by prefix length. RA-C1.
+**PF-3 (F-7): silent contract break during refactor.** Trigger: any of the planned cuts. Effect:
+output differs subtly and unit tests still pass. Fix: build the golden test first (R-03).
 
-### PF-4: environment_manager regressions ship silently (Maintainability, 3)
-**What happens:** A change to config merging, domain validation, or output wiring breaks, but no
-test catches it because the module is 35% covered and its constructor can't run offline.
-**Trigger:** Any refactor of the CLI env path.
-**Timeline:** On the next change to that file.
-**Minimum fix:** Extract the external-IP probe behind a seam so the class is constructible without a
-network, then add unit tests. RA-D1.
+**PF-4 (F-5): non-reproducible run.** Trigger: a dependency minor release changes resolver
+behaviour between two runs. Effect: the same input produces different output with no code change.
+Fix: lock with hashes (R-16, decision D-8).
 
-### PF-6: Dead subdomains mislabelled "self-referential", masking real dangling candidates (Correctness, 4)
-**What happens:** A genuinely non-existent subdomain (NXDOMAIN, no CNAME) is reported as
-`self_referential` with "the domain points to itself and will never resolve." The operator is told it
-is a harmless misconfiguration when in fact it is a dead name that carries no CNAME at all — the
-opposite of the self-referential case the label describes. Real dangling/claimable candidates can be
-buried under this wrong label.
-**Trigger:** Any input domain that fully fails to resolve and has no CNAME. Confirmed on the live
-authorised live run: 9/9 dead hosts (verified via `dig`: no A, no CNAME) all mislabelled.
-**Root cause:** `check_dangling_cname_async` is first entered with `current_domain == original_domain`
-(depth 0). The self-referential branch (`current == original`) is trivially true there, so it fires for
-every dead domain, not only for CNAME chains that loop back to the origin (which is the only case #89
-intended).
-**Timeline:** Every run containing dead subdomains — i.e. essentially every real enumeration.
-**Minimum fix:** Gate the self-referential branch on `depth > 0` (we actually followed a CNAME back to
-the origin). At depth 0 with no CNAME, categorise normally via `DomainCategoriser`. Add a regression
-test with a NXDOMAIN-no-CNAME domain asserting the category is **not** `self_referential`, and a test
-for a true looping CNAME asserting it **is**. See RA-B3.
+## Phase 4: Test coverage gaps
 
-### PF-5: Green CI turns red with no code change (CI/CD, 3)
-**What happens:** A new `ruff` release adds/changes a rule; `ruff check`/`format --check` fail on
-untouched code; `main` goes red.
-**Trigger:** Unpinned `ruff>=0.11.0`.
-**Timeline:** On the next ruff release with a rule change.
-**Minimum fix:** Pin ruff to an exact version in `requirements-dev.txt` and bump deliberately. RA-A2.
-
----
-
-## Phase 4 — Test coverage gaps
-
-Current measured coverage (pytest-cov, `--cov=classes --cov=imports`): **85% overall, 144 tests
-passing.** Weakest modules:
-
-| Module | Cover | Why it matters | Test type needed |
-|---|---|---|---|
-| `classes/environment_manager.py` | **35%** | CLI env wiring, domain validation, config/pattern loading, env-info save | Unit: mock the HTTP probe; test `is_valid_domain` (valid/invalid/edge), `clean_domains`, `load_patterns` (missing/bad JSON), `set_domains`, `get_random_nameserver` |
-| `classes/output_manager.py` | 70% | Builds the output tree every run | Unit: dir creation, file vs dir path handling, write error path |
-| `imports/cloud_ip_ranges.py` | 84% | External data fetch + Azure fallback chain | Unit: mock `requests`/`urlopen`; assert **no `sys.exit`** on error (locks in RA-B1); cache hit/miss/pinned fallback |
-| `classes/config_resolver.py` | 84% | Arg/config precedence | Unit: CLI overrides config; bad config file tolerated; `--resolvers` alias |
-
-**Assertions to watch (not "wrong but green"):** the takeover tests are specific and strong (they
-assert category strings and file targets) — keep that bar. When adding coverage, do **not** assert
-merely that a function "runs"; assert the classification/precedence/error-handling outcome.
-
-**Top 3 highest-value additions:**
-1. `environment_manager` unit suite behind an injected/mocked IP probe (unblocks PF-4, biggest % gain).
-2. `cloud_ip_ranges` error-path tests that assert graceful `([], [])` return (regression lock for RA-B1).
-3. CSP-matching correctness test with a known IP in a known CSP range (guards RA-C refactor).
-
----
-
-## Phase 5 — Dependency audit
-
-- **CVEs:** `pip-audit -r requirements.txt` → **No known vulnerabilities.**
-- **Freshness:** All core deps current (dnspython 2.8, aiodns 4.0.4, requests 2.34, urllib3 2.7).
-- **Pinning:** Mixed — `aiodns~=4.0.3` (compatible-release) vs `>=` elsewhere; `ruff` unpinned in CI
-  (RA-A2). Recommend consistent lower-bound `>=` for libraries, exact pin for the lint toolchain.
-- **Layout smell:** test tooling in runtime `requirements.txt` (RA-B / hygiene). Split runtime vs
-  test/dev cleanly: runtime → `requirements.txt`; test+lint → `requirements-dev.txt`.
-
----
-
-## Phase 6 — CI/CD gap analysis
-
-| Check | Present? | Note |
+| Path | Why critical | Test type needed |
 |---|---|---|
-| Tests run on every PR | ✅ | `ci.yml` on push+PR+weekly schedule |
-| Lint + format check | ✅ | ruff check + ruff format --check |
-| Secret scanning | ✅ | `secret-scan.yml` (gitleaks) + `.gitleaks.toml` |
-| Baseline invariants tested | ⚠️ | Present but **the tag test is env-fragile** (RA-A1) |
-| Action versions pinned | ⚠️ | Actions pinned to major (`@v6`), but **`ruff` tool unpinned** (RA-A2) |
-| Scheduled drift run | ✅ | Weekly cron — good; it is currently what surfaces the red baseline |
-| Local pre-push CI parity | ⚠️ | `github-actions-locally` works but cannot catch the tag test (local has tags). Adopt it **and** fix the fragile test — RA-A3 |
+| `run()` end to end | Only place pipe files, JSON contracts and summary are proven consistent | Golden: mocked DNS and catalogues, byte-exact comparison of every output file |
+| `perform_csp_checks` repeat addresses | The same address across many hostnames | Unit plus benchmark |
+| Markdown view (new) | Will be read by agents | Golden against the same fixture; size ratio vs JSON recorded |
 
-**Fix snippet (CI tag fetch), for RA-A1:**
+Highest value additions: the golden run test, a benchmark harness, and a `--cov-fail-under`
+gate. Existing tests largely assert outcomes rather than execution (good); test code is 4,852
+lines against 2,652 of source, of which roughly 320 test lines cover code proposed for deletion.
+
+## Phase 5: Dependency audit
+
+| Package | Pin | Note |
+|---|---|---|
+| aiodns, aiofiles | `~=` | `aiofiles` only appends single lines; sync append is already used by `csp` writer (cut candidate) |
+| dnspython | `>=2.9.0` | Deliberate second opinion; keep |
+| requests, urllib3 | `>=` | Used only for the `ifconfig.io` probe; `urllib.request` is already used elsewhere (cut candidates) |
+| tqdm | `>=` | Keep (progress) |
+| boto3 | `>=` | Lambda only (cut with D-1) |
+| ruff | `==0.17.0` | Pinned; pre-commit rev aligned in PR 203 |
+
+No CVEs known at review time (no `pip-audit` run is wired into CI; see F-6). Net: 4 runtime
+dependencies removable (`boto3`, `requests`, `urllib3`, `aiofiles`).
+
+## Phase 6: CI/CD gaps
+
+| Check | State |
+|---|---|
+| Tests on every PR | Yes (job `test`) |
+| Lint and format | Yes (ruff) |
+| Secret scan | Yes (gitleaks, trufflehog), SHA-pinned |
+| Action pinning | Yes |
+| Scheduled drift run | Yes (weekly) plus Dependabot |
+| Coverage floor | **No** (F-6) |
+| Dependency vulnerability scan | **No** |
+| Local gate | Pre-push and pre-commit hooks were pointing at a removed path; repaired 2026-10-16 and verified (5 of 5 steps green) |
+
+Snippet for the coverage gap (R-16):
+
 ```yaml
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0   # fetch full history + tags so version-sync baseline can run
+      - name: Test (pytest)
+        run: pytest --cov=classes --cov=imports --cov-fail-under=95 --cov-report=term-missing
 ```
 
----
+## Phase 7: Summary of action items
 
-## Phase 7 — Feature-vs-goals gap analysis (the "how good is good enough?" answer)
+See [`ROADMAP.md`](ROADMAP.md), items R-01 to R-18, each written to be executed by a named model
+tier with explicit steps, verification commands, and stop conditions.
 
-> ### ⚠️ This section was written against a misread goal — see [Correction](#correction-the-goal-this-review-assessed-was-wrong) at the end
->
-> The analysis below treats cloud attribution as a supporting attribute of a dangling-CNAME
-> tool. That is not what the tool is for. The verdicts in the table are sound for the goal
-> stated, and the goal stated was wrong. Read the correction before relying on this.
+## Phase 8: Ponytail audit
 
-**Stated goal (README):** passive, DNS-only bulk resolution + CSP attribution + dangling-CNAME and
-NS-takeover detection + forensic evidence, practical for large lists. Active probing (HTTP/TLS/ports/
-screenshots) is *deliberately* out of scope.
+Intent applied: DNS-only, contracts frozen, no claiming. Correctness, security and performance
+are out of scope for this phase (they are in Phases 2 and 3). Every `delete:` was grepped across
+source, tests, docs and workflows; symbols used only by their own tests are marked as such.
+Ranked by lines removed. Line counts are approximate.
 
-| Goal | State | Verdict |
-|---|---|---|
-| Bulk async DNS resolution | asyncio + Semaphore + retry loop | ✅ Met |
-| Multi-IP fidelity (A records) | All A IPs captured, pipe-delimited, all fed to CSP match | ✅ Met |
-| CSP attribution (AWS/GCP/Azure) | 3 providers, v4+v6, resilient Azure fetch | ⚠️ **Verdict withdrawn** — assessed as an attribute, not as the product. See correction |
-| Dangling CNAME takeover detection | Depth-limited chain follow, 60 classification patterns, self-ref handling | ✅ Met, strong |
-| NS takeover detection | Unresolvable-NS check | ✅ Met |
-| Forensic evidence | Async dig/nslookup capture | ✅ Met (CLI only, by design) |
-| Actionable output | Consolidated 4 files + prioritised run summary | ✅ Met |
-| "Practical for large lists" | True functionally; **perf cliff at scale** (RA-C) | ⚠️ Partial |
-| Robustness under failure | Good, except **Azure `sys.exit`** (RA-B1) | ⚠️ One defect |
+1. `delete:` Lambda stack: `lambda_handler.py` (108), `classes/lambda_environment_manager.py`
+   (120), `tests/test_lambda_handler.py` (199), `tests/test_lambda_environment_manager.py` (122),
+   `docs/LAMBDA.md` (192), `requirements-lambda.txt`, the extra install in `ci.yml`, README
+   sections. Shared `run()` stays. Replacement: nothing (restorable from tag `v2.0.0`).
+   **-746 lines, -1 dep (`boto3`).**
+2. `reuse:` three re-parsers of the same pipe files. Keep structured records in memory (one small
+   dataclass), render pipe lines, JSON, summary and Markdown from them. Targets:
+   `classes/allocator_contract.py` (`_lines`, `_parse_target`), `classes/run_contract.py:158`
+   (`_lines`, the `startswith` ladder), `classes/run_summary.py:7`. Also deletes the "Malformed ..."
+   `ValueError` paths that exist only because of re-parsing. **About -200 lines.**
+3. `delete:` docs that describe delivered work: `docs/roadmap/PR-A` to `PR-H` (about 670 lines) and
+   `docs/roadmap/README.md`; `HANDOVER.md` (575) largely duplicates `AGENTS.md` and
+   `docs/roadmap/AGENT-GUIDE.md`. History keeps all of it. **About -900 lines of docs.**
+4. `delete:` dead code, each grepped (source callers: none): `is_wildcard_resolution`
+   (`classes/wildcard_detector.py:129`, tests only), `FileDoesNotExistError`, `NotAnIntegerError`,
+   `InvalidNameserversError` (`classes/custom_exceptions.py`, plus `tests/test_custom_exceptions.py`),
+   `get_random_nameserver` and `get_config_file` (`classes/environment_manager.py:100,103`),
+   and `helper/find_authoritative_ns.py` (174 lines, referenced nowhere; **needs maintainer
+   confirmation**, D-6). **About -250 lines.**
+5. `yagni:` `classes/csp_ip_addresses.py` (49 lines, six getters, six constructor arguments).
+   `ProviderCatalogue` already holds `ipv4_ranges`, `ipv6_ranges` and `metadata`. Pass the
+   `{provider: catalogue}` dict; `get_vendor_ips`/`merge_matches` collapse into one loop.
+   Also removes `ProviderCatalogue.__iter__` (`imports/cloud_ip_ranges.py:50`, "compatibility with
+   the existing matcher boundary") and the unpack in `resolver.py:119`. **About -110 lines.**
+6. `shrink:` `imports/cloud_ip_ranges.py`: legacy scalar-snapshot migration (`:127`; snapshots
+   expire within 14 days, so it has been dead since August); `fetch_ip_ranges` /
+   `fetch_ip_ranges_for_azure` one-line wrappers (`:209`, `:213`); `extreme` range dumps inside the
+   parsers (`:176`, `:203`) duplicating the dump in `resolver.py`; two copies of the IPv4/IPv6
+   validation loop; two near-identical `ProviderCatalogue` constructions; two identical
+   multi-exception tuples. **About -60 lines.**
+7. `reuse:` `_remove_output` defined twice (`classes/allocator_contract.py:77`,
+   `classes/run_contract.py:187`), atomic JSON write twice, `_lines` three times, `CONTRACT_VERSION`
+   twice, `_timestamp` twice (`resolver.py:232`, `imports/cloud_ip_ranges.py:70`).
+   Import from one place. **About -50 lines.**
+8. `native:` `requests` and `urllib3` exist only for the `ifconfig.io` probe
+   (`classes/environment_manager.py:9,29`); `urllib.request.urlopen` is already used in
+   `imports/cloud_ip_ranges.py`. `aiofiles` appends one line per call; the CSP writer already uses
+   plain `open(..., "a")`. **-3 deps, about -15 lines.**
+9. `yagni:` `classes/domain_processing_context.py` (21 lines): `dangling_domains` is collected,
+   returned, and ignored by `resolver.py` (`_dangling`). Remove the set, the setter and the third
+   return value. **About -25 lines plus test edits.**
+10. `shrink:` `hasattr(env_manager, "_csp_written_lines")` lazy init
+    (`imports/cloud_service_provider_checks.py:25`): initialise in `EnvironmentManager.__init__`.
+    `stdlib:` `subprocess.run(["which", ...])` in `classes/evidence_collector.py` is
+    `shutil.which(...)`. **About -12 lines.**
 
-**Live-run verification (authorised client domain, 2026-07-15).** A 15-host run completed cleanly
-end-to-end: no crash, correct concurrency/retry behaviour, the prioritised run summary and the 4-file
-output all produced. This confirms the happy path and the operator-facing UX work as advertised. It
-also **found a real bug**: all 9 non-resolving hosts were mislabelled `self_referential` (verified by
-`dig`: they have no A and no CNAME — they are simply NXDOMAIN). That is RA-B3 / PF-6. The live run
-doing its job and catching a classification defect is precisely why the maintainer set it as a
-verification criterion.
+Considered and kept: the 90-entry `config.json` pattern table (D-2), dnspython as a second
+resolver (PR 161 fixed real unreliability), `DomainCategoriser` (10 lines, one caller, but tested
+and cheap), the three-state wildcard verdicts (documented hard-won behaviour), `OutputManager`
+(61 lines, earns its keep).
 
-**Honest gaps against the "field-ready" bar:**
-1. **Self-referential misclassification** (RA-B3) — the field-run bug above; highest correctness impact.
-2. **Perf at true scale** (RA-C) — the one place the "large lists" claim is fragile.
-3. **Azure `sys.exit`** (RA-B1) — a single upstream blip can lose a whole run's results.
-4. **AAAA-only hosts** read as unresolved (A-record-only resolution). Low priority for red-team use
-   per maintainer, but should be **documented as a known limitation**, not left implicit.
-5. **No confirmation of exploitability** — by design (that's the separate active-probing project).
-   README should say so explicitly so users know where the boundary is and where to go next.
+`net: about -1,400 lines of source and tests, about -900 lines of documentation, -4 runtime
+dependencies possible.`
 
-**Bottom line:** within its declared scope, the tool **meaningfully meets its original goals.** It is
-not "unfinished." The remaining work is hardening and polish to clear the field-ready bar — not new
-core capability. **"Good enough" for field-ready = CI green (PR-A) + the RA-B correctness/reliability
-fixes (especially B3, the self-referential bug the live run caught) + the RA-D coverage lift.** Anything
-past that (RA-C perf, RA-F features) is genuine improvement, not a gap between promise and delivery.
+## What this review deliberately did not do
 
----
-
-## Phase 8 — Action roadmap
-
-Action items are grouped into **bundled PRs of similar nature** (per devops-practices: group related
-changes into one point release). Full per-PR execution plans — written for a less-capable agent to
-run independently — live in [`docs/roadmap/`](docs/roadmap/). Model tier per group is assigned via
-`model-selection-framework` and justified in [`ROADMAP.md`](ROADMAP.md).
-
-See [`ROADMAP.md`](ROADMAP.md) for the ordered, bundled roadmap with priorities, model tiers, and
-release grouping. Summary of groups:
-
-- **PR-A — CI reliability (CRITICAL):** fix the fragile tag baseline test + CI tag fetch; pin ruff;
-  adopt local-CI habit. Greens `main`, unblocks everything.
-- **PR-B — Reliability & correctness (HIGH):** fix self-referential misclassification (RA-B3, found by
-  the live run); remove Azure `sys.exit`; remove orphan `timeout` file.
-- **PR-C — Scalability (MEDIUM):** pre-build CSP networks; fix O(n²) dedupe.
-- **PR-D — Coverage lift (HIGH):** make `environment_manager` testable + add unit suites; lift 85%→≥90%.
-- **PR-E — Lambda/scope cleanup (MEDIUM):** move Lambda deploy docs to `docs/LAMBDA.md`; document the
-  active-probing boundary and the companion project.
-- **PR-F — New DNS features (MEDIUM):** wildcard-DNS detection; record AAAA resolutions; extra
-  takeover signatures — all within the DNS-only boundary.
-- **PR-G — Docs & release polish (LOW):** README roadmap → link ROADMAP.md; crt.sh helper; limitation notes.
-- **PR-H — Dependency batch (LOW):** merge the 10 dependabot PRs once CI is green; prune stale branches.
-
----
-
-## Verification (karpathy Layer 2) — 2026-07-29
-
-Layer 1 fixed the goal and the evidence bar before work began. This section records the
-verification of what was actually delivered, against those criteria. Written after the work
-shipped, judged against criteria set before it started.
-
-### Against the agreed evidence bar
-
-| Criterion (set in Layer 1) | Result | Evidence |
-|---|---|---|
-| **Measured coverage %** | ✅ Met | 85% → **95%**; 144 → 186 tests. `environment_manager.py` 35% → 86%, `output_manager.py` → 100% |
-| **Clean authorised live run** | ✅ Met, and it earned its keep | Ran three times. Found **two** real defects that tests had not: the self-referential mislabel (B3) and the no-CNAME false candidates (B4). Both fixed and re-verified live |
-| **Honest feature-vs-goals gap analysis** | ✅ Met | Phase 7 above; gaps restated below |
-| **Field-ready bar** | ✅ Substantially met | Correctness defects closed; CI green; false-positive noise eliminated |
-| **DNS-only scope firm** | ✅ Held | No HTTP/TLS/port features added. Boundary now stated explicitly in the README |
-| **Docs consumable by a weaker agent** | ✅ Met | `docs/roadmap/` per-PR plans + `AGENT-GUIDE.md`; six of them were executed by sub-agents without further context |
-
-### What verification actually caught
-
-The live-run criterion proved the most valuable, and vindicates setting it in Layer 1:
-
-1. **B3 — self-referential mislabel.** Every dead subdomain was reported as "the domain points to
-   itself". Unit tests passed throughout; only a live run against real DNS exposed it.
-2. **B4 — false takeover candidates.** After B3, the same hosts were *still* announced as
-   `TAKEOVER CANDIDATE(S) DETECTED — REVIEW IMMEDIATELY` despite having no CNAME. A second live run
-   caught it. Candidates went 9 → 0 on the same input.
-3. **Branch protection misconfiguration.** Required contexts named the *workflows* (`CI`,
-   `Secret Scan`) while GitHub reports *job* names. Every PR was permanently unmergeable — the true
-   cause of the dependabot backlog, which the red CI had masked. Neither tests nor local CI could
-   surface this; it only appeared on a real merge attempt.
-
-The pattern is consistent: **the defects that mattered were invisible to the test suite.** Coverage
-rose 10 points without catching any of them. Coverage measures exercise, not correctness.
-
-### Honest gaps remaining
-
-- **F1 wildcard detection — not built.** The largest outstanding feature. Without it, a wildcard zone
-  makes every enumerated subdomain "resolve", flooding output. This remains the biggest gap against
-  the "practical for large domain lists" claim.
-- **F3 signatures — not extended.** 60 patterns; unclassified targets still surface as `unknown`.
-- **Perf at true scale (C) — improved, not proven.** CIDR parsing and dedupe are fixed, but no
-  benchmark at 10k+ domains has been run. The cliff is removed in principle, unmeasured in practice.
-- **`local-ci` cannot classify one CI-only step.** `ecr-build.yml`'s docker step read as a genuine
-  failure locally because its `${{ }}` context sits in `env:` rather than `run:`. Moot here — that
-  workflow was removed — but the limitation is real for other repos.
-
-### Verdict
-
-Within its declared DNS-only scope, the tool **meets its goals and clears the field-ready bar it was
-held to**. The work delivered was corrective rather than additive: the codebase was already sound,
-and what it lacked was a green pipeline, three correctness fixes, and evidence. It now has all three.
-
-It is **not** finished — F1 is a genuine capability gap, and scale performance is unproven. Neither
-is a gap between promise and delivery: the README claims neither wildcard handling nor benchmarked
-throughput.
-
-
----
-
-## Correction: the goal this review assessed was wrong
-
-*Added 2026-07-30, after the maintainer corrected the premise.*
-
-This review assessed DNSResolver as a dangling-CNAME detector with cloud attribution as a
-supporting attribute. That is not what the tool is for, and the error runs through the whole
-gap analysis in Phase 7.
-
-### The actual purpose
-
-Two jobs of **equal** weight:
-
-1. **Dangling CNAME / subdomain takeover candidates.** Commodity — other tooling covers this.
-2. **A records resolving into claimable cloud IP space.** The differentiator.
-
-Job 2 is the one that is easy to under-value from the code. A dangling CNAME names a service,
-so intent can be read straight from DNS. A bare A record cannot: if the address is a cloud IP
-the owner released, whoever allocates it next controls what is served for that hostname, and
-**DNS gives no signal that this is so**. The only way to find out is to churn allocation in
-that provider and region until the address comes back to you.
-
-The tool identifies and hands off those targets. It never claims anything — that is a separate
-tool. Which means the output files are **machine-readable interfaces**, not reports.
-
-### What the misframing caused this review to miss
-
-Phase 7 recorded CSP attribution as "✅ Met". At the time, `imports/cloud_ip_ranges.py` kept
-only the CIDR string from each published prefix and discarded everything else:
-
-| Provider | Published | Kept |
-|---|---|---|
-| AWS | `ip_prefix`, `region`, `service`, `network_border_group` | prefix |
-| GCP | `ipv4Prefix`/`ipv6Prefix`, `service`, `scope` | prefix |
-| Azure | `addressPrefixes`, `region`, `systemService` | prefixes |
-
-The output read `example.com resolved to aws IPs: ['1.2.3.4']`. For a downstream consumer that
-is close to useless: over half of AWS's ~10,500 prefixes carry the generic `AMAZON` tag, and
-nothing distinguished a CloudFront edge from an EC2 address in a named region. The primary
-product was, in effect, unfinished — and the review called it met.
-
-Two further defects followed from the same blind spot, both found only after the reframing:
-
-- **Wildcard resolutions were fed to the cloud matcher unmarked.** A wildcarded zone in cloud
-  space emitted one record per enumerated subdomain, each a distinct line, none deduplicated —
-  the hosting platform's own addresses burying real targets in the primary output.
-- **`network_border_group` was discarded**, though it is the boundary an Elastic IP is actually
-  allocated from, and so the exact scope a consumer operates within.
-
-### Since fixed
-
-- Region, service and border group captured from all three providers.
-- Handoff records: `[WILDCARD|]domain|ip|provider|region|service|prefix|border_group`.
-- Summary groups by provider, region and service, and excludes wildcard records from target counts.
-- Wildcard detection documented as best-effort against large rotating pools.
-
-### The lesson
-
-This is a sharper version of the verification lesson recorded above. There, tests passed while
-the code was wrong. Here, the **review** was internally consistent, evidence-backed and
-thorough — while measuring against the wrong thing. Rigour applied to a wrong premise produces
-confident, well-supported, wrong conclusions.
-
-The premise came from the README, which led with dangling-CNAME detection and listed cloud
-matching as a bullet. It was a reasonable misreading, available to anyone. That is why
-[`AGENTS.md`](AGENTS.md) now states the purpose explicitly at repo root: so the next reader,
-human or agent, does not have to infer it.
+It did not run the tool against live DNS or providers: nothing in the proposed work changes
+resolution or classification, and every cut is gated on a byte-exact golden test (R-03) rather
+than on unit coverage. Items that do change observable behaviour (R-13 Markdown, R-15 matcher) say
+so and carry their own live-run gate.

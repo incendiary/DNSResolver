@@ -79,7 +79,7 @@ the previous agent created was squash-merged and deleted. There is nothing hidde
 |---|---|
 | **`AGENTS.md`** | What the tool is for, architecture, output contracts, conventions, traps. **Start here.** |
 | `README.md` | User-facing documentation |
-| `REVIEW.md` | The 8-phase codebase review — **read its Correction section at the end first**, because the body was written against a misread goal |
+| `REVIEW.md` | Current review and ponytail audit (2026-10-16). The superseded 2026-07 review, whose body was written against a misread goal, is `docs/roadmap/REVIEW-2026-07.md` — **read its Correction section at the end first** |
 | `ROADMAP.md` | Plan and its status, plus what remains open |
 | `docs/roadmap/AGENT-GUIDE.md` | Per-task working rules used during delivery |
 | `docs/roadmap/PR-*.md` | Individual execution plans (historical; all delivered) |
@@ -125,7 +125,7 @@ Starting point was: CI red for weeks, 12 stalled PRs, 144 tests, 85% coverage, v
 
 ### Be sceptical about
 
-- **The framing error.** `REVIEW.md`'s body treats cloud attribution as a supporting attribute.
+- **The framing error.** `docs/roadmap/REVIEW-2026-07.md`'s body treats cloud attribution as a supporting attribute.
   It is one of two co-equal products. The correction is appended at the end of that file; the
   body is left intact deliberately so the mistake is visible rather than tidied away.
 - **Performance is unverified.** Known cliffs were removed (per-IP CIDR parsing, an O(n²)
@@ -281,7 +281,7 @@ Effort:           XS / S / M / L / XL
 ```
 
 Write findings to `REVIEW.md` and action items to `ROADMAP.md`. **Do not overwrite the existing
-correction section in `REVIEW.md`** — it is deliberate evidence that a thorough review can be
+correction section in `docs/roadmap/REVIEW-2026-07.md`** — it is deliberate evidence that a thorough review can be
 wrong, and it is more useful to you than a clean document would be.
 
 
