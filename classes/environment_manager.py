@@ -4,9 +4,8 @@ import os
 import re
 import sys
 from datetime import datetime
+from urllib.request import urlopen
 
-import requests
-from requests import RequestException
 from tqdm import tqdm
 
 from classes.config_resolver import ConfigResolver
@@ -25,9 +24,9 @@ class TqdmLoggingHandler(logging.StreamHandler):
 
 def fetch_external_ip(timeout=10):
     try:
-        response = requests.get("https://ifconfig.io/ip", timeout=timeout)
-        return response.text.strip()
-    except RequestException as error:
+        with urlopen("https://ifconfig.io/ip", timeout=timeout) as response:
+            return response.read().decode("utf-8").strip()
+    except OSError as error:
         return f"An error occurred while trying to retrieve the external ip: {error}"
 
 
