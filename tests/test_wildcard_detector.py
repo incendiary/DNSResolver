@@ -40,22 +40,22 @@ def env_manager():
 # ---------------------------------------------------------------------------
 
 
-def test_parent_zone_strips_leftmost_label():
-    assert WildcardDetector.parent_zone("foo.example.com") == "example.com"
-
-
-def test_parent_zone_of_deep_name_targets_nearest_zone():
-    """`a.b.example.com` is covered by `*.b.example.com`, not `*.example.com`."""
-    assert WildcardDetector.parent_zone("a.b.example.com") == "b.example.com"
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        pytest.param("foo.example.com", "example.com", id="strips_leftmost_label"),
+        # `a.b.example.com` is covered by `*.b.example.com`, not `*.example.com`.
+        pytest.param("a.b.example.com", "b.example.com", id="deep_name_nearest_zone"),
+        pytest.param("foo.example.com.", "example.com", id="tolerates_trailing_dot"),
+    ],
+)
+def test_parent_zone(name, expected):
+    assert WildcardDetector.parent_zone(name) == expected
 
 
 def test_parent_zone_none_for_apex():
     """A name with no subdomain cannot be covered by a wildcard in its own zone."""
     assert WildcardDetector.parent_zone("example.com") is None
-
-
-def test_parent_zone_tolerates_trailing_dot():
-    assert WildcardDetector.parent_zone("foo.example.com.") == "example.com"
 
 
 # ---------------------------------------------------------------------------
@@ -191,32 +191,23 @@ async def test_classify_returns_none_outside_a_wildcard_zone(env_manager):
     assert await detector.classify("real.example.com", ["192.0.2.1"]) is None
 
 
-async def test_classify_confirms_catch_all_on_exact_match(env_manager):
+# A zone that answers for anything, classified against what the probe sampled.
+# "unsampled" is the rotating-pool case: the name landed on addresses the probe
+# never saw. Previously that returned a flat False and the catch-all was
+# reported as a real target.
+@pytest.mark.parametrize(
+    ("name", "addresses", "expected"),
+    [
+        pytest.param("ghost.example.com", ["192.0.2.1"], "WILDCARD", id="exact_match"),
+        pytest.param(
+            "elsewhere.example.com", ["203.0.113.9"], "WILDCARD_ZONE", id="unsampled"
+        ),
+        pytest.param("ghost.example.com", [], "WILDCARD_ZONE", id="empty_resolution"),
+    ],
+)
+async def test_classify_in_wildcard_zone(env_manager, name, addresses, expected):
     resolver = MagicMock()
     resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
     detector = WildcardDetector(resolver, env_manager)
 
-    assert await detector.classify("ghost.example.com", ["192.0.2.1"]) == "WILDCARD"
-
-
-async def test_classify_reports_zone_when_addresses_were_not_sampled(env_manager):
-    """
-    The rotating-pool case. The zone answers for anything, but this name landed
-    on addresses the probe never saw. Previously that returned a flat False and
-    the catch-all was reported as a real target.
-    """
-    resolver = MagicMock()
-    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
-    detector = WildcardDetector(resolver, env_manager)
-
-    verdict = await detector.classify("elsewhere.example.com", ["203.0.113.9"])
-
-    assert verdict == "WILDCARD_ZONE"
-
-
-async def test_classify_reports_zone_for_empty_resolution_in_wildcard_zone(env_manager):
-    resolver = MagicMock()
-    resolver.query = AsyncMock(return_value=[dns_answer("192.0.2.1")])
-    detector = WildcardDetector(resolver, env_manager)
-
-    assert await detector.classify("ghost.example.com", []) == "WILDCARD_ZONE"
+    assert await detector.classify(name, addresses) == expected

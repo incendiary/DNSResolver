@@ -43,20 +43,17 @@ def ctx(mock_env_manager, catalogues):
 # ---------------------------------------------------------------------------
 
 
-def test_is_ip_version_ipv4_correct():
-    assert is_ip_version("34.1.2.3", 4) is True
-
-
-def test_is_ip_version_ipv4_rejected_for_v6():
-    assert is_ip_version("34.1.2.3", 6) is False
-
-
-def test_is_ip_version_ipv6_correct():
-    assert is_ip_version("2600:1900::1", 6) is True
-
-
-def test_is_ip_version_ipv6_rejected_for_v4():
-    assert is_ip_version("2600:1900::1", 4) is False
+@pytest.mark.parametrize(
+    ("address", "version", "expected"),
+    [
+        pytest.param("34.1.2.3", 4, True, id="ipv4_correct"),
+        pytest.param("34.1.2.3", 6, False, id="ipv4_rejected_for_v6"),
+        pytest.param("2600:1900::1", 6, True, id="ipv6_correct"),
+        pytest.param("2600:1900::1", 4, False, id="ipv6_rejected_for_v4"),
+    ],
+)
+def test_is_ip_version(address, version, expected):
+    assert is_ip_version(address, version) is expected
 
 
 # ---------------------------------------------------------------------------
