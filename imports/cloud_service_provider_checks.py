@@ -16,6 +16,20 @@ def parse_network(cidr):
     return ipaddress.ip_network(cidr)
 
 
+# The catalogues are fixed for a run, so a match depends only on (address,
+# family). One slot, held by identity: a different catalogues object (the next
+# run, or the next test) starts a fresh memo, and holding the reference stops
+# its id being reused while the memo is live.
+_memo_slot = (None, {})
+
+
+def _match_memo(catalogues):
+    global _memo_slot
+    if _memo_slot[0] is not catalogues:
+        _memo_slot = (catalogues, {})
+    return _memo_slot[1]
+
+
 def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=None):
     domain = domain_context.get_domain()
     output_files = env_manager.output_files
@@ -28,11 +42,12 @@ def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=
     vendor_ips_context_ipv4 = get_vendor_ips(domain_context, ip_version=4)
     vendor_ips_context_ipv6 = get_vendor_ips(domain_context, ip_version=6)
 
+    memo = _match_memo(domain_context.get_catalogues())
     matches_ipv4 = get_ip_matches(
-        final_ips, vendor_ips_context_ipv4, domain_context, ip_version=4
+        final_ips, vendor_ips_context_ipv4, domain_context, ip_version=4, memo=memo
     )
     matches_ipv6 = get_ip_matches(
-        final_ips, vendor_ips_context_ipv6, domain_context, ip_version=6
+        final_ips, vendor_ips_context_ipv6, domain_context, ip_version=6, memo=memo
     )
 
     matches = merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context_ipv4)
@@ -80,15 +95,30 @@ def describe(catalogues, provider, cidr):
     return entries or [("unknown", "unknown", "unknown")]
 
 
-def get_ip_matches(final_ips, vendor_ips_context, domain_context, ip_version):
+def get_ip_matches(
+    final_ips, vendor_ips_context, domain_context, ip_version, memo=None
+):
+    """Match each address of one family; `memo` (from perform_csp_checks) caches per address."""
     matches = {vendor: {} for vendor in vendor_ips_context}
     for ip in final_ips:
         if not is_ip_version(ip, ip_version):
             continue
-        ip_obj = (
-            ipaddress.IPv4Address(ip) if ip_version == 4 else ipaddress.IPv6Address(ip)
-        )
-        match_ip_with_vendors(ip_obj, vendor_ips_context, domain_context, matches)
+        key = (ip, ip_version)
+        if memo is not None and key in memo:
+            found = memo[key]
+        else:
+            ip_obj = (
+                ipaddress.IPv4Address(ip)
+                if ip_version == 4
+                else ipaddress.IPv6Address(ip)
+            )
+            found = {vendor: {} for vendor in vendor_ips_context}
+            match_ip_with_vendors(ip_obj, vendor_ips_context, domain_context, found)
+            if memo is not None:
+                memo[key] = found
+        for vendor, by_address in found.items():
+            for address, prefixes in by_address.items():
+                matches[vendor].setdefault(address, set()).update(prefixes)
     return matches
 
 

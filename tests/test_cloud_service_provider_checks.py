@@ -636,3 +636,40 @@ def test_overlapping_providers_are_written_in_catalogue_order(
 
     providers = [line.split("|")[2] for line in out_file.read_text().splitlines()]
     assert providers == ["gcp", "aws", "azure"]
+
+
+# ---------------------------------------------------------------------------
+# per-run memo
+# ---------------------------------------------------------------------------
+
+
+def _checks(tmp_path, env, context, ips):
+    csp_file = tmp_path / f"csp{id(context)}.txt"
+    csp_file.touch()
+    env.output_files = {"standard": {"csp": str(csp_file)}}
+    perform_csp_checks(context, env, ips)
+    return csp_file.read_text()
+
+
+def test_memo_scans_each_address_once(mock_env_manager, ctx, monkeypatch):
+    import imports.cloud_service_provider_checks as checks
+
+    calls = []
+    real = checks.match_ip_with_vendors
+    monkeypatch.setattr(
+        checks, "match_ip_with_vendors", lambda *a: calls.append(a[0]) or real(*a)
+    )
+    perform_csp_checks(ctx, mock_env_manager, ["34.1.2.3"])
+    perform_csp_checks(ctx, mock_env_manager, ["34.1.2.3"])
+    assert len(calls) == 1
+
+
+def test_memo_does_not_leak_between_catalogues(tmp_path, mock_env_manager):
+    one = {"aws": make_catalogue("aws", ["192.0.2.0/24"])}
+    two = {"aws": make_catalogue("aws", ["198.51.100.0/24"])}
+    for catalogues, expected in ((one, True), (two, False)):
+        context = DomainProcessingContext(mock_env_manager, catalogues)
+        context.set_domain("example.com")
+        mock_env_manager._csp_written = set()
+        output = _checks(tmp_path, mock_env_manager, context, ["192.0.2.1"])
+        assert bool(output) is expected
