@@ -8,3 +8,5 @@ WILDCARD|host1.wild.example.com|198.18.0.50|aws|eu-west-2|EC2|198.18.0.0/24|eu-w
 WILDCARD_ZONE|host2.rot.example.com|198.18.0.61|aws|eu-west-2|EC2|198.18.0.0/24|eu-west-2
 shared-a.example.com|198.51.100.77|gcp|europe-west2|Google Cloud|198.51.100.0/24|unknown
 shared-b.example.com|198.51.100.77|gcp|europe-west2|Google Cloud|198.51.100.0/24|unknown
+multi.example.com|198.18.1.5|gcp|europe-west2|Google Cloud|198.18.1.0/25|unknown
+multi.example.com|198.18.1.5|aws|eu-west-2|EC2|198.18.1.0/24|eu-west-2

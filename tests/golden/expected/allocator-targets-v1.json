@@ -19,6 +19,24 @@
   },
   {
     "contract_version": "1.0",
+    "hostname": "multi.example.com",
+    "ip": "198.18.1.5",
+    "provider": "aws",
+    "region": "eu-west-2",
+    "services": [
+      "EC2"
+    ],
+    "prefixes": [
+      "198.18.1.0/24"
+    ],
+    "network_border_groups": [
+      "eu-west-2"
+    ],
+    "dns_record_type": "A",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
     "hostname": "v6.example.com",
     "ip": "2001:db8:a::1",
     "provider": "aws",
@@ -105,6 +123,24 @@
       "unknown"
     ],
     "dns_record_type": "AAAA",
+    "actionability": "actionable"
+  },
+  {
+    "contract_version": "1.0",
+    "hostname": "multi.example.com",
+    "ip": "198.18.1.5",
+    "provider": "gcp",
+    "region": "europe-west2",
+    "services": [
+      "Google Cloud"
+    ],
+    "prefixes": [
+      "198.18.1.0/25"
+    ],
+    "network_border_groups": [
+      "unknown"
+    ],
+    "dns_record_type": "A",
     "actionability": "actionable"
   },
   {
