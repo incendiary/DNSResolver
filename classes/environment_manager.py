@@ -121,7 +121,7 @@ class EnvironmentManager:
             print(f"{key:20}: {value}")
 
     def _populate_environment_info(self):
-        external_ip = fetch_external_ip()
+        external_ip = fetch_external_ip() if self.args.record_external_ip else None
         self.environment_info = {
             "command_executed": " ".join(sys.argv),
             "external_ip": external_ip,

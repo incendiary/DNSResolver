@@ -77,26 +77,41 @@ known vulnerabilities.
 python resolver.py <domains_file> [options]
 ```
 
-`domains_file` — path to a plain-text file with one domain per line.
+`domains_file` is a plain-text file with one domain per line. It may instead come from `DNSRESOLVER_DOMAINS_FILE`.
 
 ### Options
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--output-dir` | `-o` | Directory to save results (default: `output`) |
-| `--config-file` | | Path to config JSON (default: `config.json`) |
-| `--verbose` / `--no-verbose` | `-v` | Enable verbose logging (default: off) |
-| `--extreme` / `--no-extreme` | `-e` | Enable extreme logging (includes full IP range dumps, implies `-v`) (default: off) |
-| `--nameservers` | | Comma-separated custom resolvers, e.g. `8.8.8.8,1.1.1.1` |
-| `--max-threads` | `-mt` | Max concurrent domain tasks (default: 50) |
-| `--timeout` | `-t` | DNS query timeout in seconds |
-| `--retries` | | Retry attempts for failed domains (default from config) |
-| `--evidence` / `--no-evidence` | | Save dig/nslookup output for flagged domains (default: off) |
-| `--version` | | Print version and exit |
+| Option | Flag (short) | Variable | Default |
+|--------|--------------|----------|---------|
+| Domains file | `domains_file` (positional) | `DNSRESOLVER_DOMAINS_FILE` | none (required) |
+| Output directory | `--output-dir` (`-o`) | `DNSRESOLVER_OUTPUT_DIR` | `output` |
+| Resolvers | `--nameservers`, `--resolvers` | `DNSRESOLVER_NAMESERVERS` | `1.1.1.1,8.8.8.8` |
+| Concurrent domain tasks | `--max-threads` (`-mt`) | `DNSRESOLVER_MAX_THREADS` | `2` |
+| DNS query timeout, seconds | `--timeout` (`-t`) | `DNSRESOLVER_TIMEOUT` | `1` |
+| Retry attempts for failed domains | `--retries` | `DNSRESOLVER_RETRIES` | `2` |
+| Verbose logging | `--verbose` / `--no-verbose` (`-v`) | `DNSRESOLVER_VERBOSE` | off |
+| Extreme logging (IP range dumps, implies verbose) | `--extreme` / `--no-extreme` (`-e`) | `DNSRESOLVER_EXTREME` | off |
+| Save dig/nslookup output for flagged domains | `--evidence` / `--no-evidence` | `DNSRESOLVER_EVIDENCE` | off |
+| Configuration file | `--config-file` | `DNSRESOLVER_CONFIG_FILE` | `config.json` |
+| Record this host's external IP | `--record-external-ip` / `--no-record-external-ip` | `DNSRESOLVER_RECORD_EXTERNAL_IP` | off |
+
+`--version` prints the version and exits. The defaults shown for resolvers, threads, timeout and retries are the values shipped in `config.json`.
 
 ### Configuration precedence
 
-Each option resolves as: command-line flag, then the `config` block of `config.json`, then the built-in default. The boolean options (`--verbose`, `--extreme`, `--evidence`) can be switched on or off from either place, and a flag always wins: `--no-evidence` overrides `"evidence": true` in `config.json`. The shipped `config.json` has all three off.
+Each option resolves as: command-line flag, then the `DNSRESOLVER_*` environment variable, then the `config` block of `config.json`, then the built-in default. A flag always wins: `--no-evidence` overrides `DNSRESOLVER_EVIDENCE=true`, which overrides `"evidence": true` in `config.json`. The shipped `config.json` has the three logging and evidence booleans off.
+
+Booleans in the environment accept `1/true/yes/on` and `0/false/no/off`, case-insensitive. Any other boolean, an integer that does not parse, or a `config.json` value of the wrong type (for example `"verbose": "yes"`) stops the run with a message naming the variable or key. An empty variable counts as unset.
+
+The tool reads environment variables only and never parses `.envrc` itself. To load them with [direnv](https://direnv.net/):
+
+```bash
+cp .envrc.example .envrc && direnv allow
+```
+
+Without direnv, use `set -a; . ./.envrc; set +a`, or set the variables in CI. `.envrc` and `.env` are ignored by Git. The tool has no secrets, so the template holds none. `config.json` remains the home for defaults and for `domain_categorisation`.
+
+The external IP lookup is off by default: `environment_results_*.json` records `"external_ip": null` unless `--record-external-ip` (or `DNSRESOLVER_RECORD_EXTERNAL_IP`) is set. This is a documented change shipping in v3.0.0.
 
 ### Example
 
@@ -277,7 +292,7 @@ Other notes:
 
 ## Configuration
 
-`config.json` sets defaults for timeout, retries, output directory, and domain categorisation patterns used for classifying dangling CNAME targets (e.g. AWS S3, GitHub Pages, Heroku). CLI flags always override config file values.
+`config.json` sets defaults for timeout, retries, output directory, and domain categorisation patterns used for classifying dangling CNAME targets (e.g. AWS S3, GitHub Pages, Heroku). Every option can also be set from the environment; see Configuration precedence above.
 
 ## Cloud provider catalogue fetching
 

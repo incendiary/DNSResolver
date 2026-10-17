@@ -11,9 +11,14 @@ Only the --resolvers alias is tested here; the broader EnvironmentManager
 integration is covered in test_environment_manager.py.
 """
 
+import json
+import re
+from pathlib import Path
 from unittest.mock import patch
 
-from classes.config_resolver import ConfigResolver
+import pytest
+
+from classes.config_resolver import OPTIONS, ConfigResolver
 
 
 def _parse(domains_file, extra_argv=None):
@@ -62,8 +67,6 @@ def test_nameservers_default_is_none(tmp_path):
 
 def _parse_with_real_config(domains_file, config, extra_argv=None):
     """Run ConfigResolver against a real config.json written to disk."""
-    import json
-
     config_path = domains_file.parent / "config.json"
     config_path.write_text(json.dumps({"config": config}))
     extra_argv = extra_argv or []
@@ -211,7 +214,6 @@ def test_boolean_flags_default_false_when_config_unreadable(tmp_path):
 
 def test_shipped_config_leaves_evidence_verbose_and_extreme_off():
     # The committed defaults must stay quiet: evidence capture is opt-in.
-    import json
     import os
 
     path = os.path.join(os.path.dirname(__file__), "..", "config.json")
@@ -222,3 +224,149 @@ def test_shipped_config_leaves_evidence_verbose_and_extreme_off():
         False,
         False,
     )
+
+
+# ---------------------------------------------------------------------------
+# Environment layer: CLI flag > DNSRESOLVER_* variable > config.json > default
+# ---------------------------------------------------------------------------
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve(tmp_path, config=None, argv=None, with_file=True):
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps({"config": config or {}}))
+    fake_argv = ["resolver.py"] + ([str(f)] if with_file else [])
+    fake_argv += ["--config-file", str(config_path)] + (argv or [])
+    with patch("sys.argv", fake_argv):
+        return ConfigResolver().args
+
+
+ENV_CASES = [
+    ("output_dir", "DNSRESOLVER_OUTPUT_DIR", "/o", "/o", "from-config"),
+    ("nameservers", "DNSRESOLVER_NAMESERVERS", "9.9.9.9", "9.9.9.9", "from-config"),
+    ("max_threads", "DNSRESOLVER_MAX_THREADS", "7", 7, 99),
+    ("timeout", "DNSRESOLVER_TIMEOUT", "3", 3, 99),
+    ("retries", "DNSRESOLVER_RETRIES", "4", 4, 99),
+    ("verbose", "DNSRESOLVER_VERBOSE", "yes", True, False),
+    ("evidence", "DNSRESOLVER_EVIDENCE", "1", True, False),
+    ("record_external_ip", "DNSRESOLVER_RECORD_EXTERNAL_IP", "true", True, False),
+]
+
+
+@pytest.mark.parametrize("dest,var,raw,expected,_cfg", ENV_CASES)
+def test_each_variable_applies(tmp_path, monkeypatch, dest, var, raw, expected, _cfg):
+    monkeypatch.setenv(var, raw)
+    assert getattr(_resolve(tmp_path), dest) == expected
+
+
+@pytest.mark.parametrize("dest,var,raw,expected,cfg", ENV_CASES)
+def test_environment_beats_config_json(
+    tmp_path, monkeypatch, dest, var, raw, expected, cfg
+):
+    monkeypatch.setenv(var, raw)
+    assert getattr(_resolve(tmp_path, {dest: cfg}), dest) == expected
+
+
+def test_extreme_variable_applies_and_implies_verbose(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_EXTREME", "ON")
+    args = _resolve(tmp_path, {"extreme": False})
+    assert args.extreme is True and args.verbose is True
+
+
+def test_config_json_beats_builtin_default(tmp_path):
+    args = _resolve(tmp_path, {"timeout": 8, "record_external_ip": True})
+    assert (args.timeout, args.record_external_ip) == (8, True)
+
+
+def test_cli_beats_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_TIMEOUT", "3")
+    monkeypatch.setenv("DNSRESOLVER_EVIDENCE", "true")
+    args = _resolve(tmp_path, argv=["--timeout", "9", "--no-evidence"])
+    assert (args.timeout, args.evidence) == (9, False)
+
+
+def test_boolean_values_are_case_insensitive(tmp_path, monkeypatch):
+    for raw, expected in (("TRUE", True), ("Off", False), ("No", False), ("1", True)):
+        monkeypatch.setenv("DNSRESOLVER_VERBOSE", raw)
+        assert _resolve(tmp_path).verbose is expected
+
+
+def test_empty_variable_is_treated_as_unset(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_TIMEOUT", "")
+    assert _resolve(tmp_path, {"timeout": 8}).timeout == 8
+
+
+def test_bad_boolean_variable_exits_naming_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_EVIDENCE", "maybe")
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path)
+    assert exc.value.code != 0 and "DNSRESOLVER_EVIDENCE" in str(exc.value.code)
+
+
+def test_bad_integer_variable_exits_naming_it(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_TIMEOUT", "fast")
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path)
+    assert exc.value.code != 0 and "DNSRESOLVER_TIMEOUT" in str(exc.value.code)
+
+
+@pytest.mark.parametrize("key,value", [("verbose", "yes"), ("evidence", 1)])
+def test_non_boolean_config_value_exits_naming_key(tmp_path, key, value):
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path, {key: value})
+    assert exc.value.code != 0 and key in str(exc.value.code)
+
+
+def test_non_integer_config_value_exits_naming_key(tmp_path):
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path, {"timeout": "3"})
+    assert "timeout" in str(exc.value.code)
+
+
+def test_domains_file_from_environment(tmp_path, monkeypatch):
+    f = tmp_path / "from-env.txt"
+    f.write_text("")
+    monkeypatch.setenv("DNSRESOLVER_DOMAINS_FILE", str(f))
+    assert _resolve(tmp_path, with_file=False).domains_file == str(f)
+
+
+def test_missing_domains_file_everywhere_is_a_usage_error(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path, with_file=False)
+    assert exc.value.code != 0
+    assert "DNSRESOLVER_DOMAINS_FILE" in capsys.readouterr().err
+
+
+def test_nonexistent_domains_file_from_environment_exits(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_DOMAINS_FILE", str(tmp_path / "nope.txt"))
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path, with_file=False)
+    assert exc.value.code != 0
+
+
+def test_config_file_from_environment(tmp_path, monkeypatch):
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    other = tmp_path / "other.json"
+    other.write_text(json.dumps({"config": {"retries": 6}}))
+    monkeypatch.setenv("DNSRESOLVER_CONFIG_FILE", str(other))
+    with patch("sys.argv", ["resolver.py", str(f)]):
+        assert ConfigResolver().args.retries == 6
+
+
+def test_envrc_example_lists_exactly_the_variables_the_code_reads():
+    example = (ROOT / ".envrc.example").read_text(encoding="utf-8")
+    assert example.splitlines()[0] == "# Copy to .envrc, then run: direnv allow"
+    in_example = set(re.findall(r"^# (DNSRESOLVER_[A-Z_]+)=", example, re.M))
+    in_code = {var for var, _ in OPTIONS.values()}
+    assert in_example == in_code
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert all(f"`{var}`" in readme for var in in_code)
+
+
+def test_envrc_files_are_git_ignored():
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").split()
+    assert ".envrc" in ignored and ".env" in ignored

@@ -113,7 +113,8 @@ def test_set_domains_reads_and_dedupes_and_validates(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _construct(tmp_path, extra_argv=None):
+def _construct_with(tmp_path, extra_argv):
+    """Build an EnvironmentManager; the caller patches fetch_external_ip."""
     domains_file = tmp_path / "domains.txt"
     domains_file.write_text("a.example.com\n")
 
@@ -132,20 +133,48 @@ def _construct(tmp_path, extra_argv=None):
     fake_argv = ["resolver.py", str(domains_file), "--config-file", str(config_file)]
     fake_argv += extra_argv or []
 
-    with (
-        patch("sys.argv", fake_argv),
-        patch(
-            "classes.environment_manager.fetch_external_ip",
-            return_value="203.0.113.5",
-        ),
-    ):
+    with patch("sys.argv", fake_argv):
         return EnvironmentManager()
 
 
+def _construct(tmp_path, extra_argv=None):
+    with patch(
+        "classes.environment_manager.fetch_external_ip", return_value="203.0.113.5"
+    ):
+        return _construct_with(tmp_path, extra_argv)
+
+
 def test_construction_uses_mocked_external_ip_no_network(tmp_path):
-    mgr = _construct(tmp_path)
+    mgr = _construct(tmp_path, ["--record-external-ip"])
     assert mgr.environment_info["external_ip"] == "203.0.113.5"
     assert isinstance(mgr.environment_info["run_in_docker"], bool)
+
+
+def test_external_ip_is_not_looked_up_by_default(tmp_path):
+    with patch("classes.environment_manager.fetch_external_ip") as fetch:
+        mgr = _construct_with(tmp_path, [])
+    fetch.assert_not_called()
+    assert mgr.environment_info["external_ip"] is None
+    saved = json.loads(open(mgr.output_files["standard"]["environment"]).read())
+    assert saved["external_ip"] is None
+
+
+def test_external_ip_is_looked_up_when_recorded(tmp_path):
+    with patch(
+        "classes.environment_manager.fetch_external_ip", return_value="203.0.113.5"
+    ) as fetch:
+        mgr = _construct_with(tmp_path, ["--record-external-ip"])
+    fetch.assert_called_once_with()
+    assert mgr.environment_info["external_ip"] == "203.0.113.5"
+
+
+def test_external_ip_can_be_enabled_from_the_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_RECORD_EXTERNAL_IP", "yes")
+    with patch(
+        "classes.environment_manager.fetch_external_ip", return_value="203.0.113.5"
+    ):
+        mgr = _construct_with(tmp_path, [])
+    assert mgr.environment_info["external_ip"] == "203.0.113.5"
 
 
 def test_construction_populates_patterns_and_config(tmp_path):
