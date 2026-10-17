@@ -32,7 +32,7 @@ from version import __version__
 async def run(env_manager):
     """
     Core resolution pipeline. Accepts any EnvironmentManager-compatible object so
-    both the CLI entrypoint (resolver.py) and the Lambda entrypoint (lambda_handler.py)
+    the CLI entrypoint (resolver.py) and any other entrypoint
     can share the same logic.
     """
     run_id = str(uuid4())
