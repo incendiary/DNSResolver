@@ -28,3 +28,5 @@
 # DNSRESOLVER_CONFIG_FILE=config.json
 # Look up and record this host's external IP in the environment results (default: false).
 # DNSRESOLVER_RECORD_EXTERNAL_IP=false
+# Report format: md also writes run-report.md next to the JSON documents, json skips it (default: md).
+# DNSRESOLVER_FORMAT=md

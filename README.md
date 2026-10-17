@@ -94,6 +94,7 @@ python resolver.py <domains_file> [options]
 | Save dig/nslookup output for flagged domains | `--evidence` / `--no-evidence` | `DNSRESOLVER_EVIDENCE` | off |
 | Configuration file | `--config-file` | `DNSRESOLVER_CONFIG_FILE` | `config.json` |
 | Record this host's external IP | `--record-external-ip` / `--no-record-external-ip` | `DNSRESOLVER_RECORD_EXTERNAL_IP` | off |
+| Report format (`md` also writes `run-report.md`; `json` skips it) | `--format {md,json}` | `DNSRESOLVER_FORMAT` | `md` |
 
 `--version` prints the version and exits. The defaults shown for resolvers, threads, timeout and retries are the values shipped in `config.json`.
 

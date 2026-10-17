@@ -20,7 +20,12 @@ OPTIONS = {
     "evidence": ("DNSRESOLVER_EVIDENCE", bool),
     "config_file": ("DNSRESOLVER_CONFIG_FILE", str),
     "record_external_ip": ("DNSRESOLVER_RECORD_EXTERNAL_IP", bool),
+    "format": ("DNSRESOLVER_FORMAT", str),
 }
+
+# Options limited to a fixed set of values (CLI is checked by argparse).
+CHOICES = {"format": ("md", "json")}
+DEFAULTS = {"format": "md"}
 
 _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
@@ -50,6 +55,11 @@ def _from_config(value, kind, key):
     if isinstance(value, bool) is (kind is bool) and isinstance(value, kind):
         return value
     sys.exit(f"config.json key {key!r} must be {kind.__name__}, got {value!r}")
+
+
+def _check_choice(dest, value, source):
+    if dest in CHOICES and value not in CHOICES[dest]:
+        sys.exit(f"{source}={value!r} must be one of: {', '.join(CHOICES[dest])}")
 
 
 class ConfigResolver:
@@ -85,10 +95,14 @@ class ConfigResolver:
             return value
         raw = os.environ.get(var, "").strip()
         if raw:
-            return _from_env(raw, kind, var)
+            value = _from_env(raw, kind, var)
+            _check_choice(dest, value, var)
+            return value
         if dest in config:
-            return _from_config(config[dest], kind, dest)
-        return None
+            value = _from_config(config[dest], kind, dest)
+            _check_choice(dest, value, f"config.json key {dest!r}")
+            return value
+        return DEFAULTS.get(dest)
 
     def _parse_args(self):
         parser = self._parser = argparse.ArgumentParser(
@@ -172,6 +186,12 @@ class ConfigResolver:
             default=None,
             help="Look up and record this host's external IP in the environment "
             "results (default: off)",
+        )
+        parser.add_argument(
+            "--format",
+            choices=CHOICES["format"],
+            help="Report format: md also writes run-report.md next to the JSON "
+            "documents, json skips it (default: md)",
         )
         return parser.parse_args()
 
