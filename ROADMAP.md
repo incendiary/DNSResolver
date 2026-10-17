@@ -38,7 +38,7 @@ There are no open decisions.
 
 ## Progress
 
-Updated 2026-10-17. Merged to `main`; version stays 2.0.0 until R-18.
+Updated 2026-10-18. Everything below is merged to `main`; v3.0.0 is cut by the release PR (R-18).
 
 | Item | State | PR | Notes |
 |---|---|---|---|
@@ -57,11 +57,12 @@ Updated 2026-10-17. Merged to `main`; version stays 2.0.0 until R-18.
 | R-14 benchmark | Done | 220 | 10.6 ms per distinct address |
 | R-15 matcher index | Done | 221 | 84.5 s to 1.32 s for about 8,000 distinct addresses; output identical |
 | R-16a coverage floor, R-16b locked dependencies | Done | 222 | `pip-audit` workflow verified on GitHub |
-| R-19a boolean config fix | PR open | 215 | D-13: shipped `evidence` default is `false`, so no behaviour change |
-| R-19b environment variables and direnv template | Not started | | After 215 |
-| R-13 Markdown report | Not started | | After R-19b |
-| R-23 lock regeneration | Not started | | New; see below |
-| R-17 allocator consumer, R-18 release | Not started | | Maintainer / release |
+| R-19a boolean config fix | Done | 215 | D-13: shipped `evidence` default is `false`, so no behaviour change |
+| R-19b environment variables and direnv template | Done | 224 | Breaking: external IP now opt-in; ships in v3.0.0 |
+| R-13 Markdown report | Done | 225 | `run-report.md` is 26% of the JSON for the golden fixture |
+| R-23 lock-sync check | Done | 226 | Check only; regenerating locks stays a documented manual step |
+| R-18 release v3.0.0 | In progress | | Release PR, then the GitHub release |
+| R-17 allocator consumer | Not started | | Maintainer, cross-repository |
 
 ## Delivery rules for every item
 
