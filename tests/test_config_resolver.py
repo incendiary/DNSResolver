@@ -129,3 +129,81 @@ def test_resolvers_alias_maps_to_nameservers_with_config_fallback(tmp_path):
         f, {"nameservers": "9.9.9.9"}, ["--resolvers", "8.8.8.8"]
     )
     assert args.nameservers == "8.8.8.8"
+
+
+FLAGS = ("verbose", "extreme", "evidence")
+
+
+def _bool_args(tmp_path, config, argv=None):
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    return _parse_with_real_config(f, config, argv)
+
+
+def test_evidence_true_in_config_applies_without_flag(tmp_path):
+    """Regression: store_true defaults of False used to mask config.json."""
+    assert _bool_args(tmp_path, {"evidence": True}).evidence is True
+
+
+def test_no_evidence_beats_config_true(tmp_path):
+    args = _bool_args(tmp_path, {"evidence": True}, ["--no-evidence"])
+    assert args.evidence is False
+
+
+def test_evidence_flag_beats_config_false(tmp_path):
+    args = _bool_args(tmp_path, {"evidence": False}, ["--evidence"])
+    assert args.evidence is True
+
+
+def test_verbose_true_in_config_applies_without_flag(tmp_path):
+    assert _bool_args(tmp_path, {"verbose": True}).verbose is True
+
+
+def test_no_verbose_beats_config_true(tmp_path):
+    args = _bool_args(tmp_path, {"verbose": True}, ["--no-verbose"])
+    assert args.verbose is False
+
+
+def test_verbose_flag_beats_config_false(tmp_path):
+    args = _bool_args(tmp_path, {"verbose": False}, ["--verbose"])
+    assert args.verbose is True
+
+
+def test_extreme_true_in_config_applies_without_flag(tmp_path):
+    assert _bool_args(tmp_path, {"extreme": True}).extreme is True
+
+
+def test_no_extreme_beats_config_true(tmp_path):
+    args = _bool_args(tmp_path, {"extreme": True}, ["--no-extreme"])
+    assert args.extreme is False
+
+
+def test_extreme_flag_beats_config_false(tmp_path):
+    args = _bool_args(tmp_path, {"extreme": False}, ["--extreme"])
+    assert args.extreme is True
+
+
+def test_short_flags_still_work(tmp_path):
+    args = _bool_args(tmp_path, {}, ["-v", "-e"])
+    assert args.verbose is True and args.extreme is True
+
+
+def test_extreme_implies_verbose(tmp_path):
+    args = _bool_args(tmp_path, {"verbose": False}, ["--extreme"])
+    assert args.extreme is True and args.verbose is True
+
+
+def test_extreme_from_config_implies_verbose(tmp_path):
+    assert _bool_args(tmp_path, {"extreme": True}).verbose is True
+
+
+def test_boolean_flags_default_false_without_flag_or_config(tmp_path):
+    args = _bool_args(tmp_path, {})
+    assert [getattr(args, flag) for flag in FLAGS] == [False, False, False]
+
+
+def test_boolean_flags_default_false_when_config_unreadable(tmp_path):
+    f = tmp_path / "domains.txt"
+    f.write_text("")
+    args = _parse(f)
+    assert [getattr(args, flag) for flag in FLAGS] == [False, False, False]

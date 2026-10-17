@@ -15,6 +15,10 @@ class ConfigResolver:
         self.args = self._parse_args()
         self._validate_args()
         self._merge_config()
+        # Tri-state flags stay None until here so config.json can fill them.
+        for flag in ("verbose", "extreme", "evidence"):
+            if getattr(self.args, flag) is None:
+                setattr(self.args, flag, False)
         if self.args.extreme:
             self.args.verbose = True
 
@@ -48,13 +52,15 @@ class ConfigResolver:
         parser.add_argument(
             "--verbose",
             "-v",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
+            default=None,
             help="Enable verbose mode to display more information",
         )
         parser.add_argument(
             "--extreme",
             "-e",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
+            default=None,
             help="Enable extreme mode to display extensive information (including IP ranges)",
         )
         parser.add_argument(
@@ -87,7 +93,8 @@ class ConfigResolver:
         )
         parser.add_argument(
             "--evidence",
-            action="store_true",
+            action=argparse.BooleanOptionalAction,
+            default=None,
             help="Enable evidence collection for DNS queries (overrides config file)",
         )
         return parser.parse_args()
