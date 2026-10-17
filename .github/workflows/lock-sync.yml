@@ -30,9 +30,10 @@ jobs:
       - name: Check that each lock satisfies its input
         run: |
           status=0
+          tmp=$(mktemp -d)
           for name in requirements requirements-dev; do
-            sed -n 's/^\([A-Za-z0-9_.-]*==[^ ]*\).*/\1/p' "$name.lock" > "$RUNNER_TEMP/$name.constraints"
-            if ! pip install --dry-run --ignore-installed -r "$name.txt" -c "$RUNNER_TEMP/$name.constraints"; then
+            sed -n 's/^\([A-Za-z0-9_.-]*==[^ ]*\).*/\1/p' "$name.lock" > "$tmp/$name.constraints"
+            if ! pip install --dry-run --ignore-installed -r "$name.txt" -c "$tmp/$name.constraints"; then
               echo "::error::$name.lock does not satisfy $name.txt"
               status=1
             fi
