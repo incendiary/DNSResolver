@@ -13,7 +13,10 @@ from classes.allocator_contract import (
 from classes.custom_exceptions import OutputWriteError, ProviderCatalogueError
 from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
+from classes.markdown_report import render
 from classes.run_contract import (
+    REPORT_FILENAME,
+    _write_text_atomic,
     clear_run_documents,
     publish_dns_observations,
     publish_run_manifest,
@@ -47,9 +50,11 @@ async def run(env_manager):
     except Exception:
         try:
             clear_allocator_targets(env_manager.output_dir)
-            publish_dns_observations(env_manager.records, env_manager.output_dir)
+            observations = publish_dns_observations(
+                env_manager.records, env_manager.output_dir
+            )
             if set(catalogues) == {"aws", "gcp", "azure"}:
-                publish_run_manifest(
+                manifest = publish_run_manifest(
                     env_manager.output_dir,
                     run_id=run_id,
                     status="failed",
@@ -57,6 +62,7 @@ async def run(env_manager):
                     completed_at=_timestamp(datetime.now(timezone.utc)),
                     catalogues=catalogues,
                 )
+                _write_report(env_manager, [], observations, manifest)
         except Exception as contract_error:
             env_manager.log_error(
                 "Unable to publish failed run state: %s", contract_error
@@ -89,7 +95,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
             f"{name}: {catalogues[name].error or catalogues[name].status}"
             for name in unusable
         )
-        publish_dns_observations(
+        observations = publish_dns_observations(
             env_manager.records,
             env_manager.output_dir,
             provider_failures={
@@ -98,7 +104,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
             },
             hostnames=env_manager.domains,
         )
-        publish_run_manifest(
+        manifest = publish_run_manifest(
             env_manager.output_dir,
             run_id=run_id,
             status="incomplete",
@@ -106,6 +112,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
             completed_at=_timestamp(datetime.now(timezone.utc)),
             catalogues=catalogues,
         )
+        _write_report(env_manager, [], observations, manifest)
         raise ProviderCatalogueError(
             "Required provider catalogue(s) unavailable; no domains were processed "
             f"and no actionable results were published. {details}. Status: {status_path}"
@@ -182,7 +189,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
         "Published %d actionable target(s) to allocator-targets-v1.json",
         len(targets),
     )
-    publish_dns_observations(env_manager.records, env_manager.output_dir)
+    observations = publish_dns_observations(env_manager.records, env_manager.output_dir)
 
     RunSummary(env_manager.records, env_manager.output_dir, __version__).display(
         len(env_manager.domains), len(domains_to_process)
@@ -201,7 +208,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
                 "%s IPv6 Ranges: %s", label, catalogues[provider].ipv6_ranges
             )
 
-    publish_run_manifest(
+    manifest = publish_run_manifest(
         env_manager.output_dir,
         run_id=run_id,
         status="complete",
@@ -209,6 +216,21 @@ async def _run(env_manager, run_id, started_at, catalogues):
         completed_at=_timestamp(datetime.now(timezone.utc)),
         catalogues=catalogues,
     )
+    _write_report(env_manager, targets, observations, manifest)
+
+
+def _write_report(env_manager, targets, observations, manifest):
+    """Write run-report.md for --format md. A view: a failure here is logged, never raised."""
+    if env_manager.args.format != "md":
+        return
+    try:
+        _write_text_atomic(
+            render(targets, observations, manifest),
+            Path(env_manager.output_dir) / REPORT_FILENAME,
+            "run report",
+        )
+    except Exception as error:
+        env_manager.log_error("Unable to write %s: %s", REPORT_FILENAME, error)
 
 
 async def main_async():

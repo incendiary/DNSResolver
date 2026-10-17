@@ -158,7 +158,7 @@ def _compare(name, actual, expected_path):
     assert actual == expected_path.read_text(encoding="utf-8"), name
 
 
-async def test_golden_run(tmp_path, monkeypatch, capsys):
+async def _golden_run(tmp_path, monkeypatch, capsys, *extra_args):
     monkeypatch.chdir(tmp_path)  # setup_logger writes dnsresolver.log to cwd
     monkeypatch.setattr(
         sys,
@@ -176,6 +176,7 @@ async def test_golden_run(tmp_path, monkeypatch, capsys):
             "1",
             "--timeout",
             "5",
+            *extra_args,
         ],
     )
     labels = iter(range(1, 1000))
@@ -204,8 +205,11 @@ async def test_golden_run(tmp_path, monkeypatch, capsys):
         env_manager = EnvironmentManager()
         capsys.readouterr()  # discard the banner and effective configuration
         await resolver.run(env_manager)
+    return Path(env_manager.output_dir)
 
-    output_dir = Path(env_manager.output_dir)
+
+async def test_golden_run(tmp_path, monkeypatch, capsys):
+    output_dir = await _golden_run(tmp_path, monkeypatch, capsys)
     expected = GOLDEN / "expected"
     for expected_name, actual_name in PIPE_FILES.items():
         _compare(
@@ -216,9 +220,30 @@ async def test_golden_run(tmp_path, monkeypatch, capsys):
     for name in JSON_FILES:
         _compare(name, (output_dir / name).read_text(encoding="utf-8"), expected / name)
 
+    report = (output_dir / "run-report.md").read_text(encoding="utf-8")
+    _compare("run-report.md", report, expected / "run-report.md")
+    actionable = report.split("## Actionable targets")[1].split("\n## ")[0]
+    targets_json = (output_dir / "allocator-targets-v1.json").read_bytes()
+    assert len(actionable.encode()) * 2 <= len(targets_json)
+
     summary = (
         capsys.readouterr()
         .out.replace(str(output_dir), "<OUTPUT_DIR>")
         .replace(f"v{__version__}", "v<VERSION>")
     )
     _compare("console summary", summary, expected / "console_summary.txt")
+
+
+async def test_format_json_writes_no_report_and_identical_json(
+    tmp_path, monkeypatch, capsys
+):
+    (tmp_path / "md").mkdir()
+    (tmp_path / "json").mkdir()
+    md_dir = await _golden_run(tmp_path / "md", monkeypatch, capsys, "--format", "md")
+    json_dir = await _golden_run(
+        tmp_path / "json", monkeypatch, capsys, "--format", "json"
+    )
+    assert (md_dir / "run-report.md").exists()
+    assert not (json_dir / "run-report.md").exists()
+    for name in JSON_FILES:
+        assert (md_dir / name).read_bytes() == (json_dir / name).read_bytes(), name

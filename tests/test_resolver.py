@@ -182,3 +182,80 @@ async def test_run_aborts_before_publication_on_output_failure(run_environment):
     assert manifest["status"] == "failed"
     assert manifest["outputs"]["actionable_targets"] is None
     assert json.loads(stale_observations.read_text()) == []
+
+
+def _catalogue(provider, usable=True):
+    return ProviderCatalogue(
+        provider,
+        ["192.0.2.0/24"] if usable else [],
+        [],
+        {},
+        "complete" if usable else "failed",
+        usable,
+        f"https://example.com/{provider}.json",
+        "2026-01-01T00:00:00Z" if usable else None,
+        f"{provider}-1" if usable else None,
+        None if usable else "TLS failure",
+    )
+
+
+async def test_incomplete_run_writes_report_without_targets(run_environment):
+    run_environment.args.format = "md"
+    with (
+        patch(
+            "resolver.fetch_google_cloud_ip_ranges",
+            return_value=_catalogue("gcp", usable=False),
+        ),
+        patch("resolver.fetch_aws_ip_ranges", return_value=_catalogue("aws")),
+        patch("resolver.fetch_azure_ip_ranges", return_value=_catalogue("azure")),
+        pytest.raises(ProviderCatalogueError),
+    ):
+        await resolver.run(run_environment)
+    report = (Path(run_environment.output_dir) / "run-report.md").read_text()
+    assert report.splitlines()[0].startswith("# DNSResolver run: INCOMPLETE")
+    assert "## Actionable targets" not in report
+    assert "- example.com" in report
+
+
+async def test_report_failure_never_masks_the_original_exception(run_environment):
+    run_environment.args.format = "md"
+    failure = OutputWriteError("disk full")
+    with (
+        patch("resolver.fetch_google_cloud_ip_ranges", return_value=_catalogue("gcp")),
+        patch("resolver.fetch_aws_ip_ranges", return_value=_catalogue("aws")),
+        patch("resolver.fetch_azure_ip_ranges", return_value=_catalogue("azure")),
+        patch("resolver.DNSHandler"),
+        patch(
+            "resolver.process_domain_async",
+            new_callable=AsyncMock,
+            side_effect=failure,
+        ),
+        patch("resolver._write_text_atomic", side_effect=OSError("read-only")),
+        pytest.raises(OutputWriteError, match="disk full"),
+    ):
+        await resolver.run(run_environment)
+    manifest = json.loads(
+        (Path(run_environment.output_dir) / "run-manifest-v1.json").read_text()
+    )
+    assert manifest["status"] == "failed"
+    assert not (Path(run_environment.output_dir) / "run-report.md").exists()
+
+
+async def test_failed_run_report_says_failed_and_lists_no_targets(run_environment):
+    run_environment.args.format = "md"
+    with (
+        patch("resolver.fetch_google_cloud_ip_ranges", return_value=_catalogue("gcp")),
+        patch("resolver.fetch_aws_ip_ranges", return_value=_catalogue("aws")),
+        patch("resolver.fetch_azure_ip_ranges", return_value=_catalogue("azure")),
+        patch("resolver.DNSHandler"),
+        patch(
+            "resolver.process_domain_async",
+            new_callable=AsyncMock,
+            side_effect=OutputWriteError("disk full"),
+        ),
+        pytest.raises(OutputWriteError),
+    ):
+        await resolver.run(run_environment)
+    report = (Path(run_environment.output_dir) / "run-report.md").read_text()
+    assert report.splitlines()[0].startswith("# DNSResolver run: FAILED")
+    assert "## Actionable targets" not in report

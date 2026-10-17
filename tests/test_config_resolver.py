@@ -253,6 +253,7 @@ ENV_CASES = [
     ("verbose", "DNSRESOLVER_VERBOSE", "yes", True, False),
     ("evidence", "DNSRESOLVER_EVIDENCE", "1", True, False),
     ("record_external_ip", "DNSRESOLVER_RECORD_EXTERNAL_IP", "true", True, False),
+    ("format", "DNSRESOLVER_FORMAT", "json", "json", "md"),
 ]
 
 
@@ -355,6 +356,23 @@ def test_config_file_from_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("DNSRESOLVER_CONFIG_FILE", str(other))
     with patch("sys.argv", ["resolver.py", str(f)]):
         assert ConfigResolver().args.retries == 6
+
+
+def test_format_defaults_to_md_and_cli_beats_environment(tmp_path, monkeypatch):
+    assert _resolve(tmp_path).format == "md"
+    monkeypatch.setenv("DNSRESOLVER_FORMAT", "md")
+    assert _resolve(tmp_path, argv=["--format", "json"]).format == "json"
+
+
+def test_invalid_format_exits_naming_the_source(tmp_path, monkeypatch):
+    monkeypatch.setenv("DNSRESOLVER_FORMAT", "html")
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path)
+    assert "DNSRESOLVER_FORMAT" in str(exc.value)
+    monkeypatch.delenv("DNSRESOLVER_FORMAT")
+    with pytest.raises(SystemExit) as exc:
+        _resolve(tmp_path, {"format": "html"})
+    assert "format" in str(exc.value)
 
 
 def test_envrc_example_lists_exactly_the_variables_the_code_reads():

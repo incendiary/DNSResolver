@@ -81,6 +81,7 @@ remains; do not add Lambda-specific features.
 | `imports/cloud_service_provider_checks.py` | Matches resolved IPs to provider ranges; writes the handoff records |
 | `imports/domain_processor.py` | Per-domain orchestration |
 | `classes/run_summary.py` | End-of-run operator summary |
+| `classes/markdown_report.py` | `render(targets, observations, manifest)`: the `run-report.md` view, built only from the published JSON documents |
 
 Concurrency is `asyncio.gather` under a `Semaphore` (`--max-threads`). Failed domains are
 collected and retried up to `--retries` times.
@@ -114,6 +115,7 @@ consumed by other tooling — changing a format is a breaking change.**
 | `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — chain is the full CNAME path (`a -> b -> c`). Plus `NS_TAKEOVER\|origin\|domain\|nameserver`: `nameserver` is the NS host whose address lookup returned NXDOMAIN or SERVFAIL, or `-` where the name has NS records but no address records (no nameserver implicated). **Breaking:** NS_TAKEOVER went from 3 fields to 4 in v3.0.0. |
 | `csp_matches_*.txt` | One record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`, carrying the same `WILDCARD\|`/`WILDCARD_ZONE\|` prefix where it applies. |
 | `unresolved_results_*.txt` | Domains that failed all retries |
+| `run-report.md` | A view of the JSON documents, written when `--format` is `md` (the default). **Not a contract**: the layout may change without a major bump, and nothing may parse it. Never put anything in it that is not in the JSON |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status). `external_ip` is `null` unless `--record-external-ip` is set |
 | `evidence/dns/` | `dig`/`nslookup` capture per flagged domain, when evidence is enabled (`--evidence` or `"evidence": true` in `config.json`; off by default) |
 

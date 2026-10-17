@@ -11,11 +11,12 @@ CONTRACT_VERSION = "1.0"
 OBSERVATIONS_FILENAME = "dns-observations-v1.json"
 MANIFEST_FILENAME = "run-manifest-v1.json"
 TARGETS_FILENAME = "allocator-targets-v1.json"
+REPORT_FILENAME = "run-report.md"
 
 
 def clear_run_documents(output_dir):
     """Remove stale run documents and their temporary files."""
-    for filename in (OBSERVATIONS_FILENAME, MANIFEST_FILENAME):
+    for filename in (OBSERVATIONS_FILENAME, MANIFEST_FILENAME, REPORT_FILENAME):
         destination = Path(output_dir) / filename
         _remove_output(destination)
         _remove_output(destination.with_suffix(destination.suffix + ".tmp"))
@@ -138,13 +139,24 @@ def _merge_observation(grouped, hostname, kind, ips, reasons):
 
 
 def _write_json_atomic(document, destination, what="run document"):
+    def write(handle):
+        json.dump(document, handle, indent=2)
+        handle.write("\n")
+
+    _write_atomic(write, destination, what)
+
+
+def _write_text_atomic(text, destination, what="run document"):
+    _write_atomic(lambda handle: handle.write(text), destination, what)
+
+
+def _write_atomic(write, destination, what):
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     _remove_output(destination)
     _remove_output(temporary)
     try:
         with open(temporary, "w", encoding="utf-8") as handle:
-            json.dump(document, handle, indent=2)
-            handle.write("\n")
+            write(handle)
         os.replace(temporary, destination)
     except OSError as error:
         raise OutputWriteError(
