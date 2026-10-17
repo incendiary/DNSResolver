@@ -38,7 +38,7 @@ There are no open decisions.
 
 ## Progress
 
-Updated 2026-10-18. Everything below is merged to `main`; v3.0.0 is cut by the release PR (R-18).
+Updated 2026-10-18. Released as v3.0.0. Open: R-17 (allocator consumer validation, maintainer) and the unscheduled idea I-1.
 
 | Item | State | PR | Notes |
 |---|---|---|---|
@@ -61,7 +61,7 @@ Updated 2026-10-18. Everything below is merged to `main`; v3.0.0 is cut by the r
 | R-19b environment variables and direnv template | Done | 224 | Breaking: external IP now opt-in; ships in v3.0.0 |
 | R-13 Markdown report | Done | 225 | `run-report.md` is 26% of the JSON for the golden fixture |
 | R-23 lock-sync check | Done | 226 | Check only; regenerating locks stays a documented manual step |
-| R-18 release v3.0.0 | In progress | | Release PR, then the GitHub release |
+| R-18 release v3.0.0 | Done | 227 | Tagged and published 2026-10-18; verified with a real run before cutting |
 | R-17 allocator consumer | Not started | | Maintainer, cross-repository |
 
 ## Delivery rules for every item
