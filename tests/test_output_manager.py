@@ -60,11 +60,20 @@ def test_create_logs_error_on_failure(tmp_path):
 async def test_write_to_file_error_is_raised(tmp_path):
     om = OutputManager(str(tmp_path), "20260101_000000")
     target = str(tmp_path / "out.txt")
-    with patch("classes.output_manager.aiofiles.open", side_effect=OSError("boom")):
+    with patch("builtins.open", side_effect=OSError("boom")):
         with patch.object(om._logger, "error") as mock_error:
-            with pytest.raises(OutputWriteError, match="Failed to write"):
+            with pytest.raises(OutputWriteError) as raised:
                 await om.write_to_file(target, "some content")
             mock_error.assert_called_once()
+    assert str(raised.value) == f"Failed to write required output {target}: boom"
+
+
+@pytest.mark.asyncio
+async def test_write_to_file_unwritable_path_raises(tmp_path):
+    om = OutputManager(str(tmp_path), "20260101_000000")
+    target = str(tmp_path / "missing_dir" / "out.txt")
+    with pytest.raises(OutputWriteError, match="Failed to write required output"):
+        await om.write_to_file(target, "some content")
 
 
 @pytest.mark.asyncio

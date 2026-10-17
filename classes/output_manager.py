@@ -1,8 +1,6 @@
 import logging
 import os
 
-import aiofiles
-
 from classes.custom_exceptions import OutputWriteError
 
 
@@ -53,8 +51,8 @@ class OutputManager:
 
     async def write_to_file(self, file_path, content):
         try:
-            async with aiofiles.open(file_path, "a", encoding="utf-8") as f:
-                await f.write(content + "\n")
+            with open(file_path, "a", encoding="utf-8") as f:
+                f.write(content + "\n")
         except OSError as error:
             message = f"Failed to write required output {file_path}: {error}"
             self._logger.error(message)
