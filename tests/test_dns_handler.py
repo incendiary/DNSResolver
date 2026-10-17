@@ -1,15 +1,4 @@
-"""
-Tests for DNSHandler.
-
-Two new ideas appear here:
-
-1. Mocking network calls — instead of making real DNS queries we replace
-   aiodns.DNSResolver with a fake object whose responses we control.
-   This keeps tests fast, deterministic, and runnable offline.
-
-2. Async tests — any `async def test_*` function is run inside an asyncio
-   event loop automatically (configured via asyncio_mode = auto in pytest.ini).
-"""
+"""Tests for DNSHandler: resolution, error handling, constructor and categorisation."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
