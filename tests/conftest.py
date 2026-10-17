@@ -112,6 +112,7 @@ def mock_env_manager():
 
     # Structured records appended beside every write
     env.records = []
+    env._csp_written = set()
 
     # log_* are sync fire-and-forget calls — plain MagicMock is fine
     env.log_info = MagicMock()

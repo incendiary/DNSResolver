@@ -31,9 +31,11 @@ def _make_process(stdout=b"output", stderr=b""):
 def test_check_tools_finds_dig_on_unix():
     with (
         patch("classes.evidence_collector.platform.system", return_value="Linux"),
-        patch("classes.evidence_collector.subprocess.run") as mock_run,
+        patch(
+            "classes.evidence_collector.shutil.which",
+            return_value="/usr/bin/dig",
+        ),
     ):
-        mock_run.return_value.returncode = 0
         nslookup, dig = EvidenceCollector.check_tools_availability()
 
     assert dig is True
@@ -43,9 +45,8 @@ def test_check_tools_finds_dig_on_unix():
 def test_check_tools_missing_on_unix():
     with (
         patch("classes.evidence_collector.platform.system", return_value="Linux"),
-        patch("classes.evidence_collector.subprocess.run") as mock_run,
+        patch("classes.evidence_collector.shutil.which", return_value=None),
     ):
-        mock_run.return_value.returncode = 1
         nslookup, dig = EvidenceCollector.check_tools_availability()
 
     assert dig is False

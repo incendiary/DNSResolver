@@ -151,6 +151,7 @@ def test_construction_uses_mocked_external_ip_no_network(tmp_path):
 def test_construction_populates_patterns_and_config(tmp_path):
     mgr = _construct(tmp_path)
     assert mgr.patterns == {}
+    assert mgr._csp_written == set()
     assert mgr.max_threads == 2
     assert mgr.timeout == 1
     assert mgr.retries == 1

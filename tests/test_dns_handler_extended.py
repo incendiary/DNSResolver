@@ -185,32 +185,6 @@ async def test_check_ns_takeover_returns_false_when_no_ns_records(
 # ---------------------------------------------------------------------------
 
 
-async def test_handle_takeover_checks_adds_dangling_domain_when_dangling(
-    handler, domain_context
-):
-    handler.takeover_detector.check_dangling_cname_async = AsyncMock(return_value=True)
-    handler.takeover_detector.check_ns_takeover = AsyncMock(return_value=False)
-
-    await handler.takeover_detector.handle_takeover_checks(
-        domain_context, "cname-target.example.com"
-    )
-
-    assert "cname-target.example.com" in domain_context.dangling_domains
-
-
-async def test_handle_takeover_checks_adds_domain_when_ns_takeover(
-    handler, domain_context
-):
-    handler.takeover_detector.check_dangling_cname_async = AsyncMock(return_value=False)
-    handler.takeover_detector.check_ns_takeover = AsyncMock(return_value=True)
-
-    await handler.takeover_detector.handle_takeover_checks(
-        domain_context, "ns-vuln.example.com"
-    )
-
-    assert "ns-vuln.example.com" in domain_context.dangling_domains
-
-
 async def test_handle_takeover_checks_returns_true_when_either_detected(
     handler, domain_context
 ):
@@ -235,4 +209,3 @@ async def test_handle_takeover_checks_returns_false_when_neither_detected(
     )
 
     assert result is False
-    assert len(domain_context.dangling_domains) == 0

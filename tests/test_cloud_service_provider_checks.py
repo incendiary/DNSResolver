@@ -393,22 +393,20 @@ def test_perform_csp_checks_dedupes_across_calls_on_same_env_manager(tmp_path, c
     so the same match for the same domain is only written once."""
 
     class RealishEnvManager:
-        """A plain object (not a MagicMock) so hasattr() behaves normally —
-        MagicMock auto-creates attributes, which would hide a missing
-        lazy-init of _csp_written."""
+        """A plain object (not a MagicMock), so a missing attribute raises
+        instead of being auto-created. It sets _csp_written the way
+        EnvironmentManager.__init__ does."""
 
         def __init__(self, output_files):
             self.output_files = output_files
             self.records = []
+            self._csp_written = set()
 
     csp_file = tmp_path / "csp.txt"
     csp_file.touch()
     env_manager = RealishEnvManager({"standard": {"csp": str(csp_file)}})
 
-    assert not hasattr(env_manager, "_csp_written")
-
     first = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
-    assert hasattr(env_manager, "_csp_written")
     second = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
 
     assert first is True

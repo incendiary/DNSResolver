@@ -58,6 +58,7 @@ class EnvironmentManager:
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.domains = set()
         self.records = []
+        self._csp_written = set()
         self.patterns = None
         self.environment_info = {}
 

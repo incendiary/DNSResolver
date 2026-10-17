@@ -1,6 +1,7 @@
 import asyncio
 import os
 import platform
+import shutil
 import subprocess
 
 
@@ -24,18 +25,8 @@ class EvidenceCollector:
                 == 0
             )
         else:
-            nslookup_available = (
-                subprocess.run(
-                    ["which", "nslookup"], capture_output=True, text=True
-                ).returncode
-                == 0
-            )
-            dig_available = (
-                subprocess.run(
-                    ["which", "dig"], capture_output=True, text=True
-                ).returncode
-                == 0
-            )
+            nslookup_available = shutil.which("nslookup") is not None
+            dig_available = shutil.which("dig") is not None
 
         return nslookup_available, dig_available
 
