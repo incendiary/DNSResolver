@@ -42,16 +42,25 @@ Updated 2026-10-17. Merged to `main`; version stays 2.0.0 until R-18.
 | Item | State | PR | Notes |
 |---|---|---|---|
 | R-01 dependency batch | Done | 203 | Eight Dependabot PRs combined |
-| R-02 stale tool paths | Done | 206 | |
-| R-03 golden end-to-end test | Done | 206 | Extended in PR 212 with a multi-provider address |
+| R-02 stale tool paths, R-03 golden test | Done | 206 | Golden fixture extended in 212 |
 | R-04 remove Lambda stack | Done | 208 | Breaking; ships in v3.0.0 |
 | R-05a dead code, R-05b helper | Done | 209 | I-1 keeps the idea |
 | R-06 archive plan docs | Done | 210 | Also removed `get_config_file` |
-| R-07 catalogues directly, R-08 shared helpers, R-10 loader trim | Done | 211 | `_lines` helpers left separate (they differ) |
+| R-07, R-08, R-10 plumbing | Done | 211 | `_lines` helpers left separate (they differ) |
 | R-09 records in memory | Done | 212 | Net source +27 lines, not the -200 estimated; the gain is structural |
-| R-11a/b drop `requests`, `urllib3`, `aiofiles` | In progress | | |
-| R-12, R-22, R-21, R-20, R-19, R-13, R-14 to R-16 | Not started | | |
-| R-17, R-18 | Not started | | Maintainer / release |
+| R-11a/b drop `requests`, `urllib3`, `aiofiles` | Done | 214 | Runtime dependencies: 7 to 3 |
+| R-12 small simplifications | Done | 216 | |
+| R-22 deterministic output order | Done | 217 | Pipe files now sorted |
+| R-20 reorganise DNS tests | Done | 218 | 41 test bodies proven identical |
+| R-21 NS_TAKEOVER nameserver field | Done | 219 | Breaking; ships in v3.0.0 |
+| R-14 benchmark | Done | 220 | 10.6 ms per distinct address |
+| R-15 matcher index | Done | 221 | 84.5 s to 1.32 s for about 8,000 distinct addresses; output identical |
+| R-16a coverage floor, R-16b locked dependencies | Done | 222 | `pip-audit` workflow verified on GitHub |
+| R-19a boolean config fix | PR open, held | 215 | Waiting on the `evidence` default decision |
+| R-19b environment variables and direnv template | Not started | | After 215 |
+| R-13 Markdown report | Not started | | After R-19b |
+| R-23 lock regeneration | Not started | | New; see below |
+| R-17 allocator consumer, R-18 release | Not started | | Maintainer / release |
 
 ## Delivery rules for every item
 
@@ -817,6 +826,23 @@ them` (bundle with R-14 and R-16a).
 ---
 
 ## Phase 5: External
+
+### R-23 Keep the lock files current
+**Tier:** T2 (Sonnet). Why: CI and supply-chain behaviour; a wrong lock fails every build, but the `test` job proves it.
+**Depends on:** R-16b.
+**Files:** `.github/workflows/` (one new workflow or an edit to an existing one), `README.md`, possibly `.github/dependabot.yml`.
+**Context:** PR 222 added `requirements.lock` and `requirements-dev.lock`. Dependabot's pip ecosystem reads `requirements.txt` and `requirements-dev.txt` but not `.lock` files, so a Dependabot bump to an input file leaves the lock stale and CI keeps installing the old locked versions. Today regenerating is a manual step documented in the README.
+**Steps:**
+1. Check `.github/dependabot.yml` (or the Dependabot settings) and note which files it watches.
+2. Add a workflow that, on a Dependabot pull request touching `requirements*.txt`, runs `pip-compile --generate-hashes --strip-extras` for both locks on Python 3.12 and commits the result back to the PR branch (or fails the check with the exact command to run). Pin pip-tools exactly; SHA-pin every action as the other workflows do.
+3. Document the behaviour in the README "Reproducible installs" section.
+**Verify:**
+- Open a throwaway pull request that edits one input file's version floor and confirm the workflow regenerates the locks (or fails with the instruction).
+- Negative check: change an input file without regenerating the lock and confirm the check fails, then revert.
+- `test`, `gitleaks` and `trufflehog` still pass.
+**Do not:** auto-merge anything; give the workflow write access beyond the pull request branch; rename the `test`, `gitleaks` or `trufflehog` jobs; drop Dependabot.
+**Done when:** a Dependabot bump of an input file produces a pull request whose lock files are current, or a clear failing check.
+**PR:** `ci: keep the lock files in step with their inputs`
 
 ### R-17 Validate the real allocator consumer end to end
 **Owner:** maintainer (cross-repository).
