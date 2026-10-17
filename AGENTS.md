@@ -115,7 +115,7 @@ consumed by other tooling — changing a format is a breaking change.**
 | `csp_matches_*.txt` | One record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`, carrying the same `WILDCARD\|`/`WILDCARD_ZONE\|` prefix where it applies. |
 | `unresolved_results_*.txt` | Domains that failed all retries |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
-| `evidence/dns/` | `dig`/`nslookup` capture per flagged domain, when `--evidence` is set |
+| `evidence/dns/` | `dig`/`nslookup` capture per flagged domain, when evidence is enabled (`--evidence` or `"evidence": true` in `config.json`; off by default) |
 
 Line order in the four pipe files is sorted (by full line text) and stable: identical input
 yields byte-identical files under any hash seed or completion order. During a run lines are
