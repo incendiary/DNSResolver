@@ -14,6 +14,8 @@ Two new ideas appear here:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiodns
+import dns.exception
+import dns.resolver
 import pytest
 
 from classes.dns_constants import (
@@ -24,6 +26,7 @@ from classes.dns_constants import (
     is_dns_error_present,
 )
 from classes.dns_handler import DNSHandler
+from classes.domain_categoriser import DomainCategoriser
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -54,50 +57,8 @@ def dns_answer(ip):
     return answer
 
 
-# ---------------------------------------------------------------------------
-# Fixture: a DNSHandler with all external dependencies replaced by mocks
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-async def handler(mock_env_manager):
-    """
-    Build a DNSHandler without touching the network.
-
-    The fixture is async so it runs inside an event loop — required because
-    aiodns.DNSResolver() calls asyncio.get_event_loop() in its __init__.
-    We patch both it and EvidenceCollector so no real I/O happens, then
-    replace the resolvers with controllable AsyncMock / MagicMock objects.
-    """
-    with (
-        patch("classes.dns_handler.aiodns.DNSResolver"),
-        patch("classes.dns_handler.dns.resolver.Resolver"),
-        patch("classes.takeover_detector.EvidenceCollector"),
-    ):
-        h = DNSHandler(mock_env_manager)
-
-    # Replace with controllable fakes. TakeoverDetector was constructed with
-    # the original aiodns resolver reference, so reassign both to the same mock.
-    mock_aiodns = AsyncMock()
-    h.aiodns_resolver = mock_aiodns
-    h.dnspython_resolver = MagicMock()
-    h.takeover_detector.aiodns_resolver = mock_aiodns
-    return h
-
-
-@pytest.fixture
-def domain_context(mock_env_manager, catalogues):
-    """A minimal DomainProcessingContext."""
-    from classes.domain_processing_context import DomainProcessingContext
-
-    ctx = DomainProcessingContext(mock_env_manager, catalogues)
-    ctx.set_domain("example.com")
-    return ctx
-
-
-# ---------------------------------------------------------------------------
-# is_dns_error_present
-# ---------------------------------------------------------------------------
+def make_error(code):
+    return aiodns.error.DNSError(code, "test error")
 
 
 def test_is_dns_error_present_matches_correct_code():
@@ -108,11 +69,6 @@ def test_is_dns_error_present_matches_correct_code():
 def test_is_dns_error_present_no_match():
     error = make_timeout()
     assert is_dns_error_present(error, [NXDOMAIN, SERVFAIL]) is False
-
-
-# ---------------------------------------------------------------------------
-# resolve_domain_async — happy path
-# ---------------------------------------------------------------------------
 
 
 async def test_resolve_domain_async_success_returns_ips(handler, domain_context):
@@ -159,11 +115,6 @@ async def test_resolve_domain_async_makes_single_attempt(
     # A and AAAA are each queried exactly once — no retry loop in the handler.
     record_types = [c.args[1] for c in handler.aiodns_resolver.query.call_args_list]
     assert sorted(record_types) == ["A", "AAAA"]
-
-
-# ---------------------------------------------------------------------------
-# resolve_domain_async — AAAA / IPv6
-# ---------------------------------------------------------------------------
 
 
 async def test_resolve_domain_async_aaaa_only_host_is_resolved(handler, domain_context):
@@ -250,165 +201,177 @@ async def test_resolve_domain_async_non_dns_error_propagates(handler, domain_con
         await handler.resolve_domain_async(domain_context)
 
 
-# ---------------------------------------------------------------------------
-# check_dangling_cname_async
-# ---------------------------------------------------------------------------
+async def test_log_and_write_dns_error_writes_to_unresolved(handler, mock_env_manager):
+    error = Exception("timeout")
+    await handler.log_and_write_dns_error("fail.example.com", error)
 
-
-async def test_check_dangling_cname_not_dangling_has_a_record(handler, domain_context):
-    """
-    If the CNAME target resolves to an A record the domain is not dangling.
-
-    We set up query() to:
-      - raise NXDOMAIN for CNAME (no CNAME record, proceed to A/AAAA/MX check)
-      - return a real answer for A (domain still alive → not dangling)
-    """
-
-    async def query_side_effect(domain, record_type):
-        if record_type == "CNAME":
-            raise make_nxdomain()
-        if record_type == "A":
-            return [dns_answer("1.2.3.4")]
-        raise make_nxdomain()
-
-    handler.takeover_detector.aiodns_resolver.query = query_side_effect
-
-    result = await handler.takeover_detector.check_dangling_cname_async(
-        domain_context, "target.example.com"
-    )
-
-    assert result is False
-
-
-async def test_check_dangling_cname_is_dangling_no_records(
-    handler, domain_context, mock_env_manager
-):
-    """
-    A domain with a CNAME whose target has no A, AAAA, MX or NS record is
-    dangling. The handler should write to the takeover file and return True.
-
-    The CNAME is required: without one there is nothing to dangle, which is
-    covered by test_check_dangling_cname_nxdomain_without_cname_is_not_a_candidate.
-    """
-
-    async def query_side_effect(domain, record_type):
-        if record_type == "CNAME" and domain == "gone.example.com":
-            cname = MagicMock()
-            cname.cname = "unclaimed.example.net"
-            return cname
-        raise make_nxdomain()
-
-    handler.takeover_detector.aiodns_resolver.query = query_side_effect
-
-    result = await handler.takeover_detector.check_dangling_cname_async(
-        domain_context, "gone.example.com"
-    )
-
-    assert result is True
-    # Verify the result was written to the dangling output file
     mock_env_manager.write_to_file.assert_called_once()
-    call_args = mock_env_manager.write_to_file.call_args
-    assert "/tmp/test_takeover.txt" in call_args[0]
+    path, content = mock_env_manager.write_to_file.call_args[0]
+    assert "unresolved" in path
+    assert "fail.example.com" in content
 
 
-async def test_check_dangling_cname_self_referential_classified_as_misconfiguration(
+async def test_log_and_write_dns_error_includes_additional_message(
+    handler, mock_env_manager
+):
+    error = Exception("servfail")
+    await handler.log_and_write_dns_error(
+        "fail.example.com", error, "Could not contact DNS servers"
+    )
+
+    _path, content = mock_env_manager.write_to_file.call_args[0]
+    assert "Could not contact DNS servers" in content
+
+
+def test_constructor_applies_timeout_and_all_nameservers(mock_env_manager):
+    mock_env_manager.timeout = 7
+    mock_env_manager.nameservers = [" 192.0.2.53 ", "198.51.100.53"]
+
+    with (
+        patch("classes.dns_handler.aiodns.DNSResolver") as aiodns_resolver_class,
+        patch("classes.dns_handler.dns.resolver.Resolver") as dns_resolver_class,
+        patch("classes.takeover_detector.EvidenceCollector"),
+    ):
+        handler = DNSHandler(mock_env_manager)
+
+    expected_nameservers = ["192.0.2.53", "198.51.100.53"]
+    aiodns_resolver_class.assert_called_once_with(
+        timeout=7, nameservers=expected_nameservers
+    )
+    assert handler.dnspython_resolver is dns_resolver_class.return_value
+    assert handler.dnspython_resolver.timeout == 7
+    assert handler.dnspython_resolver.lifetime == 7
+    assert handler.dnspython_resolver.nameservers == expected_nameservers
+
+
+async def test_nxdomain_with_takeover_returns_true(handler, domain_context):
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=True)
+    error = make_error(NXDOMAIN)
+
+    result = await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", error, final_retry=False
+    )
+
+    assert result == (True, [])
+
+
+async def test_dnspython_success_preserves_addresses(handler, domain_context):
+    """When aiodns fails, fallback addresses remain available to the pipeline."""
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.dnspython_resolver.resolve = MagicMock(
+        side_effect=[["192.0.2.10"], ["2001:db8::10"]]
+    )
+    error = make_error(NXDOMAIN)
+
+    result = await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", error, final_retry=True
+    )
+
+    assert result == (True, ["192.0.2.10", "2001:db8::10"])
+    record_types = [
+        call.args[1] for call in handler.dnspython_resolver.resolve.call_args_list
+    ]
+    assert sorted(record_types) == ["A", "AAAA"]
+    handler.takeover_detector.handle_takeover_checks.assert_not_called()
+    domain_context.env_manager.write_to_file.assert_not_called()
+
+
+async def test_dnspython_noanswer_returns_false(handler, domain_context):
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.resolver.NoAnswer)
+    error = make_error(NXDOMAIN)
+
+    result = await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", error, final_retry=False
+    )
+
+    assert result == (False, [])
+
+
+async def test_dnspython_nxdomain_runs_takeover_check(handler, domain_context):
+    """A dnspython NXDOMAIN also triggers a takeover check."""
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.resolver.NXDOMAIN)
+    error = make_error(NXDOMAIN)
+
+    await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", error, final_retry=False
+    )
+
+    assert handler.takeover_detector.handle_takeover_checks.call_count == 1
+
+
+async def test_nonfinal_failure_does_not_write_unresolved(
     handler, domain_context, mock_env_manager
 ):
-    """
-    A CNAME pointing to itself is a misconfiguration, not a takeover risk.
-    It should be written with category 'self_referential', not 'unknown'.
-    """
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.exception.Timeout)
 
-    async def query_side_effect(domain, record_type):
-        if record_type == "CNAME":
-            cname = MagicMock()
-            # Target resolves back to the original domain (self-referential)
-            cname.cname = "example.com"
-            return cname
-        raise make_nxdomain()
-
-    handler.takeover_detector.aiodns_resolver.query = query_side_effect
-    domain_context.set_domain("example.com")
-
-    result = await handler.takeover_detector.check_dangling_cname_async(
-        domain_context, "example.com"
+    result = await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", make_error(TIMEOUT), final_retry=False
     )
 
-    assert result is True
-    call_args = mock_env_manager.write_to_file.call_args
-    written_line = call_args[0][1]
-    assert "self_referential" in written_line
-    assert "points to itself" in written_line
-
-
-async def test_check_dangling_cname_nxdomain_without_cname_is_not_a_candidate(
-    handler, domain_context, mock_env_manager
-):
-    """
-    A name that does not exist and has no CNAME is not a takeover candidate.
-
-    Nothing is dangling: there is no CNAME pointing at an unclaimed resource,
-    the name is simply absent from DNS. Reporting it as a candidate is a false
-    positive that buries real findings, so no takeover line may be written.
-    The caller still records the domain as unresolved.
-    """
-    handler.takeover_detector.aiodns_resolver.query = AsyncMock(
-        side_effect=make_nxdomain()
-    )
-    domain_context.set_domain("dead.example.com")
-
-    result = await handler.takeover_detector.check_dangling_cname_async(
-        domain_context, "dead.example.com"
-    )
-
-    assert result is False
+    assert result == (False, [])
     mock_env_manager.write_to_file.assert_not_called()
 
 
-async def test_check_dangling_cname_real_dangling_cname_still_flagged(
+async def test_servfail_final_retry_logs_contact_message(
     handler, domain_context, mock_env_manager
 ):
-    """
-    The complement of the test above: a domain whose CNAME target does not
-    resolve is still reported as a takeover candidate. This guards against the
-    no-CNAME fix suppressing genuine findings.
-    """
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.resolver.NoAnswer)
+    error = make_error(SERVFAIL)
 
-    async def query_side_effect(domain, record_type):
-        if record_type == "CNAME" and domain == "live.example.com":
-            cname = MagicMock()
-            cname.cname = "gone.cloudapp.net"
-            return cname
-        raise make_nxdomain()
-
-    handler.takeover_detector.aiodns_resolver.query = query_side_effect
-    domain_context.set_domain("live.example.com")
-
-    result = await handler.takeover_detector.check_dangling_cname_async(
-        domain_context, "live.example.com"
+    await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", error, final_retry=True
     )
 
-    assert result is True
-    written_line = mock_env_manager.write_to_file.call_args[0][1]
-    assert written_line.startswith("DANGLING|")
-    assert "gone.cloudapp.net" in written_line
+    calls = [str(c) for c in mock_env_manager.write_to_file.call_args_list]
+    assert any("Could not contact DNS servers" in c for c in calls)
 
 
-async def test_check_dangling_cname_timeout_is_not_dangling(handler, domain_context):
-    """
-    A timeout on A/AAAA/MX means we can't confirm the domain is gone.
-    We conservatively return False to avoid false positives.
-    """
+async def test_non_servfail_final_retry_logs_without_extra_message(
+    handler, domain_context, mock_env_manager
+):
+    handler.takeover_detector.handle_takeover_checks = AsyncMock(return_value=False)
+    handler.dnspython_resolver.resolve = MagicMock(side_effect=dns.resolver.NoAnswer)
+    error = make_error(NXDOMAIN)
 
-    async def query_side_effect(domain, record_type):
-        if record_type == "CNAME":
-            raise make_nxdomain()
-        raise make_timeout()  # all other record types time out
-
-    handler.takeover_detector.aiodns_resolver.query = query_side_effect
-
-    result = await handler.takeover_detector.check_dangling_cname_async(
-        domain_context, "slow.example.com"
+    await handler.handle_domain_resolution_errors(
+        domain_context, "example.com", error, final_retry=True
     )
 
-    assert result is False
+    mock_env_manager.write_to_file.assert_called_once()
+    _, content = mock_env_manager.write_to_file.call_args[0]
+    assert "Could not contact DNS servers" not in content
+
+
+def test_categorise_domain_matches_known_pattern():
+    patterns = {
+        "heroku": {
+            "regex": r"\.herokuapp\.com\.",
+            "recommendation": "Remove if dangling",
+            "evidence": "https://devcenter.heroku.com",
+        }
+    }
+    category, recommendation, _ = DomainCategoriser.categorise_domain(
+        "myapp.herokuapp.com.", patterns
+    )
+    assert category == "heroku"
+    assert recommendation == "Remove if dangling"
+
+
+def test_categorise_domain_returns_unknown_when_no_match():
+    category, recommendation, evidence = DomainCategoriser.categorise_domain(
+        "example.com",
+        {
+            "heroku": {
+                "regex": r"\.herokuapp\.com\.",
+                "recommendation": "",
+                "evidence": "",
+            }
+        },
+    )
+    assert category == "unknown"
+    assert recommendation == "Unclassified"
+    assert evidence == "N/A"
