@@ -8,7 +8,7 @@ _validate_args checks that the domains file exists on disk, so we use
 tmp_path to create a real (empty) file for each test.
 
 Only the --resolvers alias is tested here; the broader EnvironmentManager
-integration is covered in test_lambda_environment_manager.py.
+integration is covered in test_environment_manager.py.
 """
 
 from unittest.mock import patch

@@ -9,8 +9,7 @@ plan, the PR plan wins for that task only.
 
 - **Language/runtime:** Python 3.12. Native dep `pycares` (via `aiodns`) needs a C toolchain to
   build wheels — normally fine on macOS/Linux with prebuilt wheels.
-- **Entry points:** `resolver.py` (CLI) and `lambda_handler.py` (AWS Lambda). Both call the shared
-  `run()` in `resolver.py`.
+- **Entry point:** `resolver.py` (CLI), which calls the shared `run()` pipeline.
 - **Config:** `config.json` has two keys — `config` (defaults: timeout, retries, output dir) and
   `domain_categorisation` (60 regex patterns classifying dangling-CNAME targets). CLI flags override
   config values.
@@ -27,13 +26,9 @@ plan, the PR plan wins for that task only.
 cd /path/to/DNSResolver
 /opt/homebrew/bin/python3.12 -m venv .venv      # or any Python 3.12; DO NOT use a broken pyenv shim
 source .venv/bin/activate
-pip install -r requirements-dev.txt -r requirements-lambda.txt   # dev = runtime+ruff+pytest; lambda = +boto3
-python -c "import aiodns, dns, tqdm, boto3; print('deps OK')"
+pip install -r requirements-dev.txt   # runtime + ruff + pytest
+python -c "import aiodns, dns, tqdm; print('deps OK')"
 ```
-
-> **Why both files:** `requirements-lambda.txt` adds `boto3`. Without it, `tests/test_lambda_handler.py`
-> fails with `ModuleNotFoundError: No module named 'boto3'` — that is an environment gap, **not** a
-> code bug. CI installs both. Install both locally so your run matches CI.
 
 ## 2. Branch & commit discipline (devops-practices)
 

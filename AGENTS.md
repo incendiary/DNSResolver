@@ -61,17 +61,15 @@ they are accepted trade-offs, not bugs. See §7.
 ## 2. Architecture
 
 ```
-resolver.py            CLI entry point ────┐
-lambda_handler.py      Lambda entry point ─┴─► run(env_manager)  — shared async pipeline
+resolver.py            CLI entry point ───► run(env_manager)  — shared async pipeline
 ```
 
-The Lambda deployment idea is shelved. Keep the existing shared entry point working, but do
-not add Lambda-specific features or let Lambda constraints drive current design decisions.
+The Lambda entry point was removed (restorable from tag `v2.0.0`). The shared `run()` pipeline
+remains; do not add Lambda-specific features.
 
 | Module | Responsibility |
 |---|---|
 | `classes/environment_manager.py` | CLI environment: argparse glue, logging, domain file I/O. `fetch_external_ip()` is a module-level seam so the class can be built without a network. |
-| `classes/lambda_environment_manager.py` | Lambda environment: env vars, stdout logging, `/tmp` I/O |
 | `classes/config_resolver.py` | Parses CLI args, merges `config.json`. CLI always wins. |
 | `classes/output_manager.py` | Builds the timestamped output tree; async writes via `aiofiles` |
 | `classes/dns_handler.py` | Async resolution. Queries **A and AAAA concurrently**; a domain is unresolved only when *both* fail. aiodns primary, dnspython second opinion. |
@@ -138,12 +136,8 @@ interpreter:
 
 ```bash
 /opt/homebrew/bin/python3.12 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt -r requirements-lambda.txt
+.venv/bin/pip install -r requirements-dev.txt
 ```
-
-Install **both** requirements files. `requirements-lambda.txt` supplies `boto3`; without it
-the Lambda tests fail with `ModuleNotFoundError` — an environment gap, not a code bug. CI
-installs both.
 
 **Before pushing**, run CI locally. A fail-closed `pre-push` hook enforces this; the
 `pre-commit` slot chains gitleaks and ruff.

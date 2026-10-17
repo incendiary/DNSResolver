@@ -39,12 +39,8 @@ missing version. Use an explicit interpreter:
 
 ```bash
 /opt/homebrew/bin/python3.12 -m venv .venv        # any working Python 3.12 is fine
-.venv/bin/pip install -r requirements-dev.txt -r requirements-lambda.txt
+.venv/bin/pip install -r requirements-dev.txt
 ```
-
-Install **both** requirements files. `requirements-lambda.txt` supplies `boto3`; without it the
-Lambda tests fail with `ModuleNotFoundError`. That is an environment gap, not a code bug. CI
-installs both.
 
 Verify your environment reproduces the current state:
 
