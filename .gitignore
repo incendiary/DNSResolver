@@ -11,3 +11,6 @@ __pycache__/
 .idea/
 .azure_ip_cache.json
 .serena/
+
+.envrc
+.env
