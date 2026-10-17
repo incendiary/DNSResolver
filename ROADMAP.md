@@ -35,6 +35,24 @@ written as text and re-parsed), and **add a compact Markdown view** for agent an
 
 There are no open decisions.
 
+## Progress
+
+Updated 2026-10-17. Merged to `main`; version stays 2.0.0 until R-18.
+
+| Item | State | PR | Notes |
+|---|---|---|---|
+| R-01 dependency batch | Done | 203 | Eight Dependabot PRs combined |
+| R-02 stale tool paths | Done | 206 | |
+| R-03 golden end-to-end test | Done | 206 | Extended in PR 212 with a multi-provider address |
+| R-04 remove Lambda stack | Done | 208 | Breaking; ships in v3.0.0 |
+| R-05a dead code, R-05b helper | Done | 209 | I-1 keeps the idea |
+| R-06 archive plan docs | Done | 210 | Also removed `get_config_file` |
+| R-07 catalogues directly, R-08 shared helpers, R-10 loader trim | Done | 211 | `_lines` helpers left separate (they differ) |
+| R-09 records in memory | Done | 212 | Net source +27 lines, not the -200 estimated; the gain is structural |
+| R-11a/b drop `requests`, `urllib3`, `aiofiles` | In progress | | |
+| R-12, R-22, R-21, R-20, R-19, R-13, R-14 to R-16 | Not started | | |
+| R-17, R-18 | Not started | | Maintainer / release |
+
 ## Delivery rules for every item
 
 1. One item, one PR, branched from current `origin/main`: `git fetch origin && git checkout -b
