@@ -178,9 +178,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
             retries + 1,
         )
 
-    targets = publish_allocator_targets(
-        env_manager.output_files["standard"]["csp"], env_manager.output_dir
-    )
+    targets = publish_allocator_targets(env_manager.records, env_manager.output_dir)
     env_manager.log_info(
         "Published %d actionable target(s) to allocator-targets-v1.json",
         len(targets),

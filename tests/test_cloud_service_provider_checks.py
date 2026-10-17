@@ -243,6 +243,7 @@ def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager
     context.set_domain("api.example.com")
     output = tmp_path / "csp.txt"
     output.touch()
+    records = []
     wrote = log_and_write(
         "aws",
         {"192.0.2.10": {"192.0.2.0/24", "192.0.2.0/25"}},
@@ -250,7 +251,7 @@ def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager
         {"standard": {"csp": str(output)}},
         context,
         set(),
-        [],
+        records,
     )
     assert wrote is True
     assert output.read_text().splitlines() == [
@@ -259,7 +260,7 @@ def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager
         "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/25|ap-southeast-1",
     ]
 
-    targets = publish_allocator_targets(output, tmp_path)
+    targets = publish_allocator_targets(records, tmp_path)
     assert targets[0]["services"] == ["AMAZON", "EC2"]
     assert targets[0]["prefixes"] == ["192.0.2.0/24", "192.0.2.0/25"]
 
