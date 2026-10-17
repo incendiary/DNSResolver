@@ -207,3 +207,18 @@ def test_boolean_flags_default_false_when_config_unreadable(tmp_path):
     f.write_text("")
     args = _parse(f)
     assert [getattr(args, flag) for flag in FLAGS] == [False, False, False]
+
+
+def test_shipped_config_leaves_evidence_verbose_and_extreme_off():
+    # The committed defaults must stay quiet: evidence capture is opt-in.
+    import json
+    import os
+
+    path = os.path.join(os.path.dirname(__file__), "..", "config.json")
+    with open(path, encoding="utf-8") as handle:
+        config = json.load(handle)["config"]
+    assert (config["evidence"], config["verbose"], config["extreme"]) == (
+        False,
+        False,
+        False,
+    )
