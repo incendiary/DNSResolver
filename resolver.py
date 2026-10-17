@@ -156,7 +156,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
                 )
                 failed.append(domain)
                 continue
-            success, _final_ips, _dangling = result
+            success, _final_ips = result
             if not success:
                 failed.append(domain)
         domains_to_process = failed

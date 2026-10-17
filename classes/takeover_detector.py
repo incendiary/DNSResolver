@@ -71,8 +71,6 @@ class TakeoverDetector:
         self.env_manager.log_info(
             f"NS takeover check for {current_domain}: {is_nstakeover}"
         )
-        if is_dangling or is_nstakeover:
-            domain_context.add_dangling_domain_to_domains(current_domain)
         return is_dangling or is_nstakeover
 
     async def check_dangling_cname_async(

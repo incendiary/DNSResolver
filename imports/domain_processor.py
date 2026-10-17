@@ -49,4 +49,4 @@ async def process_domain_async(
         f"Finished processing domain: {domain_context.get_domain()}"
     )
 
-    return success, final_ips, domain_context.dangling_domains
+    return success, final_ips
