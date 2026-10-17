@@ -125,12 +125,3 @@ class WildcardDetector:
         if resolved_ips and set(resolved_ips).issubset(wildcard):
             return "WILDCARD"
         return "WILDCARD_ZONE"
-
-    async def is_wildcard_resolution(self, domain, resolved_ips):
-        """
-        True only for a confirmed catch-all answer.
-
-        Retained for callers that want the high-confidence signal alone; prefer
-        `classify` where the zone-level fact also matters.
-        """
-        return await self.classify(domain, resolved_ips) == "WILDCARD"

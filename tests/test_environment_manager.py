@@ -87,24 +87,6 @@ def test_load_patterns_malformed_json(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# get_random_nameserver
-# ---------------------------------------------------------------------------
-
-
-def test_get_random_nameserver_returns_one_of_configured():
-    mgr = EnvironmentManager.__new__(EnvironmentManager)
-    mgr.nameservers = ["8.8.8.8", "1.1.1.1"]
-    result = mgr.get_random_nameserver()
-    assert result in mgr.nameservers
-
-
-def test_get_random_nameserver_none_when_unset():
-    mgr = EnvironmentManager.__new__(EnvironmentManager)
-    mgr.nameservers = None
-    assert mgr.get_random_nameserver() is None
-
-
-# ---------------------------------------------------------------------------
 # set_domains
 # ---------------------------------------------------------------------------
 

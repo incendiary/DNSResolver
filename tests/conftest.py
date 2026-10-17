@@ -78,7 +78,6 @@ def mock_env_manager():
     env = MagicMock()
 
     # DNS / resolver config — direct attribute access (no getters)
-    env.get_random_nameserver.return_value = None  # method with logic, kept as method
     env.nameservers = ["8.8.8.8"]
     env.retries = 2
     env.timeout = 5
