@@ -161,6 +161,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `allocator-targets-v1.json` | Versioned provider-aware allocator handoff. Groups service, prefix, and border-group metadata per provider/hostname/address/region and excludes wildcard observations; one address may produce multiple records when a provider publishes multiple regions. |
 | `dns-observations-v1.json` | Versioned excluded-observation feed for wildcard, dangling CNAME, NS, unresolved, and provider-catalogue-incomplete results. |
 | `run-manifest-v1.json` | Final completion marker recording run status, provider catalogue provenance, and the published contract documents. |
+| `run-report.md` | A compact Markdown view of the three JSON documents above (actionable targets by provider and region, excluded observations by kind, provider catalogues), written when `--format` is `md` (the default). Not a contract: the layout may change without a major version bump, and nothing should parse it. Where the run is `incomplete` or `failed`, the first line says so and there is no targets section. |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `provider_catalogues.json` | AWS, GCP, and Azure catalogue status, source, retrieval time, snapshot identifier, and any failure reason |
 | `{provider}_ip_ranges.json` | Validated provider ranges and provenance used by this run, from either a live source or a fresh cache |
@@ -185,6 +186,7 @@ resolver.py              — CLI entry point → run(env_manager)
 ├── DomainProcessingContext  — per-domain state (domain name, resolver, provider catalogues)
 ├── DomainCategoriser        — regex-based classification of dangling CNAME targets
 ├── run_contract.py          — excluded-observation and final run-manifest publisher
+├── markdown_report.py       — run-report.md, a Markdown view rendered from the published JSON
 └── domain_processor.py     — orchestrates DNS → CSP checks per domain
 ```
 
