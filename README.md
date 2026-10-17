@@ -116,7 +116,7 @@ The tool reads environment variables only and never parses `.envrc` itself. To l
 cp .envrc.example .envrc && direnv allow
 ```
 
-Without direnv, use `set -a; . ./.envrc; set +a`, or set the variables in CI. `.envrc` and `.env` are ignored by Git. The tool has no secrets, so the template holds none. `config.json` remains the home for defaults and for `domain_categorisation`.
+Uncomment a line to use it and keep its `export`: direnv evaluates `.envrc` as shell, and only exported variables reach the tool. Without direnv, use `set -a; . ./.envrc; set +a`, or set the variables in CI. `.envrc` and `.env` are ignored by Git. The tool has no secrets, so the template holds none. `config.json` remains the home for defaults and for `domain_categorisation`.
 
 The external IP lookup is off by default: `environment_results_*.json` records `"external_ip": null` unless `--record-external-ip` (or `DNSRESOLVER_RECORD_EXTERNAL_IP`) is set. This is a documented change shipping in v3.0.0.
 

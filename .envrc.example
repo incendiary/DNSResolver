@@ -1,32 +1,34 @@
 # Copy to .envrc, then run: direnv allow
 #
-# Every variable is optional and commented out at its default. This tool has
+# Every variable is optional and commented out at its default. Uncomment a line
+# to use it and keep the `export`: direnv evaluates this file as shell, and only
+# exported variables reach the tool. This tool has
 # no secrets. Precedence: command-line flag, then these variables, then the
 # "config" block of config.json, then the built-in default.
 # Booleans accept 1/true/yes/on and 0/false/no/off (case-insensitive); any
 # other value is an error. Integers must parse. Empty means unset.
 
 # Domains file, one per line (required here or on the command line; no default).
-# DNSRESOLVER_DOMAINS_FILE=
+# export DNSRESOLVER_DOMAINS_FILE=
 # Directory for timestamped results (config.json default: output).
-# DNSRESOLVER_OUTPUT_DIR=output
+# export DNSRESOLVER_OUTPUT_DIR=output
 # Comma-separated resolvers for all queries (config.json default: 1.1.1.1,8.8.8.8).
-# DNSRESOLVER_NAMESERVERS=1.1.1.1,8.8.8.8
+# export DNSRESOLVER_NAMESERVERS=1.1.1.1,8.8.8.8
 # Maximum concurrent domain tasks (config.json default: 2).
-# DNSRESOLVER_MAX_THREADS=2
+# export DNSRESOLVER_MAX_THREADS=2
 # DNS query timeout in seconds (config.json default: 1).
-# DNSRESOLVER_TIMEOUT=1
+# export DNSRESOLVER_TIMEOUT=1
 # Retry attempts for failed domains (config.json default: 2).
-# DNSRESOLVER_RETRIES=2
+# export DNSRESOLVER_RETRIES=2
 # Verbose logging (default: false).
-# DNSRESOLVER_VERBOSE=false
+# export DNSRESOLVER_VERBOSE=false
 # Extreme logging, includes IP range dumps and implies verbose (default: false).
-# DNSRESOLVER_EXTREME=false
+# export DNSRESOLVER_EXTREME=false
 # Save dig/nslookup output for flagged domains (default: false).
-# DNSRESOLVER_EVIDENCE=false
+# export DNSRESOLVER_EVIDENCE=false
 # Path to the configuration file (default: config.json).
-# DNSRESOLVER_CONFIG_FILE=config.json
+# export DNSRESOLVER_CONFIG_FILE=config.json
 # Look up and record this host's external IP in the environment results (default: false).
-# DNSRESOLVER_RECORD_EXTERNAL_IP=false
+# export DNSRESOLVER_RECORD_EXTERNAL_IP=false
 # Report format: md also writes run-report.md next to the JSON documents, json skips it (default: md).
-# DNSRESOLVER_FORMAT=md
+# export DNSRESOLVER_FORMAT=md
