@@ -67,6 +67,12 @@ pip-compile --strip-extras --generate-hashes --output-file requirements.lock req
 pip-compile --strip-extras --generate-hashes --output-file requirements-dev.lock requirements-dev.txt
 ```
 
+Dependabot edits the input files only; it does not regenerate the locks. A pull request that
+changes an input file so that its lock can no longer satisfy it fails the `lock-sync` check
+(`.github/workflows/lock-sync.yml`). The check only reads: it resolves each input against its
+lock without installing and, on failure, prints the commands above. Run them and commit the
+regenerated locks to the same branch.
+
 Review lock diffs like code: a changed hash on an unchanged version is a red flag. A weekly
 workflow (`.github/workflows/pip-audit.yml`) runs `pip-audit` against the lock and fails on
 known vulnerabilities.
