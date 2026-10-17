@@ -152,13 +152,6 @@ class FakeDnspython:
         raise dns.resolver.NXDOMAIN()
 
 
-def _ordered_domains(self):
-    # Production uses a set, whose order varies per process. One worker plus
-    # file order makes the write order, and so every output byte, reproducible.
-    with open(self.domains_file, encoding="utf-8") as handle:
-        self.domains = self.clean_domains(handle.read().splitlines())
-
-
 def _compare(name, actual, expected_path):
     if os.environ.get("UPDATE_GOLDEN"):
         expected_path.write_text(actual, encoding="utf-8")
@@ -206,7 +199,6 @@ async def test_golden_run(tmp_path, monkeypatch, capsys):
             side_effect=lambda: UUID(int=next(labels)),
         ),
         patch("resolver._timestamp", side_effect=lambda _value: next(timestamps)),
-        patch.object(EnvironmentManager, "set_domains", _ordered_domains),
     ):
         clock.now.return_value.strftime.return_value = STAMP
         env_manager = EnvironmentManager()

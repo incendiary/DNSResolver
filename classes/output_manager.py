@@ -57,3 +57,16 @@ class OutputManager:
             message = f"Failed to write required output {file_path}: {error}"
             self._logger.error(message)
             raise OutputWriteError(message) from error
+
+
+def write_sorted_atomic(path, lines):
+    """Replace `path` with `lines` in sorted order, via a temporary file."""
+    temporary = f"{path}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as f:
+            f.writelines(f"{line}\n" for line in sorted(lines))
+        os.replace(temporary, path)
+    except OSError as error:
+        raise OutputWriteError(
+            f"Failed to write required output {path}: {error}"
+        ) from error
