@@ -19,6 +19,7 @@ OPTIONS = {
     "extreme": ("DNSRESOLVER_EXTREME", bool),
     "evidence": ("DNSRESOLVER_EVIDENCE", bool),
     "config_file": ("DNSRESOLVER_CONFIG_FILE", str),
+    "record_external_ip": ("DNSRESOLVER_RECORD_EXTERNAL_IP", bool),
 }
 
 _TRUE = ("1", "true", "yes", "on")
@@ -164,6 +165,13 @@ class ConfigResolver:
             action=argparse.BooleanOptionalAction,
             default=None,
             help="Enable evidence collection for DNS queries (overrides config file)",
+        )
+        parser.add_argument(
+            "--record-external-ip",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="Look up and record this host's external IP in the environment "
+            "results (default: off)",
         )
         return parser.parse_args()
 
