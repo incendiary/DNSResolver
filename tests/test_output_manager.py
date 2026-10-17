@@ -114,7 +114,7 @@ def test_sort_pipe_files_orders_by_line_whatever_the_write_order(tmp_path):
         Dangling("z.example.com", "t", "c", "r", "e", 1, "z -> t"),
         Resolution("a.example.com", ("192.0.2.1",)),
         Unresolved("m.example.com", "NXDOMAIN"),
-        NsTakeover("z.example.com", "ns.example.com"),
+        NsTakeover("z.example.com", "z.example.com", "ns.example.com"),
         CspMatch("z.example.com", "1", "aws", "r", "s", "p", "g"),
         Unresolved("b.example.com", "NXDOMAIN"),
         CspMatch("a.example.com", "1", "aws", "r", "s", "p", "g"),
@@ -138,7 +138,7 @@ def test_sort_pipe_files_orders_by_line_whatever_the_write_order(tmp_path):
     assert first["takeover"] == [
         "DANGLING|a.example.com|t|c|r|e|1|a -> t",
         "DANGLING|z.example.com|t|c|r|e|1|z -> t",
-        "NS_TAKEOVER|z.example.com|ns.example.com",
+        "NS_TAKEOVER|z.example.com|z.example.com|ns.example.com",
     ]
     assert [line.split("|")[0] for line in first["csp"]] == [
         "a.example.com",

@@ -60,7 +60,7 @@ def test_publisher_excludes_wildcard_records_and_deduplicates(tmp_path):
         match(),
         match(wildcard="WILDCARD"),
         match(wildcard="WILDCARD_ZONE"),
-        NsTakeover("api.example.com", "ns.example.net"),
+        NsTakeover("api.example.com", "api.example.com", "ns.example.net"),
     ]
 
     targets = publish_allocator_targets(records, tmp_path)
