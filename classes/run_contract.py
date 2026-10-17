@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from classes.custom_exceptions import OutputWriteError
+from classes.records import Dangling, NsTakeover, Resolution, Unresolved
 
 CONTRACT_VERSION = "1.0"
 OBSERVATIONS_FILENAME = "dns-observations-v1.json"
@@ -21,62 +22,46 @@ def clear_run_documents(output_dir):
 
 
 def publish_dns_observations(
-    output_files,
+    records,
     output_dir,
     provider_failures=None,
     hostnames=None,
 ):
-    """Build the excluded-observation contract from the run's text outputs."""
+    """Build the excluded-observation contract from the run's records."""
     grouped = {}
-    standard = output_files.get("standard", {})
 
-    for line in _lines(standard.get("resolved")):
-        if line.startswith("WILDCARD|"):
-            _add_observation(
-                grouped,
-                line,
-                "WILDCARD",
-                "wildcard",
-                "DNS answer matched the zone wildcard probe",
-            )
-        elif line.startswith("WILDCARD_ZONE|"):
-            _add_observation(
-                grouped,
-                line,
-                "WILDCARD_ZONE",
-                "wildcard_zone",
-                "Parent zone answered random-label probes",
-            )
-
-    for line in _lines(standard.get("takeover")):
-        fields = line.split("|")
-        if line.startswith("DANGLING|") and len(fields) >= 3:
+    for record in records:
+        if isinstance(record, Resolution):
+            if record.wildcard == "WILDCARD":
+                kind, reason = "wildcard", "DNS answer matched the zone wildcard probe"
+            elif record.wildcard == "WILDCARD_ZONE":
+                kind, reason = (
+                    "wildcard_zone",
+                    "Parent zone answered random-label probes",
+                )
+            else:
+                continue
+            _merge_observation(grouped, record.domain, kind, record.ips, [reason])
+        elif isinstance(record, Dangling):
             _merge_observation(
                 grouped,
-                fields[1],
+                record.origin,
                 "dangling_cname",
                 [],
-                [f"CNAME target did not resolve: {fields[2]}"],
+                [f"CNAME target did not resolve: {record.target}"],
             )
-        elif line.startswith("NS_TAKEOVER|") and len(fields) >= 3:
+        elif isinstance(record, NsTakeover):
             _merge_observation(
                 grouped,
-                fields[1],
+                record.origin,
                 "ns_takeover",
                 [],
-                [f"Nameserver did not resolve: {fields[2]}"],
+                [f"Nameserver did not resolve: {record.domain}"],
             )
-        else:
-            raise ValueError("Malformed takeover observation output")
-
-    unresolved_prefix = "DNS resolution error for "
-    for line in _lines(standard.get("unresolved")):
-        if not line.startswith(unresolved_prefix):
-            raise ValueError("Malformed unresolved observation output")
-        hostname, separator, reason = line[len(unresolved_prefix) :].partition(": ")
-        if not separator or not hostname or not reason:
-            raise ValueError("Malformed unresolved observation output")
-        _merge_observation(grouped, hostname, "unresolved", [], [reason])
+        elif isinstance(record, Unresolved):
+            _merge_observation(
+                grouped, record.domain, "unresolved", [], [record.reason]
+            )
 
     if provider_failures:
         reasons = [
@@ -142,29 +127,10 @@ def publish_run_manifest(
     return manifest
 
 
-def _add_observation(grouped, line, marker, kind, reason):
-    fields = line.split("|")
-    if len(fields) < 3 or fields[0] != marker or not fields[1]:
-        raise ValueError(f"Malformed {kind} observation output")
-    _merge_observation(grouped, fields[1], kind, fields[2:], [reason])
-
-
 def _merge_observation(grouped, hostname, kind, ips, reasons):
     entry = grouped.setdefault((hostname, kind), {"ips": set(), "reasons": set()})
     entry["ips"].update(ip for ip in ips if ip)
     entry["reasons"].update(reason for reason in reasons if reason)
-
-
-def _lines(path):
-    if not path:
-        return []
-    try:
-        with open(path, encoding="utf-8") as handle:
-            return [line.strip() for line in handle if line.strip()]
-    except OSError as error:
-        raise ValueError(
-            f"Unable to read observation output {path}: {error}"
-        ) from error
 
 
 def _write_json_atomic(document, destination, what="run document"):

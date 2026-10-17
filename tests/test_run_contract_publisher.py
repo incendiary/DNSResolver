@@ -6,6 +6,13 @@ import pytest
 from jsonschema import Draft202012Validator, FormatChecker
 
 from classes.custom_exceptions import OutputWriteError
+from classes.records import (
+    CspMatch,
+    Dangling,
+    NsTakeover,
+    Resolution,
+    Unresolved,
+)
 from classes.run_contract import publish_dns_observations, publish_run_manifest
 from imports.cloud_ip_ranges import ProviderCatalogue
 
@@ -18,28 +25,34 @@ MANIFEST_SCHEMA = json.loads(
 )
 
 
-def _output_files(tmp_path):
-    files = {
-        "resolved": (
-            "WILDCARD|wild.example.com|192.0.2.10\n"
-            "WILDCARD_ZONE|rotating.example.com|192.0.2.20|2001:db8::20\n"
-            "ordinary.example.com|192.0.2.30\n"
+def _records():
+    return [
+        Resolution("wild.example.com", ("192.0.2.10",), "WILDCARD"),
+        Resolution(
+            "rotating.example.com", ("192.0.2.20", "2001:db8::20"), "WILDCARD_ZONE"
         ),
-        "unresolved": (
-            "DNS resolution error for missing.example.com: query timed out\n"
+        Resolution("ordinary.example.com", ("192.0.2.30",)),
+        Unresolved("missing.example.com", "query timed out"),
+        Dangling(
+            "old.example.com",
+            "missing.example.net",
+            "unknown",
+            "Review it",
+            "N/A",
+            1,
+            "old.example.com -> missing.example.net",
         ),
-        "takeover": (
-            "DANGLING|old.example.com|missing.example.net|unknown|Review it|N/A|1|old.example.com -> missing.example.net\n"
-            "NS_TAKEOVER|delegated.example.com|ns1.missing.example.net\n"
+        NsTakeover("delegated.example.com", "ns1.missing.example.net"),
+        CspMatch(
+            "ordinary.example.com",
+            "192.0.2.30",
+            "aws",
+            "r",
+            "s",
+            "192.0.2.0/24",
+            "r",
         ),
-        "csp": "",
-    }
-    paths = {}
-    for name, content in files.items():
-        path = tmp_path / f"{name}.txt"
-        path.write_text(content, encoding="utf-8")
-        paths[name] = str(path)
-    return {"standard": paths}
+    ]
 
 
 def _catalogue(provider, usable=True):
@@ -59,7 +72,7 @@ def _catalogue(provider, usable=True):
 
 def test_observation_publisher_retains_every_excluded_kind(tmp_path):
     observations = publish_dns_observations(
-        _output_files(tmp_path),
+        _records(),
         tmp_path,
         provider_failures={"gcp": "catalogue unavailable"},
         hostnames=["ordinary.example.com"],
@@ -121,7 +134,15 @@ def test_observation_publication_failure_removes_stale_and_temporary_files(tmp_p
         patch("classes.run_contract.os.replace", side_effect=OSError("read only")),
         pytest.raises(OutputWriteError, match="Unable to publish run document"),
     ):
-        publish_dns_observations(_output_files(tmp_path), tmp_path)
+        publish_dns_observations(_records(), tmp_path)
 
     assert not destination.exists()
     assert not temporary.exists()
+
+
+def test_unresolved_observation_keeps_the_additional_suffix_in_its_reason(tmp_path):
+    records = [Unresolved("a.example.com", "(2, 'x')", "Could not contact DNS servers")]
+
+    observations = publish_dns_observations(records, tmp_path)
+
+    assert observations[0]["reasons"] == ["(2, 'x')|Could not contact DNS servers"]
