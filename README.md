@@ -47,6 +47,30 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+### Reproducible installs (locked dependencies)
+
+Output files are interfaces for other tooling, so CI installs from hash-locked files rather
+than the `>=` floors in `requirements.txt`. The lock pins every transitive package to an exact
+version and SHA-256 hashes, so a republished or tampered package fails the install.
+
+```bash
+pip install --require-hashes -r requirements.lock        # runtime only
+pip install --require-hashes -r requirements-dev.lock    # runtime plus test and lint tools
+```
+
+`requirements.txt` and `requirements-dev.txt` stay the human-edited inputs. Regenerate the
+locks after editing them, using Python 3.12 (the version CI runs) in a throwaway venv:
+
+```bash
+pip install pip-tools
+pip-compile --strip-extras --generate-hashes --output-file requirements.lock requirements.txt
+pip-compile --strip-extras --generate-hashes --output-file requirements-dev.lock requirements-dev.txt
+```
+
+Review lock diffs like code: a changed hash on an unchanged version is a red flag. A weekly
+workflow (`.github/workflows/pip-audit.yml`) runs `pip-audit` against the lock and fails on
+known vulnerabilities.
+
 ## Usage
 
 ```bash
