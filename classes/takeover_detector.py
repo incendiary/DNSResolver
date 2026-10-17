@@ -5,6 +5,7 @@ import aiodns
 from classes.dns_constants import NO_DATA, NXDOMAIN, SERVFAIL, is_dns_error_present
 from classes.domain_categoriser import DomainCategoriser
 from classes.evidence_collector import EvidenceCollector
+from classes.records import Dangling, NsTakeover
 
 MAX_CNAME_DEPTH = 20
 
@@ -42,9 +43,10 @@ class TakeoverDetector:
                     await self.aiodns_resolver.query(ns_domain, "A")
                 except aiodns.error.DNSError as e:
                     if is_dns_error_present(e, [NXDOMAIN, SERVFAIL]):
+                        record = NsTakeover(original_domain, domain)
+                        self.env_manager.records.append(record)
                         await self.env_manager.write_to_file(
-                            output_files["standard"]["takeover"],
-                            f"NS_TAKEOVER|{original_domain}|{domain}",
+                            output_files["standard"]["takeover"], record.pipe()
                         )
                         self.env_manager.log_info(
                             f"NS takeover possible for domain {domain}"
@@ -132,9 +134,10 @@ class TakeoverDetector:
 
         try:
             await self.aiodns_resolver.query(current_domain, "NS")
+            record = NsTakeover(original_domain, current_domain)
+            self.env_manager.records.append(record)
             await self.env_manager.write_to_file(
-                output_files["standard"]["takeover"],
-                f"NS_TAKEOVER|{original_domain}|{current_domain}",
+                output_files["standard"]["takeover"], record.pipe()
             )
             self.env_manager.log_info(
                 f"NS takeover possible for domain {current_domain}"
@@ -168,9 +171,18 @@ class TakeoverDetector:
                 DomainCategoriser.categorise_domain(current_domain, patterns)
             )
         chain_str = " -> ".join(h.rstrip(".") for h in chain)
+        record = Dangling(
+            original_domain,
+            current_domain,
+            category,
+            recommendation,
+            evidence_link,
+            depth,
+            chain_str,
+        )
+        self.env_manager.records.append(record)
         await self.env_manager.write_to_file(
-            output_files["standard"]["takeover"],
-            f"DANGLING|{original_domain}|{current_domain}|{category}|{recommendation}|{evidence_link}|{depth}|{chain_str}",
+            output_files["standard"]["takeover"], record.pipe()
         )
         self.env_manager.log_info(
             f"Domain {current_domain} is a dangling CNAME with category: {category}"

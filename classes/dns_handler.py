@@ -5,6 +5,7 @@ import dns.exception
 import dns.resolver
 
 from classes.dns_constants import NXDOMAIN, SERVFAIL, is_dns_error_present
+from classes.records import Unresolved
 from classes.takeover_detector import TakeoverDetector
 from classes.wildcard_detector import WildcardDetector
 
@@ -35,13 +36,12 @@ class DNSHandler:
         self.wildcard_detector = WildcardDetector(self.aiodns_resolver, env_manager)
 
     async def log_and_write_dns_error(self, domain, error, additional_message=""):
-        message = f"DNS resolution error for {domain}: {error}"
-        if additional_message:
-            message += f"|{additional_message}"
-        self.env_manager.log_error(message)
+        record = Unresolved(domain, str(error), additional_message)
+        self.env_manager.log_error(record.pipe())
+        self.env_manager.records.append(record)
         await self.env_manager.write_to_file(
             self.env_manager.output_files["standard"]["unresolved"],
-            message,
+            record.pipe(),
         )
 
     async def handle_domain_resolution_errors(

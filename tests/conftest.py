@@ -110,6 +110,9 @@ def mock_env_manager():
     # write_to_file is async, so it needs AsyncMock not MagicMock
     env.write_to_file = AsyncMock()
 
+    # Structured records appended beside every write
+    env.records = []
+
     # log_* are sync fire-and-forget calls — plain MagicMock is fine
     env.log_info = MagicMock()
     env.log_error = MagicMock()
