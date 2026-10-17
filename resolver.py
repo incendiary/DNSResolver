@@ -182,7 +182,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
     )
     publish_dns_observations(env_manager.records, env_manager.output_dir)
 
-    RunSummary(env_manager.output_files, env_manager.output_dir, __version__).display(
+    RunSummary(env_manager.records, env_manager.output_dir, __version__).display(
         len(env_manager.domains), len(domains_to_process)
     )
 
