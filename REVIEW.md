@@ -176,7 +176,7 @@ Ranked by lines removed. Line counts are approximate.
    dataclass), render pipe lines, JSON, summary and Markdown from them. Targets:
    `classes/allocator_contract.py` (`_lines`, `_parse_target`), `classes/run_contract.py:158`
    (`_lines`, the `startswith` ladder), `classes/run_summary.py:7`. Also deletes the "Malformed ..."
-   `ValueError` paths that exist only because of re-parsing. **About -200 lines.**
+   `ValueError` paths that exist only because of re-parsing. **Estimated -200 lines; delivered in PR 212 as a net +27 lines of source (new `classes/records.py` and `.pipe()` methods offset the deleted parsers), with the gain being structural: no re-parsing, no late `Malformed` failure, records ready for the Markdown report.**
 3. `delete:` docs that describe delivered work: `docs/roadmap/PR-A` to `PR-H` (about 670 lines) and
    `docs/roadmap/README.md`; `HANDOVER.md` (575) largely duplicates `AGENTS.md` and
    `docs/roadmap/AGENT-GUIDE.md`. History keeps all of it. **About -900 lines of docs.**
