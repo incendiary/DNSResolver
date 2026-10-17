@@ -13,9 +13,7 @@ from imports.cloud_ip_ranges import ProviderCatalogue
 def run_environment(tmp_path):
     environment = MagicMock()
     environment.output_dir = str(tmp_path)
-    csp_path = tmp_path / "csp_matches.txt"
-    csp_path.write_text("", encoding="utf-8")
-    environment.output_files = {"standard": {"csp": str(csp_path)}}
+    environment.records = []
     environment.domains = {"example.com"}
     environment.retries = 1
     environment.max_threads = 1

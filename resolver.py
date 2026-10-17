@@ -47,10 +47,7 @@ async def run(env_manager):
     except Exception:
         try:
             clear_allocator_targets(env_manager.output_dir)
-            publish_dns_observations(
-                env_manager.output_files,
-                env_manager.output_dir,
-            )
+            publish_dns_observations(env_manager.records, env_manager.output_dir)
             if set(catalogues) == {"aws", "gcp", "azure"}:
                 publish_run_manifest(
                     env_manager.output_dir,
@@ -93,7 +90,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
             for name in unusable
         )
         publish_dns_observations(
-            env_manager.output_files,
+            env_manager.records,
             env_manager.output_dir,
             provider_failures={
                 name: catalogues[name].error or catalogues[name].status
@@ -178,16 +175,14 @@ async def _run(env_manager, run_id, started_at, catalogues):
             retries + 1,
         )
 
-    targets = publish_allocator_targets(
-        env_manager.output_files["standard"]["csp"], env_manager.output_dir
-    )
+    targets = publish_allocator_targets(env_manager.records, env_manager.output_dir)
     env_manager.log_info(
         "Published %d actionable target(s) to allocator-targets-v1.json",
         len(targets),
     )
-    publish_dns_observations(env_manager.output_files, env_manager.output_dir)
+    publish_dns_observations(env_manager.records, env_manager.output_dir)
 
-    RunSummary(env_manager.output_files, env_manager.output_dir, __version__).display(
+    RunSummary(env_manager.records, env_manager.output_dir, __version__).display(
         len(env_manager.domains), len(domains_to_process)
     )
 

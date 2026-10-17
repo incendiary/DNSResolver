@@ -9,3 +9,4 @@ nstake.example.com
 gone.example.com
 shared-a.example.com
 shared-b.example.com
+multi.example.com

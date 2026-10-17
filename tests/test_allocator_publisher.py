@@ -7,6 +7,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from classes.allocator_contract import publish_allocator_targets
 from classes.custom_exceptions import OutputWriteError
+from classes.records import CspMatch, NsTakeover
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = json.loads(
@@ -14,21 +15,33 @@ SCHEMA = json.loads(
 )
 
 
-def write_matches(tmp_path, lines):
-    path = tmp_path / "csp_matches.txt"
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return path
+def match(
+    host="api.example.com",
+    ip="192.0.2.10",
+    provider="aws",
+    region="ap-southeast-1",
+    service="EC2",
+    prefix="192.0.2.0/24",
+    border_group="ap-southeast-1",
+    wildcard="",
+):
+    return CspMatch(host, ip, provider, region, service, prefix, border_group, wildcard)
 
 
 def test_publisher_groups_metadata_and_matches_contract(tmp_path):
-    matches = write_matches(
-        tmp_path,
-        [
-            "api.example.com|192.0.2.10|aws|ap-southeast-1|AMAZON|192.0.2.0/24|ap-southeast-1",
-            "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/25|ap-southeast-1",
-            "ipv6.example.com|2001:db8::10|gcp|asia-southeast1|Google Cloud|2001:db8::/32|unknown",
-        ],
-    )
+    matches = [
+        match(service="AMAZON"),
+        match(prefix="192.0.2.0/25"),
+        match(
+            "ipv6.example.com",
+            "2001:db8::10",
+            "gcp",
+            "asia-southeast1",
+            "Google Cloud",
+            "2001:db8::/32",
+            "unknown",
+        ),
+    ]
 
     targets = publish_allocator_targets(matches, tmp_path)
 
@@ -42,52 +55,45 @@ def test_publisher_groups_metadata_and_matches_contract(tmp_path):
 
 
 def test_publisher_excludes_wildcard_records_and_deduplicates(tmp_path):
-    target = (
-        "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/24|ap-southeast-1"
-    )
-    matches = write_matches(
-        tmp_path,
-        [target, target, f"WILDCARD|{target}", f"WILDCARD_ZONE|{target}"],
-    )
+    records = [
+        match(),
+        match(),
+        match(wildcard="WILDCARD"),
+        match(wildcard="WILDCARD_ZONE"),
+        NsTakeover("api.example.com", "ns.example.net"),
+    ]
 
-    targets = publish_allocator_targets(matches, tmp_path)
+    targets = publish_allocator_targets(records, tmp_path)
 
     assert len(targets) == 1
     assert targets[0]["hostname"] == "api.example.com"
 
 
-def test_empty_match_file_publishes_valid_empty_array(tmp_path):
-    matches = write_matches(tmp_path, [])
-    targets = publish_allocator_targets(matches, tmp_path)
+def test_no_matches_publishes_valid_empty_array(tmp_path):
+    targets = publish_allocator_targets([], tmp_path)
     assert targets == []
     assert json.loads((tmp_path / "allocator-targets-v1.json").read_text()) == []
 
 
 @pytest.mark.parametrize(
-    "line",
+    "bad",
     [
-        "missing|fields|aws",
-        "api.example.com|not-an-ip|aws|ap-southeast-1|EC2|192.0.2.0/24|ap-southeast-1",
-        "api.example.com|192.0.2.10|unknown|region|service|192.0.2.0/24|region",
-        "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|198.51.100.0/24|ap-southeast-1",
+        match(region=""),
+        match(ip="not-an-ip"),
+        match(provider="unknown"),
+        match(prefix="198.51.100.0/24"),
+        match(prefix="not-a-prefix"),
     ],
 )
-def test_malformed_match_input_fails_without_publishing(line, tmp_path):
-    matches = write_matches(tmp_path, [line])
+def test_invalid_match_fails_without_publishing(bad, tmp_path):
     (tmp_path / "allocator-targets-v1.json").write_text('[{"stale": true}]')
     with pytest.raises(ValueError):
-        publish_allocator_targets(matches, tmp_path)
+        publish_allocator_targets([bad], tmp_path)
     assert not (tmp_path / "allocator-targets-v1.json").exists()
 
 
 def test_publisher_preserves_distinct_provider_regions(tmp_path):
-    matches = write_matches(
-        tmp_path,
-        [
-            "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/24|ap-southeast-1",
-            "api.example.com|192.0.2.10|aws|us-east-1|EC2|192.0.2.0/24|us-east-1",
-        ],
-    )
+    matches = [match(), match(region="us-east-1", border_group="us-east-1")]
     targets = publish_allocator_targets(matches, tmp_path)
 
     assert len(targets) == 2
@@ -99,12 +105,7 @@ def test_publisher_preserves_distinct_provider_regions(tmp_path):
 
 @pytest.mark.parametrize("failure", ["open", "write", "replace"])
 def test_publication_failure_removes_stale_and_temporary_files(tmp_path, failure):
-    matches = write_matches(
-        tmp_path,
-        [
-            "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/24|ap-southeast-1"
-        ],
-    )
+    matches = [match()]
     destination = tmp_path / "allocator-targets-v1.json"
     temporary = tmp_path / "allocator-targets-v1.json.tmp"
     destination.write_text('[{"stale": true}]', encoding="utf-8")

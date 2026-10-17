@@ -71,6 +71,7 @@ remains; do not add Lambda-specific features.
 |---|---|
 | `classes/environment_manager.py` | CLI environment: argparse glue, logging, domain file I/O. `fetch_external_ip()` is a module-level seam so the class can be built without a network. |
 | `classes/config_resolver.py` | Parses CLI args, merges `config.json`. CLI always wins. |
+| `classes/records.py` | Frozen record dataclasses (`Resolution`, `CspMatch`, `Dangling`, `NsTakeover`, `Unresolved`). Each `.pipe()` returns exactly the line its output file holds. `env_manager.records` keeps them in memory; the JSON publishers and the run summary read records, never the pipe files. |
 | `classes/output_manager.py` | Builds the timestamped output tree; async writes via `aiofiles` |
 | `classes/dns_handler.py` | Async resolution. Queries **A and AAAA concurrently**; a domain is unresolved only when *both* fail. aiodns primary, dnspython second opinion. |
 | `classes/takeover_detector.py` | Dangling CNAME + NS takeover, depth-limited CNAME chain following |

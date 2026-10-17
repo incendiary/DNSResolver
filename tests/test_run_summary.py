@@ -1,22 +1,21 @@
-"""Tests for RunSummary — verifies stdout output using capsys and tmp_path."""
+"""Tests for RunSummary: verifies stdout output from in-memory records using capsys."""
 
+from classes.records import CspMatch, Dangling, NsTakeover, Resolution, Unresolved
 from classes.run_summary import RunSummary
 
 
-def _make_summary(tmp_path, files=None):
-    """Build a RunSummary backed by real temp files populated with given lines."""
-    standard = {
-        "resolved": tmp_path / "resolved.txt",
-        "unresolved": tmp_path / "unresolved.txt",
-        "takeover": tmp_path / "takeover.txt",
-        "csp": tmp_path / "csp.txt",
-    }
-    for key, path in standard.items():
-        content = files.get(key, "") if files else ""
-        path.write_text(content, encoding="utf-8")
+def _summary(records=()):
+    return RunSummary(list(records), "/tmp/output")
 
-    output_files = {"standard": {k: str(v) for k, v in standard.items()}}
-    return RunSummary(output_files, str(tmp_path))
+
+def _dangling(origin, target, category, recommendation, evidence, hops=0, chain=""):
+    return Dangling(origin, target, category, recommendation, evidence, hops, chain)
+
+
+def _csp(domain, ip, provider, region, service, wildcard=""):
+    return CspMatch(
+        domain, ip, provider, region, service, f"{ip}/32", "unknown", wildcard
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -24,12 +23,9 @@ def _make_summary(tmp_path, files=None):
 # ---------------------------------------------------------------------------
 
 
-def test_no_candidates_prints_clean_message(tmp_path, capsys):
-    summary = _make_summary(
-        tmp_path,
-        {
-            "resolved": "example.com|1.2.3.4\nfoo.com|5.6.7.8\n",
-        },
+def test_no_candidates_prints_clean_message(capsys):
+    summary = _summary(
+        [Resolution("example.com", ("1.2.3.4",)), Resolution("foo.com", ("5.6.7.8",))]
     )
     summary.display(total_input=2, failed_count=0)
 
@@ -38,26 +34,43 @@ def test_no_candidates_prints_clean_message(tmp_path, capsys):
     assert "[!]" not in out
 
 
-def test_counts_are_accurate(tmp_path, capsys):
-    summary = _make_summary(
-        tmp_path,
-        {
-            "resolved": "a.com|1.1.1.1\nb.com|2.2.2.2\n",
-            "unresolved": "DNS resolution error for c.com: timeout\n",
-            "csp": (
-                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16\n"
-                "b.com|2.2.2.2|gcp|europe-west2|Google Cloud|2.2.0.0/16\n"
-                "b2.com|3.3.3.3|gcp|us-central1|Google Cloud|3.3.0.0/16\n"
-            ),
-        },
+def test_counts_are_accurate(capsys):
+    summary = _summary(
+        [
+            Resolution("a.com", ("1.1.1.1",)),
+            Resolution("b.com", ("2.2.2.2",)),
+            Unresolved("c.com", "timeout"),
+            _csp("a.com", "1.1.1.1", "aws", "eu-west-2", "EC2"),
+            _csp("b.com", "2.2.2.2", "gcp", "europe-west2", "Google Cloud"),
+            _csp("b2.com", "3.3.3.3", "gcp", "us-central1", "Google Cloud"),
+        ]
     )
     summary.display(total_input=5, failed_count=1)
 
     out = capsys.readouterr().out
-    assert "5" in out  # total input
+    assert "Input domains        :      5" in out
+    assert "Resolved             :      2" in out
+    assert "Unresolved errors    :      1" in out
+    assert "Failed (all retries) :      1" in out
     assert "AWS: 1" in out
     assert "GCP: 2" in out
     assert "Azure: 0" in out
+
+
+def test_wildcard_resolutions_are_counted_separately(capsys):
+    summary = _summary(
+        [
+            Resolution("a.com", ("1.1.1.1",), "WILDCARD"),
+            Resolution("b.com", ("2.2.2.2",), "WILDCARD_ZONE"),
+            Resolution("c.com", ("3.3.3.3",)),
+        ]
+    )
+    summary.display(total_input=3, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "Resolved             :      3" in out
+    assert "confirmed catch-all:      1" in out
+    assert "in catch-all zone  :      1" in out
 
 
 # ---------------------------------------------------------------------------
@@ -65,9 +78,18 @@ def test_counts_are_accurate(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 
-def test_classified_dangling_cname_shown_in_full(tmp_path, capsys):
-    dangling = "DANGLING|root.example.com|app.s3.amazonaws.com|aws_s3|Remove the CNAME|https://evidence.link\n"
-    summary = _make_summary(tmp_path, {"takeover": dangling})
+def test_classified_dangling_cname_shown_in_full(capsys):
+    summary = _summary(
+        [
+            _dangling(
+                "root.example.com",
+                "app.s3.amazonaws.com",
+                "aws_s3",
+                "Remove the CNAME",
+                "https://evidence.link",
+            )
+        ]
+    )
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
@@ -80,13 +102,24 @@ def test_classified_dangling_cname_shown_in_full(tmp_path, capsys):
     assert "https://evidence.link" in out
 
 
-def test_classified_cnames_grouped_by_category(tmp_path, capsys):
-    dangling = (
-        "DANGLING|a.com|a.herokudns.com|heroku|Remove it|https://heroku.example\n"
-        "DANGLING|b.com|b.herokudns.com|heroku|Remove it|https://heroku.example\n"
-        "DANGLING|c.com|c.s3.amazonaws.com|aws_s3|Remove the CNAME|https://aws.example\n"
+def test_classified_cnames_grouped_by_category(capsys):
+    summary = _summary(
+        [
+            _dangling(
+                "a.com", "a.herokudns.com", "heroku", "Remove it", "https://h.example"
+            ),
+            _dangling(
+                "b.com", "b.herokudns.com", "heroku", "Remove it", "https://h.example"
+            ),
+            _dangling(
+                "c.com",
+                "c.s3.amazonaws.com",
+                "aws_s3",
+                "Remove the CNAME",
+                "https://aws.example",
+            ),
+        ]
     )
-    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
@@ -96,17 +129,26 @@ def test_classified_cnames_grouped_by_category(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
-# Unclassified dangling CNAMEs — collapsed to a count
+# Unclassified dangling CNAMEs
 # ---------------------------------------------------------------------------
 
 
-def test_unclassified_cnames_shown_individually(tmp_path, capsys):
+def test_unclassified_cnames_shown_individually(capsys):
     """Unclassified entries must appear individually with CNAME target and risk context."""
-    dangling = (
-        "DANGLING|a.com|mystery-target.example.com|unknown|Unclassified|N/A\n"
-        "DANGLING|b.com|another-unknown.example.com|unknown|Unclassified|N/A\n"
+    summary = _summary(
+        [
+            _dangling(
+                "a.com", "mystery-target.example.com", "unknown", "Unclassified", "N/A"
+            ),
+            _dangling(
+                "b.com",
+                "another-unknown.example.com",
+                "unknown",
+                "Unclassified",
+                "N/A",
+            ),
+        ]
     )
-    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=2, failed_count=0)
 
     out = capsys.readouterr().out
@@ -119,14 +161,17 @@ def test_unclassified_cnames_shown_individually(tmp_path, capsys):
     assert "Classified dangling CNAMEs" not in out
 
 
-def test_unclassified_count_included_in_total_banner(tmp_path, capsys):
+def test_unclassified_count_included_in_total_banner(capsys):
     """Unclassified dangles must count toward the [!] total."""
-    dangling = (
-        "DANGLING|a.com|known.herokudns.com|heroku|Remove it|https://h.example\n"
-        "DANGLING|b.com|unknown1.example.com|unknown|Unclassified|N/A\n"
-        "DANGLING|c.com|unknown2.example.com|unknown|Unclassified|N/A\n"
+    summary = _summary(
+        [
+            _dangling(
+                "a.com", "known.herokudns.com", "heroku", "Remove it", "https://h"
+            ),
+            _dangling("b.com", "unknown1.example.com", "unknown", "Unclassified", "-"),
+            _dangling("c.com", "unknown2.example.com", "unknown", "Unclassified", "-"),
+        ]
     )
-    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
@@ -136,13 +181,20 @@ def test_unclassified_count_included_in_total_banner(tmp_path, capsys):
     assert "Unclassified dangling CNAMEs (2)" in out
 
 
-def test_classified_and_unclassified_split(tmp_path, capsys):
+def test_classified_and_unclassified_split(capsys):
     """Classified entries are shown in full; unclassified shown individually with context."""
-    dangling = (
-        "DANGLING|a.com|app.herokudns.com|heroku|Remove the app|https://heroku.example\n"
-        "DANGLING|b.com|noise.example.com|unknown|Unclassified|N/A\n"
+    summary = _summary(
+        [
+            _dangling(
+                "a.com",
+                "app.herokudns.com",
+                "heroku",
+                "Remove the app",
+                "https://heroku.example",
+            ),
+            _dangling("b.com", "noise.example.com", "unknown", "Unclassified", "N/A"),
+        ]
     )
-    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=2, failed_count=0)
 
     out = capsys.readouterr().out
@@ -157,9 +209,8 @@ def test_classified_and_unclassified_split(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 
-def test_ns_takeover_flagged(tmp_path, capsys):
-    ns = "NS_TAKEOVER|vuln.example.com|ns1.orphaned-registrar.com\n"
-    summary = _make_summary(tmp_path, {"takeover": ns})
+def test_ns_takeover_flagged(capsys):
+    summary = _summary([NsTakeover("vuln.example.com", "ns1.orphaned-registrar.com")])
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
@@ -170,13 +221,14 @@ def test_ns_takeover_flagged(tmp_path, capsys):
     assert "DNS control" in out
 
 
-def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):
-    takeover = (
-        "DANGLING|a.com|a.herokudns.com|heroku|Remove|https://h.example\n"
-        "NS_TAKEOVER|b.com|ns1.dead.example\n"
-        "NS_TAKEOVER|c.com|ns2.dead.example\n"
+def test_both_dangling_and_ns_takeover_total_count(capsys):
+    summary = _summary(
+        [
+            _dangling("a.com", "a.herokudns.com", "heroku", "Remove", "https://h"),
+            NsTakeover("b.com", "ns1.dead.example"),
+            NsTakeover("c.com", "ns2.dead.example"),
+        ]
     )
-    summary = _make_summary(tmp_path, {"takeover": takeover})
     summary.display(total_input=3, failed_count=0)
 
     out = capsys.readouterr().out
@@ -188,13 +240,21 @@ def test_both_dangling_and_ns_takeover_total_count(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 
 
-def test_classified_cname_chain_shown_when_depth_gt_zero(tmp_path, capsys):
+def test_classified_cname_chain_shown_when_depth_gt_zero(capsys):
     """A classified dangling CNAME with depth > 0 must show the full hop chain."""
-    dangling = (
-        "DANGLING|sub.victim.com|c.cdn.com|aws_s3|Remove CNAME|https://evidence.link|2"
-        "|sub.victim.com -> b.cdn.com -> c.cdn.com\n"
+    summary = _summary(
+        [
+            _dangling(
+                "sub.victim.com",
+                "c.cdn.com",
+                "aws_s3",
+                "Remove CNAME",
+                "https://evidence.link",
+                2,
+                "sub.victim.com -> b.cdn.com -> c.cdn.com",
+            )
+        ]
     )
-    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
@@ -202,13 +262,21 @@ def test_classified_cname_chain_shown_when_depth_gt_zero(tmp_path, capsys):
     assert "sub.victim.com -> b.cdn.com -> c.cdn.com" in out
 
 
-def test_unclassified_cname_chain_shown_when_depth_gt_zero(tmp_path, capsys):
+def test_unclassified_cname_chain_shown_when_depth_gt_zero(capsys):
     """An unclassified dangling CNAME with depth > 0 must show the full hop chain."""
-    dangling = (
-        "DANGLING|sub.victim.com|mystery.example.com|unknown|Unclassified|N/A|1"
-        "|sub.victim.com -> mystery.example.com\n"
+    summary = _summary(
+        [
+            _dangling(
+                "sub.victim.com",
+                "mystery.example.com",
+                "unknown",
+                "Unclassified",
+                "N/A",
+                1,
+                "sub.victim.com -> mystery.example.com",
+            )
+        ]
     )
-    summary = _make_summary(tmp_path, {"takeover": dangling})
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
@@ -216,63 +284,50 @@ def test_unclassified_cname_chain_shown_when_depth_gt_zero(tmp_path, capsys):
     assert "sub.victim.com -> mystery.example.com" in out
 
 
-def test_legacy_dangling_line_no_depth_still_parses(tmp_path, capsys):
-    """A DANGLING line without depth/chain fields (pre-v1.11 format) parses without error."""
-    dangling = "DANGLING|root.example.com|app.s3.amazonaws.com|aws_s3|Remove the CNAME|https://evidence.link\n"
-    summary = _make_summary(tmp_path, {"takeover": dangling})
+def test_no_chain_line_at_depth_zero(capsys):
+    summary = _summary(
+        [
+            _dangling(
+                "root.example.com",
+                "app.s3.amazonaws.com",
+                "aws_s3",
+                "Remove the CNAME",
+                "https://evidence.link",
+            )
+        ]
+    )
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
     assert "Classified dangling CNAMEs (1)" in out
     assert "app.s3.amazonaws.com" in out
-    assert "Chain" not in out  # no chain line for depth=0 / missing fields
+    assert "Chain" not in out
 
 
-# ---------------------------------------------------------------------------
-# Resilience
-# ---------------------------------------------------------------------------
-
-
-def test_dangling_line_missing_fields_skipped_gracefully(tmp_path, capsys):
-    """A malformed dangling line (< 5 fields) should not crash and is silently ignored."""
-    summary = _make_summary(tmp_path, {"takeover": "DANGLING|only|two\n"})
-    summary.display(total_input=1, failed_count=0)
+def test_no_records_prints_clean_summary(capsys):
+    _summary().display(total_input=0, failed_count=0)
 
     out = capsys.readouterr().out
     assert "No takeover candidates detected." in out
+    assert "No cloud-hosted addresses found." in out
 
 
-def test_missing_file_treated_as_empty(tmp_path, capsys):
-    """If an output file is absent, _lines() returns [] without crashing."""
-    output_files = {
-        "standard": {
-            "resolved": "/nonexistent/resolved.txt",
-            "unresolved": "/nonexistent/unresolved.txt",
-            "takeover": "/nonexistent/takeover.txt",
-            "csp": "/nonexistent/csp.txt",
-        }
-    }
-    summary = RunSummary(output_files, "/tmp/output")
-    summary.display(total_input=0, failed_count=0)
-
-    out = capsys.readouterr().out
-    assert "No takeover candidates detected." in out
+# ---------------------------------------------------------------------------
+# Cloud matches
+# ---------------------------------------------------------------------------
 
 
-def test_csp_breakdown_shows_region_and_service(tmp_path, capsys):
+def test_csp_breakdown_shows_region_and_service(capsys):
     """
-    A provider tally alone is not actionable — an operator needs the region an
+    A provider tally alone is not actionable. An operator needs the region an
     address is allocated from and the service it belongs to.
     """
-    summary = _make_summary(
-        tmp_path,
-        {
-            "csp": (
-                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16\n"
-                "b.com|1.1.1.2|aws|eu-west-2|EC2|1.1.0.0/16\n"
-                "c.com|9.9.9.9|aws|us-east-1|AMAZON|9.9.0.0/16\n"
-            ),
-        },
+    summary = _summary(
+        [
+            _csp("a.com", "1.1.1.1", "aws", "eu-west-2", "EC2"),
+            _csp("b.com", "1.1.1.2", "aws", "eu-west-2", "EC2"),
+            _csp("c.com", "9.9.9.9", "aws", "us-east-1", "AMAZON"),
+        ]
     )
     summary.display(total_input=3, failed_count=0)
 
@@ -284,21 +339,18 @@ def test_csp_breakdown_shows_region_and_service(tmp_path, capsys):
     assert out.index("eu-west-2") < out.index("us-east-1")
 
 
-def test_wildcard_cloud_records_are_excluded_from_targets(tmp_path, capsys):
+def test_wildcard_cloud_records_are_excluded_from_targets(capsys):
     """
     Wildcard cloud records are the hosting platform's own addresses. They are
     reported for transparency but must not inflate the target counts, or a
     single wildcarded zone would dominate the summary.
     """
-    summary = _make_summary(
-        tmp_path,
-        {
-            "csp": (
-                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16|eu-west-2\n"
-                "WILDCARD|b.com|2.2.2.2|gcp|europe-west2|Google Cloud|2.2.0.0/16|unknown\n"
-                "WILDCARD|c.com|2.2.2.2|gcp|europe-west2|Google Cloud|2.2.0.0/16|unknown\n"
-            ),
-        },
+    summary = _summary(
+        [
+            _csp("a.com", "1.1.1.1", "aws", "eu-west-2", "EC2"),
+            _csp("b.com", "2.2.2.2", "gcp", "europe-west2", "Google Cloud", "WILDCARD"),
+            _csp("c.com", "2.2.2.2", "gcp", "europe-west2", "Google Cloud", "WILDCARD"),
+        ]
     )
     summary.display(total_input=3, failed_count=0)
 
@@ -308,44 +360,37 @@ def test_wildcard_cloud_records_are_excluded_from_targets(tmp_path, capsys):
     assert "excluded (wildcard) :    2" in out
 
 
-def test_cloud_targets_get_headline_billing(tmp_path, capsys):
+def test_cloud_targets_get_headline_billing(capsys):
     """
     Cloud reclaim targets are one of the tool's two jobs, so they are announced
     rather than reported as a footnote under the takeover banner.
     """
-    summary = _make_summary(
-        tmp_path,
-        {"csp": "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16|eu-west-2\n"},
-    )
+    summary = _summary([_csp("a.com", "1.1.1.1", "aws", "eu-west-2", "EC2")])
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
     assert "1 CLOUD-HOSTED ADDRESS(ES)" in out
 
 
-def test_no_cloud_addresses_says_so_explicitly(tmp_path, capsys):
+def test_no_cloud_addresses_says_so_explicitly(capsys):
     """Silence would read as 'not checked'; say the check ran and found nothing."""
-    summary = _make_summary(tmp_path, {"csp": ""})
-    summary.display(total_input=1, failed_count=0)
+    _summary().display(total_input=1, failed_count=0)
 
     assert "No cloud-hosted addresses found." in capsys.readouterr().out
 
 
-def test_catch_all_zone_records_are_also_excluded_from_targets(tmp_path, capsys):
+def test_catch_all_zone_records_are_also_excluded_from_targets(capsys):
     """
     Both verdicts are excluded from the target count. A catch-all served from a
-    pool larger than the probe sampled is still a catch-all — counting it as a
+    pool larger than the probe sampled is still a catch-all. Counting it as a
     target is the failure this two-tier reporting exists to prevent.
     """
-    summary = _make_summary(
-        tmp_path,
-        {
-            "csp": (
-                "a.com|1.1.1.1|aws|eu-west-2|EC2|1.1.0.0/16|eu-west-2\n"
-                "WILDCARD|b.com|2.2.2.2|aws|eu-west-1|EC2|2.2.0.0/16|eu-west-1\n"
-                "WILDCARD_ZONE|c.com|3.3.3.3|aws|us-east-1|EC2|3.3.0.0/16|us-east-1\n"
-            ),
-        },
+    summary = _summary(
+        [
+            _csp("a.com", "1.1.1.1", "aws", "eu-west-2", "EC2"),
+            _csp("b.com", "2.2.2.2", "aws", "eu-west-1", "EC2", "WILDCARD"),
+            _csp("c.com", "3.3.3.3", "aws", "us-east-1", "EC2", "WILDCARD_ZONE"),
+        ]
     )
     summary.display(total_input=3, failed_count=0)
 

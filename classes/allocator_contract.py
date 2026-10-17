@@ -3,21 +3,22 @@
 import ipaddress
 from pathlib import Path
 
+from classes.records import CspMatch
 from classes.run_contract import CONTRACT_VERSION, _remove_output, _write_json_atomic
 
 SUPPORTED_PROVIDERS = {"aws", "gcp", "azure"}
-WILDCARD_PREFIXES = ("WILDCARD|", "WILDCARD_ZONE|")
 
 
-def publish_allocator_targets(csp_path, output_dir):
+def publish_allocator_targets(records, output_dir):
     """Write allocator-targets-v1.json atomically and return its records."""
     destination = Path(output_dir) / "allocator-targets-v1.json"
     clear_allocator_targets(output_dir)
     grouped = {}
-    for line_number, line in enumerate(_lines(csp_path), start=1):
-        if line.startswith(WILDCARD_PREFIXES):
+    for match in records:
+        # Wildcard matches are the hosting platform's own addresses, not targets.
+        if not isinstance(match, CspMatch) or match.wildcard:
             continue
-        target = _parse_target(line, line_number)
+        target = _target(match)
         identity = (
             target["provider"],
             target["hostname"],
@@ -60,46 +61,30 @@ def clear_allocator_targets(output_dir):
     _remove_output(destination.with_suffix(".json.tmp"))
 
 
-def _lines(path):
+def _target(match):
+    """Validate one match against the contract and shape it as a target."""
+    where = f"CSP match {match.domain}|{match.ip}"
+    required = (match.domain, match.region, match.service, match.prefix)
+    if not all(required) or not match.border_group:
+        raise ValueError(f"Empty field in {where}")
+    if match.provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(f"Unknown provider at {where}")
     try:
-        with open(path, encoding="utf-8") as handle:
-            for line in handle:
-                stripped = line.strip()
-                if stripped:
-                    yield stripped
-    except OSError as exc:
-        raise ValueError(f"Unable to read CSP match output: {exc}") from exc
-
-
-def _parse_target(line, line_number):
-    fields = line.split("|")
-    if len(fields) != 7 or any(not field for field in fields):
-        raise ValueError(f"Malformed CSP match record at line {line_number}")
-    hostname, address_text, provider, region, service, prefix_text, border_group = (
-        fields
-    )
-    if provider not in SUPPORTED_PROVIDERS:
-        raise ValueError(f"Unknown provider at CSP match line {line_number}")
-    try:
-        address = ipaddress.ip_address(address_text)
-        prefix = ipaddress.ip_network(prefix_text)
+        address = ipaddress.ip_address(match.ip)
+        prefix = ipaddress.ip_network(match.prefix)
     except ValueError as exc:
-        raise ValueError(
-            f"Invalid address or prefix at CSP match line {line_number}"
-        ) from exc
+        raise ValueError(f"Invalid address or prefix at {where}") from exc
     if address not in prefix:
-        raise ValueError(
-            f"Address is outside its prefix at CSP match line {line_number}"
-        )
+        raise ValueError(f"Address is outside its prefix at {where}")
     return {
         "contract_version": CONTRACT_VERSION,
-        "hostname": hostname,
+        "hostname": match.domain,
         "ip": str(address),
-        "provider": provider,
-        "region": region,
-        "services": {service},
+        "provider": match.provider,
+        "region": match.region,
+        "services": {match.service},
         "prefixes": {str(prefix)},
-        "network_border_groups": {border_group},
+        "network_border_groups": {match.border_group},
         "dns_record_type": "A" if address.version == 4 else "AAAA",
         "actionability": "actionable",
     }

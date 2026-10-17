@@ -1,4 +1,5 @@
 from classes.domain_processing_context import DomainProcessingContext
+from classes.records import Resolution
 from imports.cloud_service_provider_checks import perform_csp_checks
 
 
@@ -32,10 +33,10 @@ async def process_domain_async(
         # the zone answers for anything so this resolution proves nothing either
         # way. Neither discards the result.
         verdict = await dns_handler.wildcard_detector.classify(domain, final_ips)
-        prefix = f"{verdict}|" if verdict else ""
+        resolution = Resolution(domain, tuple(final_ips), verdict or "")
+        env_manager.records.append(resolution)
         await env_manager.write_to_file(
-            output_files["standard"]["resolved"],
-            f"{prefix}{domain}|{'|'.join(final_ips)}",
+            output_files["standard"]["resolved"], resolution.pipe()
         )
         # The verdict travels with the cloud match too. In a zone that answers
         # for anything, an address cannot be attributed to this domain rather

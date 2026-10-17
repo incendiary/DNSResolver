@@ -61,19 +61,21 @@ def _catalogue(provider, ipv4, ipv6, metadata):
 CATALOGUES = {
     "aws": _catalogue(
         "aws",
-        ["198.18.0.0/24"],
+        ["198.18.0.0/24", "198.18.1.0/24"],
         ["2001:db8:a::/48"],
         {
             "198.18.0.0/24": [("eu-west-2", "EC2", "eu-west-2")],
+            "198.18.1.0/24": [("eu-west-2", "EC2", "eu-west-2")],
             "2001:db8:a::/48": [("eu-west-2", "EC2", "eu-west-2")],
         },
     ),
     "gcp": _catalogue(
         "gcp",
-        ["198.51.100.0/24"],
+        ["198.51.100.0/24", "198.18.1.0/25"],
         ["2001:db8:b::/48"],
         {
             "198.51.100.0/24": [("europe-west2", "Google Cloud", "unknown")],
+            "198.18.1.0/25": [("europe-west2", "Google Cloud", "unknown")],
             "2001:db8:b::/48": [("europe-west2", "Google Cloud", "unknown")],
         },
     ),
@@ -107,6 +109,8 @@ DNS = {
     "nstake.example.com": {"A": ["192.0.2.80"], "NS": ["ns1.deadns.example.net"]},
     "shared-a.example.com": {"A": ["198.51.100.77"]},
     "shared-b.example.com": {"A": ["198.51.100.77"]},
+    # One address inside both an AWS and a GCP prefix: pins provider order.
+    "multi.example.com": {"A": ["198.18.1.5"]},
 }
 # Catch-all zones. wild: probes and hosts all get one address (WILDCARD).
 # rot: probes get .60 but host2 resolves to .61, which was not sampled

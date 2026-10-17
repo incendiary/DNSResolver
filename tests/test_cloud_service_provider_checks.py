@@ -181,7 +181,7 @@ def test_log_and_write_creates_entry(tmp_path, ctx):
     output_files = {"standard": {"csp": str(out_file)}}
 
     result = log_and_write(
-        "gcp", {"34.1.2.3": {"34.0.0.0/8"}}, "example.com", output_files, ctx, set()
+        "gcp", {"34.1.2.3": {"34.0.0.0/8"}}, "example.com", output_files, ctx, set(), []
     )
 
     assert result is True
@@ -207,6 +207,7 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
         output_files,
         ctx,
         written_lines,
+        [],
     )
     second = log_and_write(
         "gcp",
@@ -215,6 +216,7 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
         output_files,
         ctx,
         written_lines,
+        [],
     )
 
     assert first is True
@@ -241,6 +243,7 @@ def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager
     context.set_domain("api.example.com")
     output = tmp_path / "csp.txt"
     output.touch()
+    records = []
     wrote = log_and_write(
         "aws",
         {"192.0.2.10": {"192.0.2.0/24", "192.0.2.0/25"}},
@@ -248,6 +251,7 @@ def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager
         {"standard": {"csp": str(output)}},
         context,
         set(),
+        records,
     )
     assert wrote is True
     assert output.read_text().splitlines() == [
@@ -256,7 +260,7 @@ def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager
         "api.example.com|192.0.2.10|aws|ap-southeast-1|EC2|192.0.2.0/25|ap-southeast-1",
     ]
 
-    targets = publish_allocator_targets(output, tmp_path)
+    targets = publish_allocator_targets(records, tmp_path)
     assert targets[0]["services"] == ["AMAZON", "EC2"]
     assert targets[0]["prefixes"] == ["192.0.2.0/24", "192.0.2.0/25"]
 
@@ -284,6 +288,7 @@ def test_log_and_write_no_full_file_read(tmp_path, ctx, monkeypatch):
         output_files,
         ctx,
         written_lines,
+        [],
     )
 
     assert "example.com|34.1.2.3|gcp|" in out_file.read_text()
@@ -306,6 +311,7 @@ def test_log_and_write_raises_explicit_output_error(tmp_path, ctx, monkeypatch):
             output_files,
             ctx,
             set(),
+            [],
         )
 
 
@@ -327,9 +333,16 @@ def test_log_and_write_substring_line_not_suppressed(tmp_path, ctx):
         output_files,
         ctx,
         written_lines,
+        [],
     )
     second = log_and_write(
-        "gcp", {"34.1.2.3": {"34.0.0.0/8"}}, "ple.com", output_files, ctx, written_lines
+        "gcp",
+        {"34.1.2.3": {"34.0.0.0/8"}},
+        "ple.com",
+        output_files,
+        ctx,
+        written_lines,
+        [],
     )
 
     assert first is True
@@ -382,25 +395,27 @@ def test_perform_csp_checks_dedupes_across_calls_on_same_env_manager(tmp_path, c
     class RealishEnvManager:
         """A plain object (not a MagicMock) so hasattr() behaves normally —
         MagicMock auto-creates attributes, which would hide a missing
-        lazy-init of _csp_written_lines."""
+        lazy-init of _csp_written."""
 
         def __init__(self, output_files):
             self.output_files = output_files
+            self.records = []
 
     csp_file = tmp_path / "csp.txt"
     csp_file.touch()
     env_manager = RealishEnvManager({"standard": {"csp": str(csp_file)}})
 
-    assert not hasattr(env_manager, "_csp_written_lines")
+    assert not hasattr(env_manager, "_csp_written")
 
     first = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
-    assert hasattr(env_manager, "_csp_written_lines")
+    assert hasattr(env_manager, "_csp_written")
     second = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
 
     assert first is True
     assert second is False  # same domain + same match already logged
     lines = [ln for ln in csp_file.read_text().splitlines() if ln]
     assert len(lines) == 1
+    assert [r.pipe() for r in env_manager.records] == lines
 
 
 # ---------------------------------------------------------------------------

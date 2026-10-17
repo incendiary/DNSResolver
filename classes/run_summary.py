@@ -1,83 +1,53 @@
+from classes.records import CspMatch, Dangling, NsTakeover, Resolution, Unresolved
+
+
 class RunSummary:
-    def __init__(self, output_files, output_dir, version=None):
-        self._files = output_files["standard"]
+    def __init__(self, records, output_dir, version=None):
+        self._records = records
         self._output_dir = output_dir
         self._version = version
 
-    def _lines(self, key):
-        path = self._files.get(key)
-        if not path:
-            return []
-        try:
-            with open(path, encoding="utf-8") as f:
-                return [ln.strip() for ln in f if ln.strip()]
-        except OSError:
-            return []
+    def _of(self, kind):
+        return [r for r in self._records if isinstance(r, kind)]
 
     def display(self, total_input, failed_count):
-        resolved_lines = self._lines("resolved")
-        resolved_count = len(resolved_lines)
-        wildcard_count = sum(1 for ln in resolved_lines if ln.startswith("WILDCARD|"))
-        wildcard_zone_count = sum(
-            1 for ln in resolved_lines if ln.startswith("WILDCARD_ZONE|")
-        )
-        unresolved_count = len(self._lines("unresolved"))
+        resolved = self._of(Resolution)
+        resolved_count = len(resolved)
+        wildcard_count = sum(1 for r in resolved if r.wildcard == "WILDCARD")
+        wildcard_zone_count = sum(1 for r in resolved if r.wildcard == "WILDCARD_ZONE")
+        unresolved_count = len(self._of(Unresolved))
 
-        takeover_lines = self._lines("takeover")
-        dangling = [
-            ln[len("DANGLING|") :]
-            for ln in takeover_lines
-            if ln.startswith("DANGLING|")
-        ]
-        ns_takeover = [
-            ln[len("NS_TAKEOVER|") :]
-            for ln in takeover_lines
-            if ln.startswith("NS_TAKEOVER|")
-        ]
+        dangling = self._of(Dangling)
+        ns_takeover = self._of(NsTakeover)
 
-        # Handoff records: [WILDCARD|]domain|ip|provider|region|service|prefix|border
-        csp_lines = self._lines("csp")
-        csp_records = []
-        csp_wildcard_count = 0
-        for line in csp_lines:
-            if line.startswith(("WILDCARD|", "WILDCARD_ZONE|")):
-                csp_wildcard_count += 1
-                # Counted, but kept out of the target breakdown below. In a zone
-                # that answers for anything, an address cannot be attributed to
-                # the domain rather than the platform — including where the probe
-                # simply did not sample that part of a rotating pool.
-                continue
-            fields = line.split("|")
-            if len(fields) >= 6:
-                csp_records.append(fields)
+        # Wildcard matches are counted, but kept out of the target breakdown
+        # below. In a zone that answers for anything, an address cannot be
+        # attributed to the domain rather than the platform, including where the
+        # probe simply did not sample that part of a rotating pool.
+        csp_matches = self._of(CspMatch)
+        csp_wildcard_count = sum(1 for m in csp_matches if m.wildcard)
+        csp_records = [m for m in csp_matches if not m.wildcard]
 
-        aws_count = sum(1 for r in csp_records if r[2] == "aws")
-        gcp_count = sum(1 for r in csp_records if r[2] == "gcp")
-        azure_count = sum(1 for r in csp_records if r[2] == "azure")
+        aws_count = sum(1 for m in csp_records if m.provider == "aws")
+        gcp_count = sum(1 for m in csp_records if m.provider == "gcp")
+        azure_count = sum(1 for m in csp_records if m.provider == "azure")
 
         # Region and service are what an operator acts on, so surface the
         # breakdown rather than a bare provider tally.
         csp_breakdown = {}
-        for record in csp_records:
-            provider, region, service = record[2], record[3], record[4]
-            csp_breakdown[(provider, region, service)] = (
-                csp_breakdown.get((provider, region, service), 0) + 1
-            )
+        for m in csp_records:
+            key = (m.provider, m.region, m.service)
+            csp_breakdown[key] = csp_breakdown.get(key, 0) + 1
 
         classified = {}
         unclassified = []
-        for line in dangling:
-            parts = line.split("|")
-            if len(parts) >= 5:
-                _orig, current, category, recommendation, evidence = parts[:5]
-                depth = int(parts[5]) if len(parts) > 5 else 0
-                chain = parts[6] if len(parts) > 6 else None
-                if category == "unknown":
-                    unclassified.append((_orig, current, depth, chain))
-                else:
-                    classified.setdefault(category, []).append(
-                        (current, recommendation, evidence, depth, chain)
-                    )
+        for d in dangling:
+            if d.category == "unknown":
+                unclassified.append((d.origin, d.target, d.hops, d.chain))
+            else:
+                classified.setdefault(d.category, []).append(
+                    (d.target, d.recommendation, d.evidence, d.hops, d.chain)
+                )
 
         classified_count = sum(len(v) for v in classified.values())
         unclassified_count = len(unclassified)
@@ -153,17 +123,15 @@ class RunSummary:
             if ns_takeover:
                 print()
                 print(f"  NS Takeover candidates ({len(ns_takeover)})")
-                for line in ns_takeover:
-                    parts = line.split("|")
-                    if len(parts) >= 2:
-                        root, ns_host = parts[0], parts[1]
-                        print(f"    {root} -> NS: {ns_host}")
-                        print(
-                            "          Why    : Nameserver does not resolve — registering it gives"
-                        )
-                        print(
-                            f"                   an attacker DNS control over {root} and all its subdomains"
-                        )
+                for ns in ns_takeover:
+                    root = ns.origin
+                    print(f"    {root} -> NS: {ns.domain}")
+                    print(
+                        "          Why    : Nameserver does not resolve — registering it gives"
+                    )
+                    print(
+                        f"                   an attacker DNS control over {root} and all its subdomains"
+                    )
 
             if unclassified:
                 print()

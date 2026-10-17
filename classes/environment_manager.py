@@ -58,6 +58,7 @@ class EnvironmentManager:
         self.logger = setup_logger()
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.domains = set()
+        self.records = []
         self.patterns = None
         self.environment_info = {}
 

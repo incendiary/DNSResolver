@@ -7,3 +7,4 @@ WILDCARD_ZONE|host2.rot.example.com|198.18.0.61
 nstake.example.com|192.0.2.80
 shared-a.example.com|198.51.100.77
 shared-b.example.com|198.51.100.77
+multi.example.com|198.18.1.5

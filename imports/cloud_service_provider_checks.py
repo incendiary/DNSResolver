@@ -2,6 +2,7 @@ import functools
 import ipaddress
 
 from classes.custom_exceptions import OutputWriteError
+from classes.records import CspMatch
 
 
 @functools.lru_cache(maxsize=None)
@@ -19,12 +20,12 @@ def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=
     domain = domain_context.get_domain()
     output_files = env_manager.output_files
 
-    # Run-scoped set of CSP lines already written, to dedupe without
+    # Run-scoped set of CSP records already written, to dedupe without
     # re-reading the output file. Owned on env_manager so it persists
     # across the many perform_csp_checks calls (one per domain) in a run.
-    if not hasattr(env_manager, "_csp_written_lines"):
-        env_manager._csp_written_lines = set()
-    written_lines = env_manager._csp_written_lines
+    if not hasattr(env_manager, "_csp_written"):
+        env_manager._csp_written = set()
+    written = env_manager._csp_written
 
     vendor_ips_context_ipv4 = get_vendor_ips(domain_context, ip_version=4)
     vendor_ips_context_ipv6 = get_vendor_ips(domain_context, ip_version=6)
@@ -49,7 +50,8 @@ def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=
                     domain,
                     output_files,
                     domain_context,
-                    written_lines,
+                    written,
+                    env_manager.records,
                     wildcard_verdict,
                 )
                 or success
@@ -128,7 +130,8 @@ def log_and_write(
     domain,
     output_files,
     domain_context,
-    written_lines,
+    written,
+    records,
     wildcard_verdict=None,
 ):
     """
@@ -154,7 +157,6 @@ def log_and_write(
     """
     catalogues = domain_context.get_catalogues()
     file_path = output_files["standard"]["csp"]
-    line_prefix = f"{wildcard_verdict}|" if wildcard_verdict else ""
     wrote_any = False
 
     for ip, prefixes in sorted(matched_ips.items()):
@@ -162,25 +164,32 @@ def log_and_write(
             for region, service, border_group in sorted(
                 describe(catalogues, vendor, prefix)
             ):
-                message = (
-                    f"{line_prefix}{domain}|{ip}|{vendor}|{region}|{service}"
-                    f"|{prefix}|{border_group}"
+                match = CspMatch(
+                    domain,
+                    ip,
+                    vendor,
+                    region,
+                    service,
+                    prefix,
+                    border_group,
+                    wildcard_verdict or "",
                 )
 
-                # Deduplicate against an in-memory, run-scoped set of lines already
+                # Deduplicate against an in-memory, run-scoped set of records already
                 # written — avoids re-reading the whole output file on every call.
-                if message in written_lines:
+                if match in written:
                     continue
 
                 try:
                     with open(file_path, "a", encoding="utf-8") as file:
-                        file.write(message + "\n")
+                        file.write(match.pipe() + "\n")
                 except OSError as error:
                     raise OutputWriteError(
                         f"Failed to write CSP attribution to {file_path}: {error}"
                     ) from error
-                written_lines.add(message)
-                domain_context.log_info(message)
+                written.add(match)
+                records.append(match)
+                domain_context.log_info(match.pipe())
                 wrote_any = True
 
     return wrote_any
