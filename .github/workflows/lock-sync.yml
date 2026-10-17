@@ -1,0 +1,46 @@
+name: Lock sync
+
+# Fails a pull request whose requirements inputs cannot be satisfied by the
+# hash-locked files. Check only: it never writes, pushes, or regenerates.
+
+on:
+  pull_request:
+    paths:
+      - "requirements*.txt"
+      - "requirements*.lock"
+      - ".github/workflows/lock-sync.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lock-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.12"
+
+      # Older pip treats --hash lines in a constraints file as --require-hashes
+      # and then rejects the unpinned inputs, so reduce each lock to name==version.
+      - name: Check that each lock satisfies its input
+        run: |
+          status=0
+          for name in requirements requirements-dev; do
+            sed -n 's/^\([A-Za-z0-9_.-]*==[^ ]*\).*/\1/p' "$name.lock" > "$RUNNER_TEMP/$name.constraints"
+            if ! pip install --dry-run --ignore-installed -r "$name.txt" -c "$RUNNER_TEMP/$name.constraints"; then
+              echo "::error::$name.lock does not satisfy $name.txt"
+              status=1
+            fi
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "Regenerate the locks with Python 3.12 in a throwaway venv (README, Reproducible installs):"
+            echo "  pip install pip-tools"
+            echo "  pip-compile --strip-extras --generate-hashes --output-file requirements.lock requirements.txt"
+            echo "  pip-compile --strip-extras --generate-hashes --output-file requirements-dev.lock requirements-dev.txt"
+          fi
+          exit "$status"
