@@ -36,4 +36,4 @@ jobs:
         run: pytest tests/baseline/ -v
 
       - name: Test (pytest)
-        run: pytest --cov=. --cov-report=term-missing
+        run: pytest --cov=classes --cov=imports --cov-fail-under=95 --cov-report=term-missing

@@ -215,7 +215,7 @@ bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml
 - **Assert outcomes, not execution.** A test that only proves code "ran without raising" is
   worse than no test, because it reads as coverage. Assert the classification string, the
   precedence result, the graceful return value.
-- **Coverage only goes up.** Currently ~95%.
+- **Coverage only goes up.** CI enforces a floor of 95% (`--cov-fail-under=95` in `ci.yml`); raise it when coverage rises, never lower it. Currently ~97%.
 - **Every bug fix gets a regression test.**
 
 ### The verification lesson
