@@ -119,7 +119,7 @@ def test_observation_publication_failure_removes_stale_and_temporary_files(tmp_p
 
     with (
         patch("classes.run_contract.os.replace", side_effect=OSError("read only")),
-        pytest.raises(OutputWriteError),
+        pytest.raises(OutputWriteError, match="Unable to publish run document"),
     ):
         publish_dns_observations(_output_files(tmp_path), tmp_path)
 

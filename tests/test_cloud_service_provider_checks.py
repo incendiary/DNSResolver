@@ -14,6 +14,7 @@ from classes.allocator_contract import publish_allocator_targets
 from classes.custom_exceptions import OutputWriteError
 from classes.domain_processing_context import DomainProcessingContext
 from imports.cloud_service_provider_checks import (
+    describe,
     get_ip_matches,
     get_vendor_ips,
     is_ip_version,
@@ -23,6 +24,7 @@ from imports.cloud_service_provider_checks import (
     parse_network,
     perform_csp_checks,
 )
+from tests.conftest import make_catalogue
 
 # ---------------------------------------------------------------------------
 # Fixture: a domain context pre-loaded with test IP ranges
@@ -30,8 +32,8 @@ from imports.cloud_service_provider_checks import (
 
 
 @pytest.fixture
-def ctx(mock_env_manager, csp_ips):
-    context = DomainProcessingContext(mock_env_manager, csp_ips)
+def ctx(mock_env_manager, catalogues):
+    context = DomainProcessingContext(mock_env_manager, catalogues)
     context.set_domain("example.com")
     return context
 
@@ -62,18 +64,18 @@ def test_is_ip_version_ipv6_rejected_for_v4():
 # ---------------------------------------------------------------------------
 
 
-def test_get_vendor_ips_ipv4_returns_correct_ranges(ctx, csp_ips):
+def test_get_vendor_ips_ipv4_returns_correct_ranges(ctx, catalogues):
     result = get_vendor_ips(ctx, ip_version=4)
-    assert result["gcp"] == csp_ips.get_gcp_ipv4()
-    assert result["aws"] == csp_ips.get_aws_ipv4()
-    assert result["azure"] == csp_ips.get_azure_ipv4()
+    assert result["gcp"] == catalogues["gcp"].ipv4_ranges
+    assert result["aws"] == catalogues["aws"].ipv4_ranges
+    assert result["azure"] == catalogues["azure"].ipv4_ranges
 
 
-def test_get_vendor_ips_ipv6_returns_correct_ranges(ctx, csp_ips):
+def test_get_vendor_ips_ipv6_returns_correct_ranges(ctx, catalogues):
     result = get_vendor_ips(ctx, ip_version=6)
-    assert result["gcp"] == csp_ips.get_gcp_ipv6()
-    assert result["aws"] == csp_ips.get_aws_ipv6()
-    assert result["azure"] == csp_ips.get_azure_ipv6()
+    assert result["gcp"] == catalogues["gcp"].ipv6_ranges
+    assert result["aws"] == catalogues["aws"].ipv6_ranges
+    assert result["azure"] == catalogues["azure"].ipv6_ranges
 
 
 def test_get_vendor_ips_unknown_version_returns_empty(ctx):
@@ -156,7 +158,7 @@ def test_merge_matches_empty_sets():
 # ---------------------------------------------------------------------------
 
 
-def test_get_ip_matches_finds_gcp_ipv4(ctx, csp_ips):
+def test_get_ip_matches_finds_gcp_ipv4(ctx, catalogues):
     # 34.1.2.3 falls in GCP's 34.0.0.0/8 range (from conftest)
     result = get_ip_matches(["34.1.2.3"], get_vendor_ips(ctx, 4), ctx, ip_version=4)
     assert result["gcp"]["34.1.2.3"] == {"34.0.0.0/8"}
@@ -222,25 +224,19 @@ def test_log_and_write_no_duplicate_entries(tmp_path, ctx):
 
 
 def test_log_and_write_emits_every_prefix_and_service(tmp_path, mock_env_manager):
-    from classes.csp_ip_addresses import CSPIPAddresses
-
-    csp = CSPIPAddresses(
-        [],
-        [],
-        ["192.0.2.0/24", "192.0.2.0/25"],
-        [],
-        [],
-        [],
-        metadata_by_provider={
-            "aws": {
+    csp = {
+        "aws": make_catalogue(
+            "aws",
+            ipv4=["192.0.2.0/24", "192.0.2.0/25"],
+            metadata={
                 "192.0.2.0/24": [
                     ("ap-southeast-1", "AMAZON", "ap-southeast-1"),
                     ("ap-southeast-1", "EC2", "ap-southeast-1"),
                 ],
                 "192.0.2.0/25": [("ap-southeast-1", "EC2", "ap-southeast-1")],
-            }
-        },
-    )
+            },
+        )
+    }
     context = DomainProcessingContext(mock_env_manager, csp)
     context.set_domain("api.example.com")
     output = tmp_path / "csp.txt"
@@ -576,3 +572,57 @@ def test_catch_all_zone_cloud_match_is_marked_distinctly(
     )
 
     assert out_file.read_text().startswith("WILDCARD_ZONE|example.com|3.1.2.3|aws|")
+
+
+# ---------------------------------------------------------------------------
+# describe
+# ---------------------------------------------------------------------------
+
+
+def test_describe_defaults_to_unknown_for_unpublished_prefix(catalogues):
+    assert describe(catalogues, "gcp", "203.0.113.0/24") == [
+        ("unknown", "unknown", "unknown")
+    ]
+
+
+def test_describe_isolates_identical_cidr_by_provider():
+    shared = "192.0.2.0/24"
+    cats = {
+        "gcp": make_catalogue(
+            "gcp",
+            [shared],
+            metadata={shared: [("asia-southeast1", "Google Cloud", "unknown")]},
+        ),
+        "aws": make_catalogue(
+            "aws",
+            [shared],
+            metadata={shared: [("ap-southeast-1", "EC2", "ap-southeast-1")]},
+        ),
+    }
+    assert describe(cats, "gcp", shared) == [
+        ("asia-southeast1", "Google Cloud", "unknown")
+    ]
+    assert describe(cats, "aws", shared) == [
+        ("ap-southeast-1", "EC2", "ap-southeast-1")
+    ]
+
+
+def test_overlapping_providers_are_written_in_catalogue_order(
+    tmp_path, mock_env_manager
+):
+    """An address published by two providers yields records in dict order."""
+    shared = "192.0.2.0/24"
+    cats = {
+        name: make_catalogue(name, [shared], metadata={shared: [("r", "S", "b")]})
+        for name in ("gcp", "aws", "azure")
+    }
+    context = DomainProcessingContext(mock_env_manager, cats)
+    context.set_domain("example.com")
+    out_file = tmp_path / "csp.txt"
+    out_file.touch()
+    mock_env_manager.output_files = {"standard": {"csp": str(out_file)}}
+
+    perform_csp_checks(context, mock_env_manager, ["192.0.2.1"])
+
+    providers = [line.split("|")[2] for line in out_file.read_text().splitlines()]
+    assert providers == ["gcp", "aws", "azure"]

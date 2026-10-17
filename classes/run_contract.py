@@ -167,7 +167,7 @@ def _lines(path):
         ) from error
 
 
-def _write_json_atomic(document, destination):
+def _write_json_atomic(document, destination, what="run document"):
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     _remove_output(destination)
     _remove_output(temporary)
@@ -178,7 +178,7 @@ def _write_json_atomic(document, destination):
         os.replace(temporary, destination)
     except OSError as error:
         raise OutputWriteError(
-            f"Unable to publish run document {destination}: {error}"
+            f"Unable to publish {what} {destination}: {error}"
         ) from error
     finally:
         _remove_output(temporary)

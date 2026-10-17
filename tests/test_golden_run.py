@@ -201,7 +201,7 @@ async def test_golden_run(tmp_path, monkeypatch, capsys):
             "classes.wildcard_detector.uuid.uuid4",
             side_effect=lambda: UUID(int=next(labels)),
         ),
-        patch("resolver._timestamp", side_effect=lambda: next(timestamps)),
+        patch("resolver._timestamp", side_effect=lambda _value: next(timestamps)),
         patch.object(EnvironmentManager, "set_domains", _ordered_domains),
     ):
         clock.now.return_value.strftime.return_value = STAMP

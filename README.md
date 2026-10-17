@@ -138,8 +138,7 @@ resolver.py              — CLI entry point → run(env_manager)
 │   ├── TakeoverDetector     — dangling CNAME detection, NS takeover checks, depth-limited CNAME chain following
 │   ├── WildcardDetector     — per-zone wildcard DNS detection, cached probe results
 │   └── EvidenceCollector    — async subprocess evidence capture (dig/nslookup)
-├── DomainProcessingContext  — per-domain state (domain name, resolver, CSP IPs)
-├── CSPIPAddresses           — value object holding fetched AWS/GCP/Azure IP ranges
+├── DomainProcessingContext  — per-domain state (domain name, resolver, provider catalogues)
 ├── DomainCategoriser        — regex-based classification of dangling CNAME targets
 ├── run_contract.py          — excluded-observation and final run-manifest publisher
 └── domain_processor.py     — orchestrates DNS → CSP checks per domain

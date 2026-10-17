@@ -25,7 +25,7 @@ Read HANDOVER.md and AGENTS.md before running anything. Then:
    `.venv/bin/pytest tests/baseline/ -v`
    `.venv/bin/pytest --cov=classes --cov=imports --cov-report=term-missing`
 3. Run the focused attribution tests:
-   `.venv/bin/pytest -q tests/test_allocator_contract.py tests/test_allocator_publisher.py tests/test_cloud_ip_ranges.py tests/test_cloud_service_provider_checks.py tests/test_csp_ip_addresses.py tests/test_resolver.py`
+   `.venv/bin/pytest -q tests/test_allocator_contract.py tests/test_allocator_publisher.py tests/test_cloud_ip_ranges.py tests/test_cloud_service_provider_checks.py tests/test_resolver.py`
 4. Run DNSResolver through its production CLI against a small file containing
    public, provider-owned names. Include `s3.amazonaws.com`, which previously
    resolved through the host's system resolver. Use a temporary config with no

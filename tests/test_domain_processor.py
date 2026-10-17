@@ -34,11 +34,11 @@ def pbar():
 
 
 async def test_returns_success_and_ips_on_resolution(
-    mock_env_manager, csp_ips, dns_handler, pbar
+    mock_env_manager, catalogues, dns_handler, pbar
 ):
     with patch("imports.domain_processor.perform_csp_checks"):
         success, ips, dangling = await process_domain_async(
-            "example.com", mock_env_manager, pbar, csp_ips, dns_handler
+            "example.com", mock_env_manager, pbar, catalogues, dns_handler
         )
 
     assert success is True
@@ -46,14 +46,14 @@ async def test_returns_success_and_ips_on_resolution(
 
 
 async def test_final_retry_is_forwarded_to_dns_handler(
-    mock_env_manager, csp_ips, dns_handler, pbar
+    mock_env_manager, catalogues, dns_handler, pbar
 ):
     with patch("imports.domain_processor.perform_csp_checks"):
         await process_domain_async(
             "example.com",
             mock_env_manager,
             pbar,
-            csp_ips,
+            catalogues,
             dns_handler,
             final_retry=False,
         )
@@ -62,28 +62,28 @@ async def test_final_retry_is_forwarded_to_dns_handler(
 
 
 async def test_pbar_is_updated_after_processing(
-    mock_env_manager, csp_ips, dns_handler, pbar
+    mock_env_manager, catalogues, dns_handler, pbar
 ):
     with patch("imports.domain_processor.perform_csp_checks"):
         await process_domain_async(
-            "example.com", mock_env_manager, pbar, csp_ips, dns_handler
+            "example.com", mock_env_manager, pbar, catalogues, dns_handler
         )
 
     pbar.update.assert_called_once_with(1)
 
 
 async def test_csp_checks_called_on_success(
-    mock_env_manager, csp_ips, dns_handler, pbar
+    mock_env_manager, catalogues, dns_handler, pbar
 ):
     with patch("imports.domain_processor.perform_csp_checks") as mock_csp:
         await process_domain_async(
-            "example.com", mock_env_manager, pbar, csp_ips, dns_handler
+            "example.com", mock_env_manager, pbar, catalogues, dns_handler
         )
 
     mock_csp.assert_called_once()
 
 
-async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
+async def test_dangling_domains_returned(mock_env_manager, catalogues, pbar):
     """
     Dangling domains discovered during resolution must come back as the
     third return value so main_async can aggregate them.
@@ -102,7 +102,7 @@ async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
         handler.resolve_domain_async = resolve_with_dangling
 
         _success, _ips, dangling = await process_domain_async(
-            "example.com", mock_env_manager, pbar, csp_ips, handler
+            "example.com", mock_env_manager, pbar, catalogues, handler
         )
 
     assert "cname-target.s3.amazonaws.com" in dangling
@@ -113,21 +113,21 @@ async def test_dangling_domains_returned(mock_env_manager, csp_ips, pbar):
 # ---------------------------------------------------------------------------
 
 
-async def test_csp_checks_not_called_on_failure(mock_env_manager, csp_ips, pbar):
+async def test_csp_checks_not_called_on_failure(mock_env_manager, catalogues, pbar):
     handler = MagicMock()
     handler.wildcard_detector.classify = AsyncMock(return_value=None)
     handler.resolve_domain_async = AsyncMock(return_value=(False, []))
 
     with patch("imports.domain_processor.perform_csp_checks") as mock_csp:
         await process_domain_async(
-            "example.com", mock_env_manager, pbar, csp_ips, handler
+            "example.com", mock_env_manager, pbar, catalogues, handler
         )
 
     mock_csp.assert_not_called()
 
 
 async def test_returns_failure_and_empty_ips_on_failure(
-    mock_env_manager, csp_ips, pbar
+    mock_env_manager, catalogues, pbar
 ):
     handler = MagicMock()
     handler.wildcard_detector.classify = AsyncMock(return_value=None)
@@ -135,7 +135,7 @@ async def test_returns_failure_and_empty_ips_on_failure(
 
     with patch("imports.domain_processor.perform_csp_checks"):
         success, ips, dangling = await process_domain_async(
-            "fail.example.com", mock_env_manager, pbar, csp_ips, handler
+            "fail.example.com", mock_env_manager, pbar, catalogues, handler
         )
 
     assert success is False
@@ -143,7 +143,7 @@ async def test_returns_failure_and_empty_ips_on_failure(
 
 
 async def test_wildcard_resolution_is_marked_in_output(
-    mock_env_manager, csp_ips, dns_handler, pbar
+    mock_env_manager, catalogues, dns_handler, pbar
 ):
     """
     A domain resolving only to its zone's wildcard addresses is written with a
@@ -153,7 +153,7 @@ async def test_wildcard_resolution_is_marked_in_output(
 
     with patch("imports.domain_processor.perform_csp_checks"):
         await process_domain_async(
-            "ghost.example.com", mock_env_manager, pbar, csp_ips, dns_handler
+            "ghost.example.com", mock_env_manager, pbar, catalogues, dns_handler
         )
 
     written = [c[0][1] for c in mock_env_manager.write_to_file.call_args_list]
@@ -161,12 +161,12 @@ async def test_wildcard_resolution_is_marked_in_output(
 
 
 async def test_ordinary_resolution_is_not_prefixed(
-    mock_env_manager, csp_ips, dns_handler, pbar
+    mock_env_manager, catalogues, dns_handler, pbar
 ):
     """Non-wildcard output keeps its original format — no regression for parsers."""
     with patch("imports.domain_processor.perform_csp_checks"):
         await process_domain_async(
-            "real.example.com", mock_env_manager, pbar, csp_ips, dns_handler
+            "real.example.com", mock_env_manager, pbar, catalogues, dns_handler
         )
 
     written = [c[0][1] for c in mock_env_manager.write_to_file.call_args_list]
@@ -175,7 +175,7 @@ async def test_ordinary_resolution_is_not_prefixed(
 
 
 async def test_catch_all_zone_resolution_is_marked_distinctly(
-    mock_env_manager, csp_ips, dns_handler, pbar
+    mock_env_manager, catalogues, dns_handler, pbar
 ):
     """
     A resolution in a zone that answers for anything, whose addresses were not
@@ -187,7 +187,7 @@ async def test_catch_all_zone_resolution_is_marked_distinctly(
 
     with patch("imports.domain_processor.perform_csp_checks"):
         await process_domain_async(
-            "maybe.example.com", mock_env_manager, pbar, csp_ips, dns_handler
+            "maybe.example.com", mock_env_manager, pbar, catalogues, dns_handler
         )
 
     written = [c[0][1] for c in mock_env_manager.write_to_file.call_args_list]

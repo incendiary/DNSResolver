@@ -10,7 +10,6 @@ from classes.allocator_contract import (
     clear_allocator_targets,
     publish_allocator_targets,
 )
-from classes.csp_ip_addresses import CSPIPAddresses
 from classes.custom_exceptions import OutputWriteError, ProviderCatalogueError
 from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
@@ -21,6 +20,7 @@ from classes.run_contract import (
 )
 from classes.run_summary import RunSummary
 from imports.cloud_ip_ranges import (
+    _timestamp,
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
@@ -36,7 +36,7 @@ async def run(env_manager):
     can share the same logic.
     """
     run_id = str(uuid4())
-    started_at = _timestamp()
+    started_at = _timestamp(datetime.now(timezone.utc))
     catalogues = {}
     clear_allocator_targets(env_manager.output_dir)
     clear_run_documents(env_manager.output_dir)
@@ -57,7 +57,7 @@ async def run(env_manager):
                     run_id=run_id,
                     status="failed",
                     started_at=started_at,
-                    completed_at=_timestamp(),
+                    completed_at=_timestamp(datetime.now(timezone.utc)),
                     catalogues=catalogues,
                 )
         except Exception as contract_error:
@@ -69,11 +69,9 @@ async def run(env_manager):
 
 async def _run(env_manager, run_id, started_at, catalogues):
     fetched_catalogues = {
-        "gcp": fetch_google_cloud_ip_ranges(
-            env_manager.output_dir, env_manager.extreme
-        ),
-        "aws": fetch_aws_ip_ranges(env_manager.output_dir, env_manager.extreme),
-        "azure": fetch_azure_ip_ranges(env_manager.output_dir, env_manager.extreme),
+        "gcp": fetch_google_cloud_ip_ranges(env_manager.output_dir),
+        "aws": fetch_aws_ip_ranges(env_manager.output_dir),
+        "azure": fetch_azure_ip_ranges(env_manager.output_dir),
     }
     catalogues.update(fetched_catalogues)
     status_path = Path(env_manager.output_dir) / "provider_catalogues.json"
@@ -108,27 +106,13 @@ async def _run(env_manager, run_id, started_at, catalogues):
             run_id=run_id,
             status="incomplete",
             started_at=started_at,
-            completed_at=_timestamp(),
+            completed_at=_timestamp(datetime.now(timezone.utc)),
             catalogues=catalogues,
         )
         raise ProviderCatalogueError(
             "Required provider catalogue(s) unavailable; no domains were processed "
             f"and no actionable results were published. {details}. Status: {status_path}"
         )
-
-    gcp_ipv4, gcp_ipv6, gcp_meta = catalogues["gcp"]
-    aws_ipv4, aws_ipv6, aws_meta = catalogues["aws"]
-    azure_ipv4, azure_ipv6, azure_meta = catalogues["azure"]
-
-    csp_ip_addresses = CSPIPAddresses(
-        gcp_ipv4,
-        gcp_ipv6,
-        aws_ipv4,
-        aws_ipv6,
-        azure_ipv4,
-        azure_ipv6,
-        metadata_by_provider={"gcp": gcp_meta, "aws": aws_meta, "azure": azure_meta},
-    )
 
     env_manager.set_domains()
     domains_to_process = list(env_manager.domains)
@@ -142,7 +126,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
                 domain,
                 env_manager,
                 pbar,
-                csp_ip_addresses,
+                catalogues,
                 dns_handler,
                 final_retry=final_retry,
             )
@@ -208,29 +192,26 @@ async def _run(env_manager, run_id, started_at, catalogues):
     )
 
     if env_manager.extreme:
-        env_manager.log_info("AWS IPv4 Ranges: %s", csp_ip_addresses.get_aws_ipv4())
-        env_manager.log_info("AWS IPv6 Ranges: %s", csp_ip_addresses.get_aws_ipv6())
-        env_manager.log_info(
-            "Google Cloud IPv4 Ranges: %s", csp_ip_addresses.get_gcp_ipv4()
-        )
-        env_manager.log_info(
-            "Google Cloud IPv6 Ranges: %s", csp_ip_addresses.get_gcp_ipv6()
-        )
-        env_manager.log_info("Azure IPv4 Ranges: %s", csp_ip_addresses.get_azure_ipv4())
-        env_manager.log_info("Azure IPv6 Ranges: %s", csp_ip_addresses.get_azure_ipv6())
+        for provider, label in (
+            ("aws", "AWS"),
+            ("gcp", "Google Cloud"),
+            ("azure", "Azure"),
+        ):
+            env_manager.log_info(
+                "%s IPv4 Ranges: %s", label, catalogues[provider].ipv4_ranges
+            )
+            env_manager.log_info(
+                "%s IPv6 Ranges: %s", label, catalogues[provider].ipv6_ranges
+            )
 
     publish_run_manifest(
         env_manager.output_dir,
         run_id=run_id,
         status="complete",
         started_at=started_at,
-        completed_at=_timestamp(),
+        completed_at=_timestamp(datetime.now(timezone.utc)),
         catalogues=catalogues,
     )
-
-
-def _timestamp():
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 async def main_async():

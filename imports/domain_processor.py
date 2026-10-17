@@ -6,11 +6,11 @@ async def process_domain_async(
     domain,
     env_manager,
     pbar,
-    csp_ip_addresses,
+    catalogues,
     dns_handler,
     final_retry=True,
 ):
-    domain_context = DomainProcessingContext(env_manager, csp_ip_addresses)
+    domain_context = DomainProcessingContext(env_manager, catalogues)
     domain_context.set_domain(domain)
 
     env_manager.log_info(f"Processing domain: {domain}")
