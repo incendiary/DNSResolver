@@ -249,6 +249,29 @@ async def test_check_ns_takeover_returns_true_when_ns_is_nxdomain(
     mock_env_manager.write_to_file.assert_called_once()
     path, content = mock_env_manager.write_to_file.call_args[0]
     assert "takeover" in path
+    assert content == ("NS_TAKEOVER|example.com|orphaned.example.com|ns1.orphaned.com")
+
+
+async def test_delegated_name_without_address_records_has_no_nameserver(
+    handler, domain_context, mock_env_manager
+):
+    """NS records but no A, AAAA or MX: no nameserver is implicated (`-`)."""
+
+    async def query_side_effect(domain, record_type):
+        if record_type == "NS":
+            return [dns_answer("ns1.example.net", attr="host")]
+        raise make_nxdomain()
+
+    handler.takeover_detector.aiodns_resolver.query = query_side_effect
+    domain_context.set_domain("deleg.example.com")
+
+    result = await handler.takeover_detector.check_dangling_cname_async(
+        domain_context, "deleg.example.com"
+    )
+
+    assert result is False
+    path, content = mock_env_manager.write_to_file.call_args[0]
+    assert content == "NS_TAKEOVER|deleg.example.com|deleg.example.com|-"
 
 
 async def test_check_ns_takeover_returns_false_when_no_ns_records(

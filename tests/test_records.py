@@ -68,8 +68,12 @@ def test_dangling_pipe():
 
 def test_ns_takeover_pipe():
     assert (
-        NsTakeover("a.example.com", "ns.example.net").pipe()
-        == "NS_TAKEOVER|a.example.com|ns.example.net"
+        NsTakeover("a.example.com", "a.example.com", "ns.example.net").pipe()
+        == "NS_TAKEOVER|a.example.com|a.example.com|ns.example.net"
+    )
+    assert (
+        NsTakeover("a.example.com", "a.example.com", "-").pipe()
+        == "NS_TAKEOVER|a.example.com|a.example.com|-"
     )
 
 

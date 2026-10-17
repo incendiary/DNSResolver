@@ -111,7 +111,7 @@ consumed by other tooling — changing a format is a breaking change.**
 | File | Format |
 |---|---|
 | `resolution_results_*.txt` | `domain\|ip1\|ip2\|…` — IPv4 first, then IPv6. May be prefixed `WILDCARD\|` (confirmed catch-all) or `WILDCARD_ZONE\|` (zone answers for anything; these addresses were not sampled). |
-| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — chain is the full CNAME path (`a -> b -> c`). Plus `NS_TAKEOVER\|origin\|domain`. |
+| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — chain is the full CNAME path (`a -> b -> c`). Plus `NS_TAKEOVER\|origin\|domain\|nameserver`: `nameserver` is the NS host whose address lookup returned NXDOMAIN or SERVFAIL, or `-` where the name has NS records but no address records (no nameserver implicated). **Breaking:** NS_TAKEOVER went from 3 fields to 4 in v3.0.0. |
 | `csp_matches_*.txt` | One record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`, carrying the same `WILDCARD\|`/`WILDCARD_ZONE\|` prefix where it applies. |
 | `unresolved_results_*.txt` | Domains that failed all retries |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
