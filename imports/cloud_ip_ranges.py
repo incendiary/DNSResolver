@@ -34,6 +34,9 @@ class CatalogueFetchError(RuntimeError):
     """A provider catalogue could not be fetched or validated."""
 
 
+_CATALOGUE_ERRORS = (CatalogueFetchError, OSError, ValueError, KeyError, TypeError)
+
+
 @dataclass(frozen=True)
 class ProviderCatalogue:
     provider: str
@@ -87,23 +90,21 @@ def _get_json(url: str) -> dict:
     )
 
 
+def _check_prefixes(ranges: List[str], version: int) -> None:
+    for cidr in ranges:
+        try:
+            parsed_version = ipaddress.ip_network(cidr).version
+        except ValueError as error:
+            raise CatalogueFetchError(f"invalid IPv{version} prefix: {cidr}") from error
+        if parsed_version != version:
+            raise CatalogueFetchError(f"invalid IPv{version} prefix: {cidr}")
+
+
 def _validate_ranges(ipv4_ranges: List[str], ipv6_ranges: List[str]) -> None:
     if not ipv4_ranges and not ipv6_ranges:
         raise CatalogueFetchError("catalogue contains no IP prefixes")
-    for cidr in ipv4_ranges:
-        try:
-            version = ipaddress.ip_network(cidr).version
-        except ValueError as error:
-            raise CatalogueFetchError(f"invalid IPv4 prefix: {cidr}") from error
-        if version != 4:
-            raise CatalogueFetchError(f"invalid IPv4 prefix: {cidr}")
-    for cidr in ipv6_ranges:
-        try:
-            version = ipaddress.ip_network(cidr).version
-        except ValueError as error:
-            raise CatalogueFetchError(f"invalid IPv6 prefix: {cidr}") from error
-        if version != 6:
-            raise CatalogueFetchError(f"invalid IPv6 prefix: {cidr}")
+    _check_prefixes(ipv4_ranges, 4)
+    _check_prefixes(ipv6_ranges, 6)
 
 
 def _add_metadata(metadata, cidr, attribution):
@@ -118,14 +119,6 @@ def _normalise_metadata(metadata, ranges):
     normalised = {}
     for cidr in ranges:
         entries = metadata.get(cidr)
-        # Snapshots written before multi-valued metadata used one three-item
-        # list: [region, service, border_group].
-        if (
-            isinstance(entries, list)
-            and len(entries) == 3
-            and all(isinstance(value, str) for value in entries)
-        ):
-            entries = [entries]
         if not isinstance(entries, list) or not entries:
             raise CatalogueFetchError(f"catalogue has no metadata for prefix: {cidr}")
         for entry in entries:
@@ -139,7 +132,7 @@ def _normalise_metadata(metadata, ranges):
     return normalised
 
 
-def _parse_standard(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
+def _parse_standard(data: dict) -> Tuple[List, List, Dict]:
     prefixes = data.get("prefixes")
     if not isinstance(prefixes, list):
         raise CatalogueFetchError("missing or invalid 'prefixes' list")
@@ -167,13 +160,10 @@ def _parse_standard(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
                 ipv6_ranges.append(cidr)
                 _add_metadata(metadata, cidr, (region, service, border_group))
     _validate_ranges(ipv4_ranges, ipv6_ranges)
-    if extreme:
-        print("IPv4 Ranges:", ipv4_ranges)
-        print("IPv6 Ranges:", ipv6_ranges)
     return ipv4_ranges, ipv6_ranges, metadata
 
 
-def _parse_azure(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
+def _parse_azure(data: dict) -> Tuple[List, List, Dict]:
     values = data.get("values")
     if not isinstance(values, list):
         raise CatalogueFetchError("missing or invalid 'values' list")
@@ -194,18 +184,7 @@ def _parse_azure(data: dict, extreme: bool) -> Tuple[List, List, Dict]:
             (ipv6_ranges if ":" in cidr else ipv4_ranges).append(cidr)
             _add_metadata(metadata, cidr, (region, service, "unknown"))
     _validate_ranges(ipv4_ranges, ipv6_ranges)
-    if extreme:
-        print("IPv4 Ranges:", ipv4_ranges)
-        print("IPv6 Ranges:", ipv6_ranges)
     return ipv4_ranges, ipv6_ranges, metadata
-
-
-def fetch_ip_ranges(url: str, extreme: bool = False) -> Tuple[List, List, Dict]:
-    return _parse_standard(_get_json(url), extreme)
-
-
-def fetch_ip_ranges_for_azure(url: str, extreme: bool) -> Tuple[List, List, Dict]:
-    return _parse_azure(_get_json(url), extreme)
 
 
 def _snapshot_id(ranges: Tuple[List, List, Dict]) -> str:
@@ -289,10 +268,10 @@ def _failed_catalogue(
 
 
 def _fetch_catalogue(
-    provider: str, source_url: str, output_dir: str, extreme: bool, parser
+    provider: str, source_url: str, output_dir: str, parser
 ) -> ProviderCatalogue:
     try:
-        ranges = parser(source_url, extreme)
+        ranges = parser(_get_json(source_url))
         if len(ranges) != 3:
             raise CatalogueFetchError("parser returned an incomplete catalogue")
         _validate_ranges(ranges[0], ranges[1])
@@ -314,22 +293,10 @@ def _fetch_catalogue(
         )
         _save_catalogue(output_dir, catalogue)
         return catalogue
-    except (
-        CatalogueFetchError,
-        OSError,
-        ValueError,
-        KeyError,
-        TypeError,
-    ) as live_error:
+    except _CATALOGUE_ERRORS as live_error:
         try:
             return _load_cached_catalogue(output_dir, provider, source_url)
-        except (
-            OSError,
-            ValueError,
-            KeyError,
-            TypeError,
-            CatalogueFetchError,
-        ) as cache_error:
+        except _CATALOGUE_ERRORS as cache_error:
             return _failed_catalogue(
                 provider,
                 source_url,
@@ -337,18 +304,12 @@ def _fetch_catalogue(
             )
 
 
-def fetch_google_cloud_ip_ranges(
-    output_dir: str, extreme: bool = False
-) -> ProviderCatalogue:
-    return _fetch_catalogue(
-        "gcp", PROVIDER_SOURCES["gcp"], output_dir, extreme, fetch_ip_ranges
-    )
+def fetch_google_cloud_ip_ranges(output_dir: str) -> ProviderCatalogue:
+    return _fetch_catalogue("gcp", PROVIDER_SOURCES["gcp"], output_dir, _parse_standard)
 
 
-def fetch_aws_ip_ranges(output_dir: str, extreme: bool = False) -> ProviderCatalogue:
-    return _fetch_catalogue(
-        "aws", PROVIDER_SOURCES["aws"], output_dir, extreme, fetch_ip_ranges
-    )
+def fetch_aws_ip_ranges(output_dir: str) -> ProviderCatalogue:
+    return _fetch_catalogue("aws", PROVIDER_SOURCES["aws"], output_dir, _parse_standard)
 
 
 # Pinned as of 2026-05-10. It is only attempted when discovery is unavailable.
@@ -382,7 +343,7 @@ def _discover_azure_url() -> str:
     raise CatalogueFetchError(f"Azure URL discovery failed: {errors[-1]}")
 
 
-def fetch_azure_ip_ranges(output_dir: str, extreme: bool = False) -> ProviderCatalogue:
+def fetch_azure_ip_ranges(output_dir: str) -> ProviderCatalogue:
     discovery_error = None
     try:
         source_url = _discover_azure_url()
@@ -390,9 +351,7 @@ def fetch_azure_ip_ranges(output_dir: str, extreme: bool = False) -> ProviderCat
         discovery_error = error
         source_url = AZURE_PINNED_URL
 
-    catalogue = _fetch_catalogue(
-        "azure", source_url, output_dir, extreme, fetch_ip_ranges_for_azure
-    )
+    catalogue = _fetch_catalogue("azure", source_url, output_dir, _parse_azure)
     if catalogue.usable:
         return catalogue
     if discovery_error:

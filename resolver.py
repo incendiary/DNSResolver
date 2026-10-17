@@ -69,11 +69,9 @@ async def run(env_manager):
 
 async def _run(env_manager, run_id, started_at, catalogues):
     fetched_catalogues = {
-        "gcp": fetch_google_cloud_ip_ranges(
-            env_manager.output_dir, env_manager.extreme
-        ),
-        "aws": fetch_aws_ip_ranges(env_manager.output_dir, env_manager.extreme),
-        "azure": fetch_azure_ip_ranges(env_manager.output_dir, env_manager.extreme),
+        "gcp": fetch_google_cloud_ip_ranges(env_manager.output_dir),
+        "aws": fetch_aws_ip_ranges(env_manager.output_dir),
+        "azure": fetch_azure_ip_ranges(env_manager.output_dir),
     }
     catalogues.update(fetched_catalogues)
     status_path = Path(env_manager.output_dir) / "provider_catalogues.json"
