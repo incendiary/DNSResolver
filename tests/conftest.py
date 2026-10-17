@@ -10,8 +10,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from classes.config_resolver import OPTIONS
 from classes.dns_handler import DNSHandler
 from imports.cloud_ip_ranges import ProviderCatalogue
+
+
+@pytest.fixture(autouse=True)
+def _clean_dnsresolver_env(monkeypatch):
+    """No DNSRESOLVER_* variable from the developer's shell may leak into a test."""
+    for var, _ in OPTIONS.values():
+        monkeypatch.delenv(var, raising=False)
+
 
 # ---------------------------------------------------------------------------
 # IP range data
