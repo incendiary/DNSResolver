@@ -78,7 +78,7 @@ the previous agent created was squash-merged and deleted. There is nothing hidde
 | `REVIEW.md` | Current review and ponytail audit (2026-10-16). The superseded 2026-07 review, whose body was written against a misread goal, is `docs/roadmap/REVIEW-2026-07.md` — **read its Correction section at the end first** |
 | `ROADMAP.md` | Plan and its status, plus what remains open |
 | `docs/roadmap/AGENT-GUIDE.md` | Per-task working rules used during delivery |
-| `docs/roadmap/PR-*.md` | Individual execution plans (historical; all delivered) |
+| `docs/roadmap/ARCHIVE.md` | Delivery archive. The per-PR execution plans were deleted once delivered and remain in git history |
 | `CONTRIBUTING.md` | Contribution basics |
 
 ### Verify the state yourself rather than trusting this table
@@ -551,8 +551,8 @@ and those runs found defects the test suite did not. If you want to do the same:
 
 ### How the previous engagement was run
 
-Work was delivered in sprints: a roadmap of bundled PRs, each with a written plan under
-`docs/roadmap/`, executed one branch per item, squash-merged, then released as a batch. Some
+Work was delivered in sprints: a roadmap of bundled PRs, each with a written plan (since removed;
+recoverable from git history), executed one branch per item, squash-merged, then released as a batch. Some
 items were delegated to sub-agents with a model tier chosen per §6. Where sub-agents were used
 they were given the plan file plus the standards in `docs/roadmap/AGENT-GUIDE.md`, and their work
 was verified before merge rather than taken on trust — two of them reported facts about the

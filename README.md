@@ -341,7 +341,8 @@ Once related root domains are identified, enumerate subdomains for each and comb
 ## Roadmap
 
 Active and completed work is tracked in **[ROADMAP.md](ROADMAP.md)**, with the findings that drive it
-in [REVIEW.md](REVIEW.md) and per-item execution plans under [`docs/roadmap/`](docs/roadmap/).
+in [REVIEW.md](REVIEW.md). The superseded 2026-07 review and the delivery archive live under
+[`docs/roadmap/`](docs/roadmap/); the per-PR execution plans were removed once delivered and remain in git history.
 
 Recent releases: consolidated output files, an actionable end-of-run summary, correct handling of
 self-referential and non-existent CNAMEs, IPv6 (AAAA) resolution, and wildcard DNS detection.
