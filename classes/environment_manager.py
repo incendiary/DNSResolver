@@ -56,7 +56,7 @@ class EnvironmentManager:
     def __init__(self):
         self.logger = setup_logger()
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.domains = set()
+        self.domains = []
         self.records = []
         self._csp_written = set()
         self.patterns = None
@@ -143,7 +143,7 @@ class EnvironmentManager:
     def set_domains(self):
         with open(self.domains_file, "r", encoding="utf-8") as f:
             raw_domains = f.read().splitlines()
-        self.domains = set(self.clean_domains(raw_domains))
+        self.domains = list(dict.fromkeys(self.clean_domains(raw_domains)))
 
     def clean_domains(self, domains):
         return [d for d in domains if d and self.is_valid_domain(d)]
