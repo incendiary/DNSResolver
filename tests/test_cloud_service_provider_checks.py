@@ -7,6 +7,7 @@ directory for each test — perfect for functions that write output files.
 """
 
 import ipaddress
+import random
 
 import pytest
 
@@ -19,7 +20,6 @@ from imports.cloud_service_provider_checks import (
     get_vendor_ips,
     is_ip_version,
     log_and_write,
-    match_ip_with_vendors,
     merge_matches,
     parse_network,
     perform_csp_checks,
@@ -43,20 +43,17 @@ def ctx(mock_env_manager, catalogues):
 # ---------------------------------------------------------------------------
 
 
-def test_is_ip_version_ipv4_correct():
-    assert is_ip_version("34.1.2.3", 4) is True
-
-
-def test_is_ip_version_ipv4_rejected_for_v6():
-    assert is_ip_version("34.1.2.3", 6) is False
-
-
-def test_is_ip_version_ipv6_correct():
-    assert is_ip_version("2600:1900::1", 6) is True
-
-
-def test_is_ip_version_ipv6_rejected_for_v4():
-    assert is_ip_version("2600:1900::1", 4) is False
+@pytest.mark.parametrize(
+    ("address", "version", "expected"),
+    [
+        pytest.param("34.1.2.3", 4, True, id="ipv4_correct"),
+        pytest.param("34.1.2.3", 6, False, id="ipv4_rejected_for_v6"),
+        pytest.param("2600:1900::1", 6, True, id="ipv6_correct"),
+        pytest.param("2600:1900::1", 4, False, id="ipv6_rejected_for_v4"),
+    ],
+)
+def test_is_ip_version(address, version, expected):
+    assert is_ip_version(address, version) is expected
 
 
 # ---------------------------------------------------------------------------
@@ -88,11 +85,9 @@ def test_get_vendor_ips_unknown_version_returns_empty(ctx):
 
 
 def test_match_ip_with_vendors_records_match(ctx):
-    ip_obj = ipaddress.IPv4Address("34.1.2.3")
     vendor_ips = {"gcp": ["34.0.0.0/8"], "aws": [], "azure": []}
-    matches = {"gcp": {}, "aws": {}, "azure": {}}
 
-    match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
+    matches = get_ip_matches(["34.1.2.3"], vendor_ips, ctx, 4)
 
     assert "34.1.2.3" in matches["gcp"]
     # The matched prefix is retained — it is the key to region and service.
@@ -101,30 +96,24 @@ def test_match_ip_with_vendors_records_match(ctx):
 
 
 def test_match_keeps_every_overlapping_prefix(ctx):
-    ip_obj = ipaddress.IPv4Address("192.0.2.10")
     vendor_ips = {"aws": ["192.0.2.0/24", "192.0.2.0/25"]}
-    matches = {"aws": {}}
-    match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
+    matches = get_ip_matches(["192.0.2.10"], vendor_ips, ctx, 4)
     assert matches["aws"]["192.0.2.10"] == {"192.0.2.0/24", "192.0.2.0/25"}
 
 
 def test_match_ip_with_vendors_no_match(ctx):
-    ip_obj = ipaddress.IPv4Address("1.2.3.4")
     vendor_ips = {"gcp": ["34.0.0.0/8"]}
-    matches = {"gcp": {}}
 
-    match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
+    matches = get_ip_matches(["1.2.3.4"], vendor_ips, ctx, 4)
 
     assert matches["gcp"] == {}
 
 
 def test_match_ip_with_vendors_ignores_invalid_range(ctx):
     """A bad CIDR string should not crash — it's logged and skipped."""
-    ip_obj = ipaddress.IPv4Address("1.2.3.4")
     vendor_ips = {"gcp": ["not-a-valid-cidr"]}
-    matches = {"gcp": {}}
 
-    match_ip_with_vendors(ip_obj, vendor_ips, ctx, matches)
+    matches = get_ip_matches(["1.2.3.4"], vendor_ips, ctx, 4)
 
     assert matches["gcp"] == {}
 
@@ -393,22 +382,20 @@ def test_perform_csp_checks_dedupes_across_calls_on_same_env_manager(tmp_path, c
     so the same match for the same domain is only written once."""
 
     class RealishEnvManager:
-        """A plain object (not a MagicMock) so hasattr() behaves normally —
-        MagicMock auto-creates attributes, which would hide a missing
-        lazy-init of _csp_written."""
+        """A plain object (not a MagicMock), so a missing attribute raises
+        instead of being auto-created. It sets _csp_written the way
+        EnvironmentManager.__init__ does."""
 
         def __init__(self, output_files):
             self.output_files = output_files
             self.records = []
+            self._csp_written = set()
 
     csp_file = tmp_path / "csp.txt"
     csp_file.touch()
     env_manager = RealishEnvManager({"standard": {"csp": str(csp_file)}})
 
-    assert not hasattr(env_manager, "_csp_written")
-
     first = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
-    assert hasattr(env_manager, "_csp_written")
     second = perform_csp_checks(ctx, env_manager, ["34.1.2.3"])
 
     assert first is True
@@ -429,12 +416,7 @@ def test_parse_network_equivalence_ip_inside_and_outside_range(ctx):
     ipaddress.ip_network() parsing would."""
     vendor_ips = {"gcp": ["34.0.0.0/8"], "aws": ["10.0.0.0/8"], "azure": []}
 
-    inside_ip = ipaddress.IPv4Address("34.1.2.3")
-    outside_ip = ipaddress.IPv4Address("8.8.8.8")
-
-    matches = {"gcp": {}, "aws": {}, "azure": {}}
-    match_ip_with_vendors(inside_ip, vendor_ips, ctx, matches)
-    match_ip_with_vendors(outside_ip, vendor_ips, ctx, matches)
+    matches = get_ip_matches(["34.1.2.3", "8.8.8.8"], vendor_ips, ctx, 4)
 
     assert matches == {
         "gcp": {"34.1.2.3": {"34.0.0.0/8"}},
@@ -468,17 +450,12 @@ def test_match_ip_with_vendors_reuses_cached_network(ctx):
     re-parse the CIDR strings for each IP."""
     parse_network.cache_clear()
     vendor_ips = {"gcp": ["34.0.0.0/8", "35.0.0.0/8"], "aws": [], "azure": []}
-    matches = {"gcp": {}, "aws": {}, "azure": {}}
 
-    ips = [ipaddress.IPv4Address(f"34.1.2.{i}") for i in range(10)]
-    for ip in ips:
-        match_ip_with_vendors(ip, vendor_ips, ctx, matches)
+    get_ip_matches([f"34.1.2.{i}" for i in range(10)], vendor_ips, ctx, 4)
 
-    info = parse_network.cache_info()
     # Only the 2 distinct CIDR strings should ever be parsed (misses == 2),
     # regardless of how many IPs (10) were checked against them.
-    assert info.misses == 2
-    assert info.hits == 10 * 2 - 2
+    assert parse_network.cache_info().misses == 2
 
 
 def test_handoff_record_carries_region_and_service_end_to_end(
@@ -641,3 +618,99 @@ def test_overlapping_providers_are_written_in_catalogue_order(
 
     providers = [line.split("|")[2] for line in out_file.read_text().splitlines()]
     assert providers == ["gcp", "aws", "azure"]
+
+
+# ---------------------------------------------------------------------------
+# per-run memo
+# ---------------------------------------------------------------------------
+
+
+def _checks(tmp_path, env, context, ips):
+    csp_file = tmp_path / f"csp{id(context)}.txt"
+    csp_file.touch()
+    env.output_files = {"standard": {"csp": str(csp_file)}}
+    perform_csp_checks(context, env, ips)
+    return csp_file.read_text()
+
+
+def test_memo_scans_each_address_once(mock_env_manager, ctx, monkeypatch):
+    import imports.cloud_service_provider_checks as checks
+
+    calls = []
+    real = checks.match_ip_with_index
+    monkeypatch.setattr(
+        checks, "match_ip_with_index", lambda *a: calls.append(a[0]) or real(*a)
+    )
+    perform_csp_checks(ctx, mock_env_manager, ["34.1.2.3"])
+    perform_csp_checks(ctx, mock_env_manager, ["34.1.2.3"])
+    assert len(calls) == 1
+
+
+def test_memo_does_not_leak_between_catalogues(tmp_path, mock_env_manager):
+    one = {"aws": make_catalogue("aws", ["192.0.2.0/24"])}
+    two = {"aws": make_catalogue("aws", ["198.51.100.0/24"])}
+    for catalogues, expected in ((one, True), (two, False)):
+        context = DomainProcessingContext(mock_env_manager, catalogues)
+        context.set_domain("example.com")
+        mock_env_manager._csp_written = set()
+        output = _checks(tmp_path, mock_env_manager, context, ["192.0.2.1"])
+        assert bool(output) is expected
+
+
+# ---------------------------------------------------------------------------
+# indexed matcher versus the original linear scan (the oracle)
+# ---------------------------------------------------------------------------
+
+
+def linear_match(ip_obj, vendor_ips_context):
+    """The original scan: every prefix of every vendor, in list order."""
+    found = {vendor: set() for vendor in vendor_ips_context}
+    for vendor, ips in vendor_ips_context.items():
+        for ip_range in ips:
+            try:
+                network = parse_network(ip_range)
+            except ValueError:
+                continue
+            if ip_obj in network:
+                found[vendor].add(ip_range)
+    return found
+
+
+def _random_catalogue(rng, version, size):
+    """Prefixes inside a small space, so they nest, repeat and collide."""
+    bits = 32 if version == 4 else 128
+    net_class = ipaddress.IPv4Network if version == 4 else ipaddress.IPv6Network
+    base = 0xC0000200 if version == 4 else 0x20010DB8 << 96
+    span = 12 if version == 4 else 16
+    pool = []
+    for _ in range(size):
+        length = rng.randint(bits - span, bits)
+        value = base | rng.getrandbits(span)
+        pool.append(net_class((value, length), strict=False))
+    return pool, base, span
+
+
+@pytest.mark.parametrize("version", [4, 6])
+def test_indexed_matcher_equals_linear_scan(ctx, version):
+    rng = random.Random(1500 + version)
+    pool, base, span = _random_catalogue(rng, version, 400)
+    cidrs = [str(n) for n in pool]
+    vendor_ips = {
+        "gcp": cidrs[:250],
+        "aws": cidrs[100:350] + cidrs[:20],  # CIDRs repeated across providers
+        "azure": cidrs[300:] + ["not-a-valid-cidr"],
+    }
+    addresses = [pool[rng.randrange(len(pool))][0] for _ in range(300)]
+    addresses += [
+        str(ipaddress.ip_address(base | rng.getrandbits(span))) for _ in range(300)
+    ]
+    addresses += ["8.8.8.8" if version == 4 else "fc00::1"]
+    nested = 0
+    memo = {}  # the index is built once, as in a run
+    for ip in addresses:
+        ip = str(ip)
+        expected = linear_match(ipaddress.ip_address(ip), vendor_ips)
+        got = get_ip_matches([ip], vendor_ips, ctx, version, memo=memo)
+        assert {v: set(m.get(ip, ())) for v, m in got.items()} == expected
+        nested += any(len(p) > 1 for p in expected.values())
+    assert nested > 50  # the sample really exercises overlapping prefixes

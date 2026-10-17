@@ -111,11 +111,17 @@ consumed by other tooling — changing a format is a breaking change.**
 | File | Format |
 |---|---|
 | `resolution_results_*.txt` | `domain\|ip1\|ip2\|…` — IPv4 first, then IPv6. May be prefixed `WILDCARD\|` (confirmed catch-all) or `WILDCARD_ZONE\|` (zone answers for anything; these addresses were not sampled). |
-| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — chain is the full CNAME path (`a -> b -> c`). Plus `NS_TAKEOVER\|origin\|domain`. |
+| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — chain is the full CNAME path (`a -> b -> c`). Plus `NS_TAKEOVER\|origin\|domain\|nameserver`: `nameserver` is the NS host whose address lookup returned NXDOMAIN or SERVFAIL, or `-` where the name has NS records but no address records (no nameserver implicated). **Breaking:** NS_TAKEOVER went from 3 fields to 4 in v3.0.0. |
 | `csp_matches_*.txt` | One record per matched address: `domain\|ip\|provider\|region\|service\|prefix\|border_group`, carrying the same `WILDCARD\|`/`WILDCARD_ZONE\|` prefix where it applies. |
 | `unresolved_results_*.txt` | Domains that failed all retries |
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | `dig`/`nslookup` capture per flagged domain, when `--evidence` is set |
+
+Line order in the four pipe files is sorted (by full line text) and stable: identical input
+yields byte-identical files under any hash seed or completion order. During a run lines are
+appended as they are found; when every domain has finished each file is rewritten sorted
+(atomically), before the JSON documents are published. Consumers must still not depend on
+more than stability.
 
 The prefix convention (`WILDCARD|`, `WILDCARD_ZONE|`, `DANGLING|`, `NS_TAKEOVER|`) is the house
 style for tagging a line's type while keeping untagged lines backward compatible. Follow it.
@@ -191,9 +197,14 @@ bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml
   wildcard rotates across regions — of two fabricated names, the old logic caught one, the
   two-tier catches both. Whether a **zone** is wildcarded is always knowable; whether a
   **particular answer** came from it often is not, and the output now says which is which.
-- **Performance at scale is reasoned, not measured.** Known cliffs were removed (per-IP CIDR
-  parsing, O(n²) dedupe) but no benchmark has been run against a large list.
-
+- **Performance at scale is measured** (`bench/bench_matcher.py`, results in `bench/BASELINE.md`,
+  55,000 synthetic prefixes). Matching used to scan every prefix per address: 10.6 ms per distinct
+  address, 84.5 s for 10,000 hostnames. Per-address memoisation alone gave 9.0 ms, so prefixes are
+  now indexed by length and masked network address: 0.17 ms per distinct address, 1.3 s for
+  10,000 hostnames, 11.2 s for 100,000. The first call still stalls the event loop for about
+  180 ms while the prefixes are parsed and indexed. Output is identical; every overlapping prefix
+  is still returned (`tests/test_cloud_service_provider_checks.py` checks the index against the
+  original linear scan).
 ---
 
 ## 8. Testing standards
@@ -204,7 +215,7 @@ bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml
 - **Assert outcomes, not execution.** A test that only proves code "ran without raising" is
   worse than no test, because it reads as coverage. Assert the classification string, the
   precedence result, the graceful return value.
-- **Coverage only goes up.** Currently ~95%.
+- **Coverage only goes up.** CI enforces a floor of 95% (`--cov-fail-under=95` in `ci.yml`); raise it when coverage rises, never lower it. Currently ~97%.
 - **Every bug fix gets a regression test.**
 
 ### The verification lesson

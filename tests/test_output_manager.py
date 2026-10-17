@@ -11,7 +11,9 @@ from unittest.mock import patch
 import pytest
 
 from classes.custom_exceptions import OutputWriteError
-from classes.output_manager import OutputManager
+from classes.environment_manager import EnvironmentManager
+from classes.output_manager import OutputManager, write_sorted_atomic
+from classes.records import CspMatch, Dangling, NsTakeover, Resolution, Unresolved
 
 
 def test_output_dir_created(tmp_path):
@@ -83,3 +85,62 @@ async def test_write_to_file_success_writes_content(tmp_path):
     await om.write_to_file(target, "hello")
     with open(target, "r", encoding="utf-8") as f:
         assert f.read() == "hello\n"
+
+
+def test_write_sorted_atomic_sorts_and_leaves_no_temporary(tmp_path):
+    path = tmp_path / "out.txt"
+    path.write_text("stale\n")
+    write_sorted_atomic(str(path), ["b|2", "WILDCARD|z", "a|1", "b|1"])
+    assert path.read_text() == "WILDCARD|z\na|1\nb|1\nb|2\n"
+    assert os.listdir(tmp_path) == ["out.txt"]
+
+
+def test_write_sorted_atomic_keeps_original_when_replace_fails(tmp_path):
+    path = tmp_path / "out.txt"
+    path.write_text("original\n")
+    with patch("classes.output_manager.os.replace", side_effect=OSError("boom")):
+        with pytest.raises(OutputWriteError):
+            write_sorted_atomic(str(path), ["b", "a"])
+    assert path.read_text() == "original\n"
+
+
+def test_sort_pipe_files_orders_by_line_whatever_the_write_order(tmp_path):
+    om = OutputManager(str(tmp_path), "20260101_000000")
+    env = EnvironmentManager.__new__(EnvironmentManager)
+    env.output_files = om.output_files
+    # Completion order differs from sorted order, and from record kind order.
+    env.records = [
+        Resolution("z.example.com", ("192.0.2.2",)),
+        Dangling("z.example.com", "t", "c", "r", "e", 1, "z -> t"),
+        Resolution("a.example.com", ("192.0.2.1",)),
+        Unresolved("m.example.com", "NXDOMAIN"),
+        NsTakeover("z.example.com", "z.example.com", "ns.example.com"),
+        CspMatch("z.example.com", "1", "aws", "r", "s", "p", "g"),
+        Unresolved("b.example.com", "NXDOMAIN"),
+        CspMatch("a.example.com", "1", "aws", "r", "s", "p", "g"),
+        Dangling("a.example.com", "t", "c", "r", "e", 1, "a -> t"),
+    ]
+    standard = om.output_files["standard"]
+
+    def read(key):
+        with open(standard[key], encoding="utf-8") as handle:
+            return handle.read().splitlines()
+
+    env.sort_pipe_files()
+    first = {key: read(key) for key in ("resolved", "csp", "takeover", "unresolved")}
+    env.sort_pipe_files()  # stable: a second pass changes nothing
+    assert {key: read(key) for key in first} == first
+    assert first["resolved"] == ["a.example.com|192.0.2.1", "z.example.com|192.0.2.2"]
+    assert first["unresolved"] == [
+        "DNS resolution error for b.example.com: NXDOMAIN",
+        "DNS resolution error for m.example.com: NXDOMAIN",
+    ]
+    assert first["takeover"] == [
+        "DANGLING|a.example.com|t|c|r|e|1|a -> t",
+        "DANGLING|z.example.com|t|c|r|e|1|z -> t",
+        "NS_TAKEOVER|z.example.com|z.example.com|ns.example.com",
+    ]
+    assert [line.split("|")[0] for line in first["csp"]] == [
+        "a.example.com",
+        "z.example.com",
+    ]

@@ -56,7 +56,11 @@ def publish_dns_observations(
                 record.origin,
                 "ns_takeover",
                 [],
-                [f"Nameserver did not resolve: {record.domain}"],
+                [
+                    "Name has NS records but no address records"
+                    if record.nameserver == "-"
+                    else f"Nameserver did not resolve: {record.nameserver}"
+                ],
             )
         elif isinstance(record, Unresolved):
             _merge_observation(

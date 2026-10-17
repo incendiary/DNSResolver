@@ -1,12 +1,12 @@
+WILDCARD_ZONE|host2.rot.example.com|198.18.0.61|aws|eu-west-2|EC2|198.18.0.0/24|eu-west-2
+WILDCARD|host1.wild.example.com|198.18.0.50|aws|eu-west-2|EC2|198.18.0.0/24|eu-west-2
 aws.example.com|198.18.0.10|aws|eu-west-2|EC2|198.18.0.0/24|eu-west-2
-gcp.example.com|198.51.100.20|gcp|europe-west2|Google Cloud|198.51.100.0/24|unknown
-gcp.example.com|2001:db8:b::20|gcp|europe-west2|Google Cloud|2001:db8:b::/48|unknown
 azure.example.com|203.0.113.30|azure|uksouth|AzureCloud|203.0.113.0/24|unknown
 azure.example.com|203.0.113.30|azure|ukwest|AzureCloud|203.0.113.0/24|unknown
-v6.example.com|2001:db8:a::1|aws|eu-west-2|EC2|2001:db8:a::/48|eu-west-2
-WILDCARD|host1.wild.example.com|198.18.0.50|aws|eu-west-2|EC2|198.18.0.0/24|eu-west-2
-WILDCARD_ZONE|host2.rot.example.com|198.18.0.61|aws|eu-west-2|EC2|198.18.0.0/24|eu-west-2
+gcp.example.com|198.51.100.20|gcp|europe-west2|Google Cloud|198.51.100.0/24|unknown
+gcp.example.com|2001:db8:b::20|gcp|europe-west2|Google Cloud|2001:db8:b::/48|unknown
+multi.example.com|198.18.1.5|aws|eu-west-2|EC2|198.18.1.0/24|eu-west-2
+multi.example.com|198.18.1.5|gcp|europe-west2|Google Cloud|198.18.1.0/25|unknown
 shared-a.example.com|198.51.100.77|gcp|europe-west2|Google Cloud|198.51.100.0/24|unknown
 shared-b.example.com|198.51.100.77|gcp|europe-west2|Google Cloud|198.51.100.0/24|unknown
-multi.example.com|198.18.1.5|gcp|europe-west2|Google Cloud|198.18.1.0/25|unknown
-multi.example.com|198.18.1.5|aws|eu-west-2|EC2|198.18.1.0/24|eu-west-2
+v6.example.com|2001:db8:a::1|aws|eu-west-2|EC2|2001:db8:a::/48|eu-west-2

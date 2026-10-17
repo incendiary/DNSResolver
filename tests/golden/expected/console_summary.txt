@@ -28,7 +28,7 @@
         Chain (1 hop)  : dangle.example.com -> old-bucket.s3.amazonaws.com
 
   NS Takeover candidates (1)
-    nstake.example.com -> NS: nstake.example.com
+    nstake.example.com -> NS: nstake.example.com (nameserver ns1.deadns.example.net)
           Why    : Nameserver does not resolve — registering it gives
                    an attacker DNS control over nstake.example.com and all its subdomains
 ----------------------------------------------------------------

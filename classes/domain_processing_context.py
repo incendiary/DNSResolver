@@ -3,7 +3,6 @@ class DomainProcessingContext:
         self.env_manager = env_manager
         self.catalogues = catalogues
         self.domain = None
-        self.dangling_domains = set()
 
     def get_catalogues(self):
         return self.catalogues
@@ -13,9 +12,6 @@ class DomainProcessingContext:
 
     def set_domain(self, domain):
         self.domain = domain
-
-    def add_dangling_domain_to_domains(self, domain):
-        self.dangling_domains.add(domain)
 
     def log_info(self, message, *args):
         self.env_manager.log_info(message, *args)

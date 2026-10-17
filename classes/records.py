@@ -64,13 +64,14 @@ class Dangling:
 
 @dataclass(frozen=True)
 class NsTakeover:
-    """`NS_TAKEOVER|origin|domain` in takeover_candidates."""
+    """`NS_TAKEOVER|origin|domain|nameserver` in takeover_candidates."""
 
     origin: str
     domain: str
+    nameserver: str  # failing NS host, or `-` when none is implicated
 
     def pipe(self):
-        return f"NS_TAKEOVER|{self.origin}|{self.domain}"
+        return f"NS_TAKEOVER|{self.origin}|{self.domain}|{self.nameserver}"
 
 
 @dataclass(frozen=True)

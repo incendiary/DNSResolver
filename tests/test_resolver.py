@@ -24,8 +24,8 @@ def run_environment(tmp_path):
 async def test_run_marks_only_last_attempt_as_final(run_environment):
     process = AsyncMock(
         side_effect=[
-            (False, [], set()),
-            (True, ["192.0.2.10"], set()),
+            (False, []),
+            (True, ["192.0.2.10"]),
         ]
     )
 

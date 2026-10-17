@@ -210,23 +210,43 @@ def test_classified_and_unclassified_split(capsys):
 
 
 def test_ns_takeover_flagged(capsys):
-    summary = _summary([NsTakeover("vuln.example.com", "ns1.orphaned-registrar.com")])
+    summary = _summary(
+        [
+            NsTakeover(
+                "vuln.example.com", "vuln.example.com", "ns1.orphaned-registrar.com"
+            )
+        ]
+    )
     summary.display(total_input=1, failed_count=0)
 
     out = capsys.readouterr().out
     assert "[!]" in out
     assert "NS Takeover candidates (1)" in out
-    assert "vuln.example.com -> NS: ns1.orphaned-registrar.com" in out
+    assert (
+        "vuln.example.com -> NS: vuln.example.com "
+        "(nameserver ns1.orphaned-registrar.com)"
+    ) in out
     assert "Why" in out
     assert "DNS control" in out
+
+
+def test_ns_takeover_without_nameserver_is_described_accurately(capsys):
+    summary = _summary([NsTakeover("deleg.example.com", "deleg.example.com", "-")])
+    summary.display(total_input=1, failed_count=0)
+
+    out = capsys.readouterr().out
+    assert "deleg.example.com -> NS: deleg.example.com" in out
+    assert "(nameserver" not in out
+    assert "Name has NS records but no address records" in out
+    assert "DNS control" not in out
 
 
 def test_both_dangling_and_ns_takeover_total_count(capsys):
     summary = _summary(
         [
             _dangling("a.com", "a.herokudns.com", "heroku", "Remove", "https://h"),
-            NsTakeover("b.com", "ns1.dead.example"),
-            NsTakeover("c.com", "ns2.dead.example"),
+            NsTakeover("b.com", "b.com", "ns1.dead.example"),
+            NsTakeover("c.com", "c.com", "ns2.dead.example"),
         ]
     )
     summary.display(total_input=3, failed_count=0)

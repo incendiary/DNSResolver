@@ -156,7 +156,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
                 )
                 failed.append(domain)
                 continue
-            success, _final_ips, _dangling = result
+            success, _final_ips = result
             if not success:
                 failed.append(domain)
         domains_to_process = failed
@@ -174,6 +174,8 @@ async def _run(env_manager, run_id, started_at, catalogues):
             len(domains_to_process),
             retries + 1,
         )
+
+    env_manager.sort_pipe_files()
 
     targets = publish_allocator_targets(env_manager.records, env_manager.output_dir)
     env_manager.log_info(

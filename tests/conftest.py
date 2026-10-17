@@ -6,10 +6,11 @@ function that names it as a parameter.  Putting them here in conftest.py
 makes them available to every test file automatically.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from classes.dns_handler import DNSHandler
 from imports.cloud_ip_ranges import ProviderCatalogue
 
 # ---------------------------------------------------------------------------
@@ -112,9 +113,51 @@ def mock_env_manager():
 
     # Structured records appended beside every write
     env.records = []
+    env._csp_written = set()
 
     # log_* are sync fire-and-forget calls — plain MagicMock is fine
     env.log_info = MagicMock()
     env.log_error = MagicMock()
 
     return env
+
+
+# ---------------------------------------------------------------------------
+# DNS handler and per-domain context
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def handler(mock_env_manager):
+    """
+    Build a DNSHandler without touching the network.
+
+    The fixture is async so it runs inside an event loop — required because
+    aiodns.DNSResolver() calls asyncio.get_event_loop() in its __init__.
+    We patch both it and EvidenceCollector so no real I/O happens, then
+    replace the resolvers with controllable AsyncMock / MagicMock objects.
+    """
+    with (
+        patch("classes.dns_handler.aiodns.DNSResolver"),
+        patch("classes.dns_handler.dns.resolver.Resolver"),
+        patch("classes.takeover_detector.EvidenceCollector"),
+    ):
+        h = DNSHandler(mock_env_manager)
+
+    # Replace with controllable fakes. TakeoverDetector was constructed with
+    # the original aiodns resolver reference, so reassign both to the same mock.
+    mock_aiodns = AsyncMock()
+    h.aiodns_resolver = mock_aiodns
+    h.dnspython_resolver = MagicMock()
+    h.takeover_detector.aiodns_resolver = mock_aiodns
+    return h
+
+
+@pytest.fixture
+def domain_context(mock_env_manager, catalogues):
+    """A minimal DomainProcessingContext."""
+    from classes.domain_processing_context import DomainProcessingContext
+
+    ctx = DomainProcessingContext(mock_env_manager, catalogues)
+    ctx.set_domain("example.com")
+    return ctx

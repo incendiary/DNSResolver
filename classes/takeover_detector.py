@@ -43,7 +43,7 @@ class TakeoverDetector:
                     await self.aiodns_resolver.query(ns_domain, "A")
                 except aiodns.error.DNSError as e:
                     if is_dns_error_present(e, [NXDOMAIN, SERVFAIL]):
-                        record = NsTakeover(original_domain, domain)
+                        record = NsTakeover(original_domain, domain, ns_domain)
                         self.env_manager.records.append(record)
                         await self.env_manager.write_to_file(
                             output_files["standard"]["takeover"], record.pipe()
@@ -71,8 +71,6 @@ class TakeoverDetector:
         self.env_manager.log_info(
             f"NS takeover check for {current_domain}: {is_nstakeover}"
         )
-        if is_dangling or is_nstakeover:
-            domain_context.add_dangling_domain_to_domains(current_domain)
         return is_dangling or is_nstakeover
 
     async def check_dangling_cname_async(
@@ -134,7 +132,7 @@ class TakeoverDetector:
 
         try:
             await self.aiodns_resolver.query(current_domain, "NS")
-            record = NsTakeover(original_domain, current_domain)
+            record = NsTakeover(original_domain, current_domain, "-")
             self.env_manager.records.append(record)
             await self.env_manager.write_to_file(
                 output_files["standard"]["takeover"], record.pipe()

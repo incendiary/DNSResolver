@@ -16,6 +16,20 @@ def parse_network(cidr):
     return ipaddress.ip_network(cidr)
 
 
+# The catalogues are fixed for a run, so a match depends only on (address,
+# family). One slot, held by identity: a different catalogues object (the next
+# run, or the next test) starts a fresh memo, and holding the reference stops
+# its id being reused while the memo is live.
+_memo_slot = (None, {})
+
+
+def _match_memo(catalogues):
+    global _memo_slot
+    if _memo_slot[0] is not catalogues:
+        _memo_slot = (catalogues, {})
+    return _memo_slot[1]
+
+
 def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=None):
     domain = domain_context.get_domain()
     output_files = env_manager.output_files
@@ -23,18 +37,17 @@ def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=
     # Run-scoped set of CSP records already written, to dedupe without
     # re-reading the output file. Owned on env_manager so it persists
     # across the many perform_csp_checks calls (one per domain) in a run.
-    if not hasattr(env_manager, "_csp_written"):
-        env_manager._csp_written = set()
     written = env_manager._csp_written
 
     vendor_ips_context_ipv4 = get_vendor_ips(domain_context, ip_version=4)
     vendor_ips_context_ipv6 = get_vendor_ips(domain_context, ip_version=6)
 
+    memo = _match_memo(domain_context.get_catalogues())
     matches_ipv4 = get_ip_matches(
-        final_ips, vendor_ips_context_ipv4, domain_context, ip_version=4
+        final_ips, vendor_ips_context_ipv4, domain_context, ip_version=4, memo=memo
     )
     matches_ipv6 = get_ip_matches(
-        final_ips, vendor_ips_context_ipv6, domain_context, ip_version=6
+        final_ips, vendor_ips_context_ipv6, domain_context, ip_version=6, memo=memo
     )
 
     matches = merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context_ipv4)
@@ -82,15 +95,39 @@ def describe(catalogues, provider, cidr):
     return entries or [("unknown", "unknown", "unknown")]
 
 
-def get_ip_matches(final_ips, vendor_ips_context, domain_context, ip_version):
+def get_ip_matches(
+    final_ips, vendor_ips_context, domain_context, ip_version, memo=None
+):
+    """
+    Match each address of one family against every published prefix.
+
+    `memo` (from perform_csp_checks) holds the per-run prefix index and the
+    per-address results; without it the index is built for this call only.
+    """
     matches = {vendor: {} for vendor in vendor_ips_context}
+    memo = {} if memo is None else memo
     for ip in final_ips:
         if not is_ip_version(ip, ip_version):
             continue
-        ip_obj = (
-            ipaddress.IPv4Address(ip) if ip_version == 4 else ipaddress.IPv6Address(ip)
-        )
-        match_ip_with_vendors(ip_obj, vendor_ips_context, domain_context, matches)
+        found = memo.get((ip, ip_version))
+        if found is None:
+            index = memo.get(("index", ip_version))
+            if index is None:
+                index = memo[("index", ip_version)] = build_prefix_index(
+                    vendor_ips_context, domain_context
+                )
+            ip_obj = (
+                ipaddress.IPv4Address(ip)
+                if ip_version == 4
+                else ipaddress.IPv6Address(ip)
+            )
+            found = memo[(ip, ip_version)] = {
+                vendor: {} for vendor in vendor_ips_context
+            }
+            match_ip_with_index(ip_obj, index, domain_context, found)
+        for vendor, by_address in found.items():
+            for address, prefixes in by_address.items():
+                matches[vendor].setdefault(address, set()).update(prefixes)
     return matches
 
 
@@ -98,21 +135,47 @@ def is_ip_version(ip, ip_version):
     return (ip_version == 4 and "." in ip) or (ip_version == 6 and ":" in ip)
 
 
-def match_ip_with_vendors(ip_obj, vendor_ips_context, domain_context, matches):
+def build_prefix_index(vendor_ips_context, domain_context):
+    """
+    Index each vendor's prefixes as {prefix_length: {network_int: [(position, cidr)]}}.
+
+    An address is contained by a prefix of length L exactly when masking it to
+    L bits gives that prefix's network address, so a lookup probes one dict per
+    distinct prefix length (at most 33 or 129) instead of scanning every prefix.
+    Nested and duplicate prefixes land in the same or different buckets and are
+    all found. An unparseable range is logged once, here, and skipped.
+    """
+    index = {}
     for vendor, ips in vendor_ips_context.items():
-        for ip_range in ips:
+        by_length = index[vendor] = {}
+        for position, ip_range in enumerate(ips):
             try:
                 network = parse_network(ip_range)
             except ValueError as e:
                 domain_context.log_info(f"Error processing IP range {ip_range}: {e}")
                 continue
-            if ip_obj in network:
-                domain_context.log_info(
-                    f"IP {ip_obj} is in range {ip_range} for vendor {vendor}"
-                )
-                # Keep the prefix that matched — it is the key to the region and
-                # service the provider published for it.
-                matches[vendor].setdefault(str(ip_obj), set()).add(ip_range)
+            bucket = by_length.setdefault(network.prefixlen, {})
+            bucket.setdefault(int(network.network_address), []).append(
+                (position, ip_range)
+            )
+    return index
+
+
+def match_ip_with_index(ip_obj, index, domain_context, matches):
+    bits = ip_obj.max_prefixlen
+    address = int(ip_obj)
+    for vendor, by_length in index.items():
+        hits = []
+        for length, bucket in by_length.items():
+            shift = bits - length
+            hits.extend(bucket.get((address >> shift) << shift, ()))
+        for _, ip_range in sorted(hits):  # list order, as the linear scan found them
+            domain_context.log_info(
+                f"IP {ip_obj} is in range {ip_range} for vendor {vendor}"
+            )
+            # Keep the prefix that matched — it is the key to the region and
+            # service the provider published for it.
+            matches[vendor].setdefault(str(ip_obj), set()).add(ip_range)
 
 
 def merge_matches(matches_ipv4, matches_ipv6, vendor_ips_context):

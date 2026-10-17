@@ -47,6 +47,30 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+### Reproducible installs (locked dependencies)
+
+Output files are interfaces for other tooling, so CI installs from hash-locked files rather
+than the `>=` floors in `requirements.txt`. The lock pins every transitive package to an exact
+version and SHA-256 hashes, so a republished or tampered package fails the install.
+
+```bash
+pip install --require-hashes -r requirements.lock        # runtime only
+pip install --require-hashes -r requirements-dev.lock    # runtime plus test and lint tools
+```
+
+`requirements.txt` and `requirements-dev.txt` stay the human-edited inputs. Regenerate the
+locks after editing them, using Python 3.12 (the version CI runs) in a throwaway venv:
+
+```bash
+pip install pip-tools
+pip-compile --strip-extras --generate-hashes --output-file requirements.lock requirements.txt
+pip-compile --strip-extras --generate-hashes --output-file requirements-dev.lock requirements-dev.txt
+```
+
+Review lock diffs like code: a changed hash on an unchanged version is a red flag. A weekly
+workflow (`.github/workflows/pip-audit.yml`) runs `pip-audit` against the lock and fails on
+known vulnerabilities.
+
 ## Usage
 
 ```bash
@@ -112,7 +136,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 |------|----------|
 | `resolution_results_*.txt` | Successfully resolved domains and their IPv4/IPv6 addresses, pipe-delimited (`domain\|ip1\|ip2`). Prefixed `WILDCARD\|` (confirmed catch-all) or `WILDCARD_ZONE\|` (zone answers for anything, unverifiable) — see [Wildcard DNS detection](#wildcard-dns-detection) |
 | `unresolved_results_*.txt` | Domains that could not be resolved after all retries |
-| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|` lines for unresolvable nameservers |
+| `takeover_candidates_*.txt` | `DANGLING\|origin\|target\|category\|recommendation\|evidence\|hops\|chain` — the chain records the full CNAME path (`a -> b -> c`), so the claimable hop is visible without re-resolving. Plus `NS_TAKEOVER\|origin\|domain\|nameserver` lines for unresolvable nameservers (`nameserver` is the failing NS host, or `-` where the name has NS records but no address records). The record gained its fourth field (`nameserver`) in v3.0.0, a breaking change for strict three-field parsers |
 | `csp_matches_*.txt` | One handoff record per provider-published attribution: `domain\|ip\|provider\|region\|service\|prefix\|border_group`. One address can produce several records. Prefixed `WILDCARD\|` when the resolution was a catch-all. See [Cloud IP attribution](#cloud-ip-attribution) |
 | `allocator-targets-v1.json` | Versioned provider-aware allocator handoff. Groups service, prefix, and border-group metadata per provider/hostname/address/region and excludes wildcard observations; one address may produce multiple records when a provider publishes multiple regions. |
 | `dns-observations-v1.json` | Versioned excluded-observation feed for wildcard, dangling CNAME, NS, unresolved, and provider-catalogue-incomplete results. |

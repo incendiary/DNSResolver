@@ -21,10 +21,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: requirements-dev.lock
 
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: pip install --require-hashes -r requirements-dev.lock
 
       - name: Lint (ruff)
         run: ruff check .
@@ -36,4 +36,4 @@ jobs:
         run: pytest tests/baseline/ -v
 
       - name: Test (pytest)
-        run: pytest --cov=. --cov-report=term-missing
+        run: pytest --cov=classes --cov=imports --cov-fail-under=95 --cov-report=term-missing

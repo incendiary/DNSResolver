@@ -37,7 +37,7 @@ async def test_returns_success_and_ips_on_resolution(
     mock_env_manager, catalogues, dns_handler, pbar
 ):
     with patch("imports.domain_processor.perform_csp_checks"):
-        success, ips, dangling = await process_domain_async(
+        success, ips = await process_domain_async(
             "example.com", mock_env_manager, pbar, catalogues, dns_handler
         )
 
@@ -83,31 +83,6 @@ async def test_csp_checks_called_on_success(
     mock_csp.assert_called_once()
 
 
-async def test_dangling_domains_returned(mock_env_manager, catalogues, pbar):
-    """
-    Dangling domains discovered during resolution must come back as the
-    third return value so main_async can aggregate them.
-    """
-    handler = MagicMock()
-    handler.wildcard_detector.classify = AsyncMock(return_value=None)
-    handler.resolve_domain_async = AsyncMock(return_value=(True, ["1.2.3.4"]))
-
-    with patch("imports.domain_processor.perform_csp_checks"):
-
-        async def resolve_with_dangling(ctx, final_retry=True):
-            assert final_retry is True
-            ctx.add_dangling_domain_to_domains("cname-target.s3.amazonaws.com")
-            return True, ["1.2.3.4"]
-
-        handler.resolve_domain_async = resolve_with_dangling
-
-        _success, _ips, dangling = await process_domain_async(
-            "example.com", mock_env_manager, pbar, catalogues, handler
-        )
-
-    assert "cname-target.s3.amazonaws.com" in dangling
-
-
 # ---------------------------------------------------------------------------
 # Failure path
 # ---------------------------------------------------------------------------
@@ -134,7 +109,7 @@ async def test_returns_failure_and_empty_ips_on_failure(
     handler.resolve_domain_async = AsyncMock(return_value=(False, []))
 
     with patch("imports.domain_processor.perform_csp_checks"):
-        success, ips, dangling = await process_domain_async(
+        success, ips = await process_domain_async(
             "fail.example.com", mock_env_manager, pbar, catalogues, handler
         )
 

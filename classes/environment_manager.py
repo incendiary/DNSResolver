@@ -9,7 +9,8 @@ from urllib.request import urlopen
 from tqdm import tqdm
 
 from classes.config_resolver import ConfigResolver
-from classes.output_manager import OutputManager
+from classes.output_manager import OutputManager, write_sorted_atomic
+from classes.records import CspMatch, Dangling, NsTakeover, Resolution, Unresolved
 
 
 class TqdmLoggingHandler(logging.StreamHandler):
@@ -56,8 +57,9 @@ class EnvironmentManager:
     def __init__(self):
         self.logger = setup_logger()
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.domains = set()
+        self.domains = []
         self.records = []
+        self._csp_written = set()
         self.patterns = None
         self.environment_info = {}
 
@@ -139,10 +141,27 @@ class EnvironmentManager:
         except (IOError, json.JSONDecodeError):
             self.patterns = {}
 
+    def sort_pipe_files(self):
+        """Rewrite each pipe file in sorted order once every domain has finished.
+
+        Domains complete in DNS-latency order, so the live writes race. The
+        lines come from the records the run already holds.
+        """
+        standard = self.output_files["standard"]
+        for key, kinds in (
+            ("resolved", (Resolution,)),
+            ("csp", (CspMatch,)),
+            ("takeover", (Dangling, NsTakeover)),
+            ("unresolved", (Unresolved,)),
+        ):
+            write_sorted_atomic(
+                standard[key], [r.pipe() for r in self.records if isinstance(r, kinds)]
+            )
+
     def set_domains(self):
         with open(self.domains_file, "r", encoding="utf-8") as f:
             raw_domains = f.read().splitlines()
-        self.domains = set(self.clean_domains(raw_domains))
+        self.domains = list(dict.fromkeys(self.clean_domains(raw_domains)))
 
     def clean_domains(self, domains):
         return [d for d in domains if d and self.is_valid_domain(d)]

@@ -125,7 +125,13 @@ class RunSummary:
                 print(f"  NS Takeover candidates ({len(ns_takeover)})")
                 for ns in ns_takeover:
                     root = ns.origin
-                    print(f"    {root} -> NS: {ns.domain}")
+                    if ns.nameserver == "-":
+                        print(f"    {root} -> NS: {ns.domain}")
+                        print(
+                            "          Why    : Name has NS records but no address records"
+                        )
+                        continue
+                    print(f"    {root} -> NS: {ns.domain} (nameserver {ns.nameserver})")
                     print(
                         "          Why    : Nameserver does not resolve — registering it gives"
                     )
