@@ -12,7 +12,9 @@ integration is covered in test_environment_manager.py.
 """
 
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -378,11 +380,30 @@ def test_invalid_format_exits_naming_the_source(tmp_path, monkeypatch):
 def test_envrc_example_lists_exactly_the_variables_the_code_reads():
     example = (ROOT / ".envrc.example").read_text(encoding="utf-8")
     assert example.splitlines()[0] == "# Copy to .envrc, then run: direnv allow"
-    in_example = set(re.findall(r"^# (DNSRESOLVER_[A-Z_]+)=", example, re.M))
+    in_example = set(re.findall(r"^# export (DNSRESOLVER_[A-Z_]+)=", example, re.M))
     in_code = {var for var, _ in OPTIONS.values()}
     assert in_example == in_code
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert all(f"`{var}`" in readme for var in in_code)
+
+
+def test_envrc_example_lines_export_when_uncommented(tmp_path):
+    # direnv evaluates .envrc as shell: without `export` a variable is set but
+    # never reaches the tool. Uncomment every example line and check they export.
+    example = (ROOT / ".envrc.example").read_text(encoding="utf-8")
+    assert not re.search(r"^# DNSRESOLVER_", example, re.M), "missing export"
+    uncommented = re.sub(r"^# (export DNSRESOLVER_)", r"\1", example, flags=re.M)
+    script = tmp_path / "envrc"
+    script.write_text(uncommented, encoding="utf-8")
+    result = subprocess.run(
+        ["/bin/bash", "-c", f". {script} && env"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={"PATH": os.environ["PATH"]},
+    )
+    exported = {line.split("=", 1)[0] for line in result.stdout.splitlines()}
+    assert {var for var, _ in OPTIONS.values()} <= exported
 
 
 def test_envrc_files_are_git_ignored():
