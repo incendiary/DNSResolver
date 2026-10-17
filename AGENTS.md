@@ -197,9 +197,14 @@ bash ~/.claude/skills/ci-local/local-ci.sh --workflow ci.yml
   wildcard rotates across regions — of two fabricated names, the old logic caught one, the
   two-tier catches both. Whether a **zone** is wildcarded is always knowable; whether a
   **particular answer** came from it often is not, and the output now says which is which.
-- **Performance at scale is reasoned, not measured.** Known cliffs were removed (per-IP CIDR
-  parsing, O(n²) dedupe) but no benchmark has been run against a large list.
-
+- **Performance at scale is measured** (`bench/bench_matcher.py`, results in `bench/BASELINE.md`,
+  55,000 synthetic prefixes). Matching used to scan every prefix per address: 10.6 ms per distinct
+  address, 84.5 s for 10,000 hostnames. Per-address memoisation alone gave 9.0 ms, so prefixes are
+  now indexed by length and masked network address: 0.17 ms per distinct address, 1.3 s for
+  10,000 hostnames, 11.2 s for 100,000. The first call still stalls the event loop for about
+  180 ms while the prefixes are parsed and indexed. Output is identical; every overlapping prefix
+  is still returned (`tests/test_cloud_service_provider_checks.py` checks the index against the
+  original linear scan).
 ---
 
 ## 8. Testing standards
