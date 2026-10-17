@@ -23,8 +23,6 @@ def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=
     # Run-scoped set of CSP records already written, to dedupe without
     # re-reading the output file. Owned on env_manager so it persists
     # across the many perform_csp_checks calls (one per domain) in a run.
-    if not hasattr(env_manager, "_csp_written"):
-        env_manager._csp_written = set()
     written = env_manager._csp_written
 
     vendor_ips_context_ipv4 = get_vendor_ips(domain_context, ip_version=4)
