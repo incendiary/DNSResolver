@@ -91,18 +91,18 @@ deferred until measured need.
   published one schema-valid unresolved observation, an empty actionable array,
   and a complete manifest.
 
-> **On its derivation.** The plan below came from [`REVIEW.md`](REVIEW.md) (2026-07-15), which
+> **On its derivation.** The plan below came from [`REVIEW.md`](REVIEW-2026-07.md) (2026-07-15), which
 > assessed the tool against a misread goal — cloud attribution treated as a supporting attribute
 > rather than as one of two co-equal products. That review now carries a correction, and the work
 > recorded under "Since v1.12.0" came from the reframing rather than from this plan. Read
-> [`AGENTS.md`](AGENTS.md) for what the tool is actually for before planning further work.
+> [`AGENTS.md`](../../AGENTS.md) for what the tool is actually for before planning further work.
 
-Derived from [`REVIEW.md`](REVIEW.md) (holistic review, 2026-07-15). Items are bundled into **atomic point-release PRs of similar nature** (per
+Derived from [`REVIEW.md`](REVIEW-2026-07.md) (holistic review, 2026-07-15). Items are bundled into **atomic point-release PRs of similar nature** (per
 devops-practices). Each group has a detailed, self-contained execution plan under
 [`docs/roadmap/`](docs/roadmap/) written so a less-capable agent can run it independently.
 
 **Working rules for anyone (human or agent) picking up an item:**
-- Follow [`docs/roadmap/AGENT-GUIDE.md`](docs/roadmap/AGENT-GUIDE.md) **first** — it encodes the
+- Follow [`docs/roadmap/AGENT-GUIDE.md`](AGENT-GUIDE.md) **first** — it encodes the
   devops-practices standards (branch naming, conventional commits, squash merge, run CI locally
   before pushing, coverage only goes up, add a regression test for every bug).
 - One logical change per PR. Bundle only same-nature changes listed in the same group.
@@ -142,13 +142,13 @@ Ship in this order. Each group is one point release (patch unless noted).
 > is what devops-practices means by "group several PRs on the same subject into one patch bump".
 
 ### 🔴 CRITICAL — do first (unblocks the repo)
-- [x] **PR-A: CI reliability** → **v1.10.5** — plan: [`docs/roadmap/PR-A-ci-reliability.md`](docs/roadmap/PR-A-ci-reliability.md) — *done, branch `fix/ci-reliability`, verified against a simulated tagless CI checkout*
+- [x] **PR-A: CI reliability** → **v1.10.5** — plan: `docs/roadmap/PR-A-ci-reliability.md` (since removed; see git history) — *done, branch `fix/ci-reliability`, verified against a simulated tagless CI checkout*
   - [x] A1: Make `test_version_tag_exists_in_git` tolerant of a tagless checkout; add `fetch-depth: 0` to CI checkout
   - [x] A2: Pin `ruff` to an exact version in `requirements-dev.txt`
   - [x] A3: Document "run CI locally before push" in AGENT-GUIDE + CONTRIBUTING
 
 ### 🟠 HIGH
-- [x] **PR-B: Reliability & correctness** → **v1.10.6** — plan: [`docs/roadmap/PR-B-reliability.md`](docs/roadmap/PR-B-reliability.md) — *done, branch `fix/reliability-correctness`, verified on a live run*
+- [x] **PR-B: Reliability & correctness** → **v1.10.6** — plan: `docs/roadmap/PR-B-reliability.md` (since removed; see git history) — *done, branch `fix/reliability-correctness`, verified on a live run*
   - [x] B3: **Fix self-referential misclassification** — dead NXDOMAIN/no-CNAME domains wrongly labelled `self_referential` (found by the live run; gated the check on `depth > 0`)
   - [x] B1: Replace `sys.exit(1)` in `fetch_ip_ranges_for_azure` with graceful `([], [])` return
   - [x] B2: Remove the orphan `timeout` output file from `OutputManager`
@@ -157,30 +157,30 @@ Ship in this order. Each group is one point release (patch unless noted).
   - **Why it matters:** a name that doesn't exist and has no CNAME is not a takeover candidate — there is nothing dangling to claim. `check_dangling_cname_async` writes a DANGLING record for *any* domain lacking A/AAAA/MX/NS, whether or not a CNAME exists. This inflates the candidate list with noise and buries real findings — a false-positive problem for a field tool.
   - **Fix direction:** only record a DANGLING candidate when an actual CNAME was observed. A bare NXDOMAIN with no CNAME should be reported as non-existent/unresolved, not as a takeover candidate. Also stop the summary presenting a domain as its own "CNAME target".
   - **Regression test:** NXDOMAIN + no CNAME → **not** in takeover candidates; real dangling CNAME → still flagged.
-- [x] **PR-D: Coverage lift** → **v1.11.0** — plan: [`docs/roadmap/PR-D-coverage.md`](docs/roadmap/PR-D-coverage.md) — *done, branch `test/coverage-lift`*
+- [x] **PR-D: Coverage lift** → **v1.11.0** — plan: `docs/roadmap/PR-D-coverage.md` (since removed; see git history) — *done, branch `test/coverage-lift`*
   - [x] D1: Extract the external-IP probe behind a `fetch_external_ip()` seam; unit-test `EnvironmentManager` (35% → **86%**)
   - [x] D2: Add `cloud_ip_ranges` error-path tests; `output_manager` (**100%**) + `config_resolver` (**91%**) edges
   - [x] Target met: overall coverage **94%** (was 85%), 174 tests
 
 ### 🟡 MEDIUM
-- [x] **PR-C: Scalability** → plan: [`docs/roadmap/PR-C-scalability.md`](docs/roadmap/PR-C-scalability.md) — *done, branch `perf/csp-matching`*
+- [x] **PR-C: Scalability** → plan: `docs/roadmap/PR-C-scalability.md` (since removed; see git history) — *done, branch `perf/csp-matching`*
   - [x] C1: Memoised `parse_network()` (`lru_cache`) — each CIDR parsed once per run, not per IP
   - [x] C2: Whole-file-read dedupe replaced with a run-scoped in-memory set on `env_manager`; also fixes the substring false-dedupe and removes a blocking read from the async path
-- [x] **PR-E: Lambda/scope cleanup** → plan: [`docs/roadmap/PR-E-scope-cleanup.md`](docs/roadmap/PR-E-scope-cleanup.md) — *done, branch `docs/scope-cleanup`*
+- [x] **PR-E: Lambda/scope cleanup** → plan: `docs/roadmap/PR-E-scope-cleanup.md` (since removed; see git history) — *done, branch `docs/scope-cleanup`*
   - [x] E1: Lambda walkthrough moved README → `docs/LAMBDA.md` (README 406 → 232 lines, content byte-identical)
   - [x] E2: Scope-boundary note added — **no URL/placeholder** (no companion project exists yet)
   - [x] E3: **Resolved** — maintainer chose the middle path: deployment machinery (`Dockerfile`, `ecr-build.yml`) removed in PR 142; `lambda_handler.py` and its tests kept as a reference entry point. Coverage and test count unaffected.
-- [x] **PR-F: New DNS features** — plan: [`docs/roadmap/PR-F-dns-features.md`](docs/roadmap/PR-F-dns-features.md) — *complete*
+- [x] **PR-F: New DNS features** — plan: `docs/roadmap/PR-F-dns-features.md` (since removed; see git history) — *complete*
   - [x] F1: Wildcard-DNS detection — per-zone cached probes, `WILDCARD|` prefix, counted in the summary. Verified live against `github.io`. A live test caught that A-only probing missed dual-stack catch-alls; probes now cover A and AAAA
   - [x] F2: Record AAAA (IPv6) resolutions — concurrent A+AAAA query; unresolved only when **both** fail. **Verified on live DNS:** `ipv6.google.com` (AAAA-only) previously reported unresolved, now resolves to 4 IPv6 addresses; dual-stack hosts capture both families
   - [x] F3: 30 fingerprints added (60 → 90), plus the pattern set's first tests
 
 ### 🟢 LOW
-- [x] **PR-G: Docs & release polish** — plan: [`docs/roadmap/PR-G-docs.md`](docs/roadmap/PR-G-docs.md) — *complete*
+- [x] **PR-G: Docs & release polish** — plan: `docs/roadmap/PR-G-docs.md` (since removed; see git history) — *complete*
   - [x] G1: README roadmap table replaced with a link to this file
   - [x] G2: `helper/crtsh_domains.sh` added — retries, fails loudly, filters to valid hostnames
   - [x] G3: Known limitations section added to the README
-- [x] **PR-H: Dependency batch** — plan: [`docs/roadmap/PR-H-dependencies.md`](docs/roadmap/PR-H-dependencies.md) — *complete*
+- [x] **PR-H: Dependency batch** — plan: `docs/roadmap/PR-H-dependencies.md` (since removed; see git history) — *complete*
   - [x] **Root cause found and fixed:** branch protection required status checks named `CI` and `Secret Scan` (the *workflow* names). GitHub reports *job* names (`test`, `gitleaks`, `trufflehog`), so those contexts could never appear and **every** PR was permanently BLOCKED — the real reason the backlog accumulated. Contexts corrected.
   - [x] PR 116 (`aws-actions/configure-aws-credentials`) closed as moot — its only consumer, `ecr-build.yml`, was removed by E3
   - [x] H1: All dependency PRs merged. Two needed recreating — their branches were pinned to a base predating the CI fix, so `update-branch` could not move them

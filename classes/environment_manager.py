@@ -96,9 +96,6 @@ class EnvironmentManager:
         self.load_patterns()
         self.logger.info("EnvironmentManager initialized.")
 
-    def get_config_file(self):
-        return self._config_file
-
     def update_logger(self):
         for handler in self.logger.handlers:
             if isinstance(handler, logging.StreamHandler):
