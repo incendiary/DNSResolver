@@ -61,20 +61,23 @@ def perform_csp_checks(domain_context, env_manager, final_ips, wildcard_verdict=
 
 
 def get_vendor_ips(domain_context, ip_version):
-    csp_ip_addresses = domain_context.get_csp_ip_addresses()
+    catalogues = domain_context.get_catalogues()
     if ip_version == 4:
-        return {
-            "gcp": csp_ip_addresses.get_gcp_ipv4(),
-            "aws": csp_ip_addresses.get_aws_ipv4(),
-            "azure": csp_ip_addresses.get_azure_ipv4(),
-        }
+        return {name: c.ipv4_ranges for name, c in catalogues.items()}
     if ip_version == 6:
-        return {
-            "gcp": csp_ip_addresses.get_gcp_ipv6(),
-            "aws": csp_ip_addresses.get_aws_ipv6(),
-            "azure": csp_ip_addresses.get_azure_ipv6(),
-        }
+        return {name: c.ipv6_ranges for name, c in catalogues.items()}
     return {}
+
+
+def describe(catalogues, provider, cidr):
+    """
+    Every region, service and network border group for a provider prefix.
+
+    Unpublished fields read 'unknown' rather than being inferred — only AWS
+    publishes a border group, and not every prefix carries a region.
+    """
+    entries = catalogues[provider].metadata.get(cidr)
+    return entries or [("unknown", "unknown", "unknown")]
 
 
 def get_ip_matches(final_ips, vendor_ips_context, domain_context, ip_version):
@@ -149,7 +152,7 @@ def log_and_write(
     so neither is a dependable target; without the marker a single wildcarded
     zone emits one record per enumerated subdomain and buries real findings.
     """
-    csp_ip_addresses = domain_context.get_csp_ip_addresses()
+    catalogues = domain_context.get_catalogues()
     file_path = output_files["standard"]["csp"]
     line_prefix = f"{wildcard_verdict}|" if wildcard_verdict else ""
     wrote_any = False
@@ -157,7 +160,7 @@ def log_and_write(
     for ip, prefixes in sorted(matched_ips.items()):
         for prefix in sorted(prefixes):
             for region, service, border_group in sorted(
-                csp_ip_addresses.describe(vendor, prefix)
+                describe(catalogues, vendor, prefix)
             ):
                 message = (
                     f"{line_prefix}{domain}|{ip}|{vendor}|{region}|{service}"

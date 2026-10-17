@@ -53,10 +53,10 @@ async def handler(mock_env_manager):
 
 
 @pytest.fixture
-def domain_context(mock_env_manager, csp_ips):
+def domain_context(mock_env_manager, catalogues):
     from classes.domain_processing_context import DomainProcessingContext
 
-    ctx = DomainProcessingContext(mock_env_manager, csp_ips)
+    ctx = DomainProcessingContext(mock_env_manager, catalogues)
     ctx.set_domain("example.com")
     return ctx
 

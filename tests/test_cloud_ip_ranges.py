@@ -9,7 +9,6 @@ import pytest
 from imports.cloud_ip_ranges import (
     AZURE_PINNED_URL,
     CatalogueFetchError,
-    ProviderCatalogue,
     _cache_path,
     _snapshot_id,
     fetch_aws_ip_ranges,
@@ -369,19 +368,3 @@ def test_azure_discovery_failure_uses_pinned_source(tmp_path):
     assert catalogue.usable is True
     assert catalogue.source_url == AZURE_PINNED_URL
     fetch.assert_called_once_with(AZURE_PINNED_URL, False)
-
-
-def test_catalogue_iterates_as_existing_matcher_tuple():
-    catalogue = ProviderCatalogue(
-        "aws",
-        ["192.0.2.0/24"],
-        [],
-        {},
-        "complete",
-        True,
-        "https://example.com/aws.json",
-        "2026-01-01T00:00:00Z",
-        "id",
-    )
-    ipv4, ipv6, metadata = catalogue
-    assert (ipv4, ipv6, metadata) == (["192.0.2.0/24"], [], {})

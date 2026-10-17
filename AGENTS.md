@@ -76,7 +76,6 @@ remains; do not add Lambda-specific features.
 | `classes/takeover_detector.py` | Dangling CNAME + NS takeover, depth-limited CNAME chain following |
 | `classes/wildcard_detector.py` | Per-zone wildcard detection via random-label probes, cached per zone |
 | `classes/domain_categoriser.py` | Regex classification of CNAME targets against `config.json`. **First match wins** — order is specific → general. |
-| `classes/csp_ip_addresses.py` | Holds fetched provider ranges **and their region/service metadata** |
 | `imports/cloud_ip_ranges.py` | Fetches AWS/GCP/Azure published ranges. Azure uses a three-stage fallback (live scrape → local cache → pinned URL). |
 | `imports/cloud_service_provider_checks.py` | Matches resolved IPs to provider ranges; writes the handoff records |
 | `imports/domain_processor.py` | Per-domain orchestration |
@@ -235,7 +234,7 @@ previously discarded it at parse time:
 | Azure | `addressPrefixes`, `region`, `systemService` | region, systemService → service |
 
 Fetchers return `(ipv4, ipv6, metadata)` where metadata maps CIDR → `(region, service)`.
-`CSPIPAddresses` carries it and exposes `describe(cidr)`. Each matched address is written as
+`ProviderCatalogue` carries it and the matcher reads it through `describe(catalogues, provider, cidr)`. Each matched address is written as
 one handoff record:
 
 ```

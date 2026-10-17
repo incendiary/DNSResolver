@@ -6,8 +6,8 @@ from classes.domain_processing_context import DomainProcessingContext
 
 
 @pytest.fixture
-def ctx(mock_env_manager, csp_ips):
-    context = DomainProcessingContext(mock_env_manager, csp_ips)
+def ctx(mock_env_manager, catalogues):
+    context = DomainProcessingContext(mock_env_manager, catalogues)
     context.set_domain("example.com")
     return context
 
@@ -20,8 +20,8 @@ def test_domain_is_set_correctly(ctx):
     assert ctx.get_domain() == "example.com"
 
 
-def test_csp_ip_addresses_stored(ctx, csp_ips):
-    assert ctx.get_csp_ip_addresses() is csp_ips
+def test_catalogues_stored(ctx, catalogues):
+    assert ctx.get_catalogues() is catalogues
 
 
 def test_add_dangling_domain(ctx):

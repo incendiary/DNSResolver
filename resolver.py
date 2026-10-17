@@ -10,7 +10,6 @@ from classes.allocator_contract import (
     clear_allocator_targets,
     publish_allocator_targets,
 )
-from classes.csp_ip_addresses import CSPIPAddresses
 from classes.custom_exceptions import OutputWriteError, ProviderCatalogueError
 from classes.dns_handler import DNSHandler
 from classes.environment_manager import EnvironmentManager
@@ -116,20 +115,6 @@ async def _run(env_manager, run_id, started_at, catalogues):
             f"and no actionable results were published. {details}. Status: {status_path}"
         )
 
-    gcp_ipv4, gcp_ipv6, gcp_meta = catalogues["gcp"]
-    aws_ipv4, aws_ipv6, aws_meta = catalogues["aws"]
-    azure_ipv4, azure_ipv6, azure_meta = catalogues["azure"]
-
-    csp_ip_addresses = CSPIPAddresses(
-        gcp_ipv4,
-        gcp_ipv6,
-        aws_ipv4,
-        aws_ipv6,
-        azure_ipv4,
-        azure_ipv6,
-        metadata_by_provider={"gcp": gcp_meta, "aws": aws_meta, "azure": azure_meta},
-    )
-
     env_manager.set_domains()
     domains_to_process = list(env_manager.domains)
     retries = env_manager.retries
@@ -142,7 +127,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
                 domain,
                 env_manager,
                 pbar,
-                csp_ip_addresses,
+                catalogues,
                 dns_handler,
                 final_retry=final_retry,
             )
@@ -208,16 +193,17 @@ async def _run(env_manager, run_id, started_at, catalogues):
     )
 
     if env_manager.extreme:
-        env_manager.log_info("AWS IPv4 Ranges: %s", csp_ip_addresses.get_aws_ipv4())
-        env_manager.log_info("AWS IPv6 Ranges: %s", csp_ip_addresses.get_aws_ipv6())
-        env_manager.log_info(
-            "Google Cloud IPv4 Ranges: %s", csp_ip_addresses.get_gcp_ipv4()
-        )
-        env_manager.log_info(
-            "Google Cloud IPv6 Ranges: %s", csp_ip_addresses.get_gcp_ipv6()
-        )
-        env_manager.log_info("Azure IPv4 Ranges: %s", csp_ip_addresses.get_azure_ipv4())
-        env_manager.log_info("Azure IPv6 Ranges: %s", csp_ip_addresses.get_azure_ipv6())
+        for provider, label in (
+            ("aws", "AWS"),
+            ("gcp", "Google Cloud"),
+            ("azure", "Azure"),
+        ):
+            env_manager.log_info(
+                "%s IPv4 Ranges: %s", label, catalogues[provider].ipv4_ranges
+            )
+            env_manager.log_info(
+                "%s IPv6 Ranges: %s", label, catalogues[provider].ipv6_ranges
+            )
 
     publish_run_manifest(
         env_manager.output_dir,

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from classes.csp_ip_addresses import CSPIPAddresses
+from imports.cloud_ip_ranges import ProviderCatalogue
 
 # ---------------------------------------------------------------------------
 # IP range data
@@ -47,18 +47,28 @@ CSP_METADATA = {
 }
 
 
-@pytest.fixture
-def csp_ips():
-    """A real CSPIPAddresses instance populated with test ranges."""
-    return CSPIPAddresses(
-        GCP_IPV4,
-        GCP_IPV6,
-        AWS_IPV4,
-        AWS_IPV6,
-        AZURE_IPV4,
-        AZURE_IPV6,
-        metadata_by_provider=CSP_METADATA,
+def make_catalogue(provider, ipv4=(), ipv6=(), metadata=None):
+    return ProviderCatalogue(
+        provider=provider,
+        ipv4_ranges=list(ipv4),
+        ipv6_ranges=list(ipv6),
+        metadata=metadata or {},
+        status="live",
+        usable=True,
+        source_url="https://example.com",
+        retrieved_at=None,
+        snapshot_id=None,
     )
+
+
+@pytest.fixture
+def catalogues():
+    """Provider catalogues populated with test ranges, in run order."""
+    return {
+        "gcp": make_catalogue("gcp", GCP_IPV4, GCP_IPV6, CSP_METADATA["gcp"]),
+        "aws": make_catalogue("aws", AWS_IPV4, AWS_IPV6, CSP_METADATA["aws"]),
+        "azure": make_catalogue("azure", AZURE_IPV4, AZURE_IPV6, CSP_METADATA["azure"]),
+    }
 
 
 # ---------------------------------------------------------------------------

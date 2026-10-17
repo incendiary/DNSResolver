@@ -1,12 +1,12 @@
 class DomainProcessingContext:
-    def __init__(self, env_manager, csp_ip_addresses):
+    def __init__(self, env_manager, catalogues):
         self.env_manager = env_manager
-        self.csp_ip_addresses = csp_ip_addresses
+        self.catalogues = catalogues
         self.domain = None
         self.dangling_domains = set()
 
-    def get_csp_ip_addresses(self):
-        return self.csp_ip_addresses
+    def get_catalogues(self):
+        return self.catalogues
 
     def get_domain(self):
         return self.domain

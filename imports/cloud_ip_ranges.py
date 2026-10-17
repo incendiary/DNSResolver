@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import sleep
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, List, Tuple
 from urllib.request import urlopen
 
 IPV4_KEYWORDS = ["ipv4Prefix", "ip_prefix"]
@@ -46,12 +46,6 @@ class ProviderCatalogue:
     retrieved_at: str | None
     snapshot_id: str | None
     error: str | None = None
-
-    def __iter__(self) -> Iterator:
-        """Keep range unpacking compatible with the existing matcher boundary."""
-        yield self.ipv4_ranges
-        yield self.ipv6_ranges
-        yield self.metadata
 
     def manifest_entry(self) -> dict:
         return {
