@@ -12,11 +12,11 @@ are exercised directly on the class/instance without full construction.
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from classes.environment_manager import EnvironmentManager
+from classes.environment_manager import EnvironmentManager, fetch_external_ip
 
 # ---------------------------------------------------------------------------
 # is_valid_domain
@@ -154,3 +154,18 @@ def test_construction_populates_patterns_and_config(tmp_path):
     assert mgr.max_threads == 2
     assert mgr.timeout == 1
     assert mgr.retries == 1
+
+
+def test_fetch_external_ip_returns_stripped_body():
+    response = MagicMock()
+    response.read.return_value = b"203.0.113.5\n"
+    response.__enter__.return_value = response
+    with patch("classes.environment_manager.urlopen", return_value=response):
+        assert fetch_external_ip() == "203.0.113.5"
+
+
+def test_fetch_external_ip_error_text_is_preserved():
+    with patch("classes.environment_manager.urlopen", side_effect=OSError("boom")):
+        assert fetch_external_ip() == (
+            "An error occurred while trying to retrieve the external ip: boom"
+        )
