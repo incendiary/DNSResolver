@@ -1,10 +1,10 @@
-aws.example.com|198.18.0.10
-gcp.example.com|198.51.100.20|2001:db8:b::20
-azure.example.com|203.0.113.30
-v6.example.com|2001:db8:a::1
-WILDCARD|host1.wild.example.com|198.18.0.50
 WILDCARD_ZONE|host2.rot.example.com|198.18.0.61
+WILDCARD|host1.wild.example.com|198.18.0.50
+aws.example.com|198.18.0.10
+azure.example.com|203.0.113.30
+gcp.example.com|198.51.100.20|2001:db8:b::20
+multi.example.com|198.18.1.5
 nstake.example.com|192.0.2.80
 shared-a.example.com|198.51.100.77
 shared-b.example.com|198.51.100.77
-multi.example.com|198.18.1.5
+v6.example.com|2001:db8:a::1

@@ -94,10 +94,10 @@ def test_load_patterns_malformed_json(tmp_path):
 def test_set_domains_reads_and_dedupes_and_validates(tmp_path):
     domains_file = tmp_path / "domains.txt"
     domains_file.write_text(
-        "a.example.com\n"
-        "a.example.com\n"  # duplicate
-        "not_a_domain\n"  # invalid
         "b.example.org\n"
+        "a.example.com\n"
+        "b.example.org\n"  # duplicate
+        "not_a_domain\n"  # invalid
         "\n"  # blank
     )
 
@@ -105,7 +105,7 @@ def test_set_domains_reads_and_dedupes_and_validates(tmp_path):
     mgr.domains_file = str(domains_file)
     mgr.set_domains()
 
-    assert mgr.domains == {"a.example.com", "b.example.org"}
+    assert mgr.domains == ["b.example.org", "a.example.com"]  # first-seen order
 
 
 # ---------------------------------------------------------------------------
