@@ -31,6 +31,7 @@ written as text and re-parsed), and **add a compact Markdown view** for agent an
 | D-10 | One release at the end (v3.0.0): Lambda removal is a removed entry point | 2026-10-16 | R-18 |
 | D-6 | Delete `helper/find_authoritative_ns.py` (unwired, untested, known defect). The underlying idea is kept as unscheduled item I-1 | 2026-10-16 | R-05b, I-1 |
 | D-12 | `NS_TAKEOVER` gains a fourth field naming the failing nameserver (`NS_TAKEOVER\|origin\|domain\|nameserver`, `-` where no nameserver is implicated); breaking for strict parsers, ships in v3.0.0 | 2026-10-16 | R-21 |
+| D-13 | The shipped `config.json` default for `evidence` is `false`. The value `true` never took effect (the bug fixed in R-19a), the README documents `--evidence` as opt-in, and committed defaults stay conservative; anyone who wants it on sets `DNSRESOLVER_EVIDENCE=true` in their own `.envrc` (R-19b) or passes `--evidence` | 2026-10-17 | R-19a, R-19b |
 | D-11 | Every option is settable from the environment (`DNSRESOLVER_*`), loaded by direnv from a git-ignored `.envrc`; a committed `.envrc.example` is the template. Precedence: CLI flag, then environment, then `config.json`, then built-in default | 2026-10-16 | R-19 |
 
 There are no open decisions.
@@ -56,7 +57,7 @@ Updated 2026-10-17. Merged to `main`; version stays 2.0.0 until R-18.
 | R-14 benchmark | Done | 220 | 10.6 ms per distinct address |
 | R-15 matcher index | Done | 221 | 84.5 s to 1.32 s for about 8,000 distinct addresses; output identical |
 | R-16a coverage floor, R-16b locked dependencies | Done | 222 | `pip-audit` workflow verified on GitHub |
-| R-19a boolean config fix | PR open, held | 215 | Waiting on the `evidence` default decision |
+| R-19a boolean config fix | PR open | 215 | D-13: shipped `evidence` default is `false`, so no behaviour change |
 | R-19b environment variables and direnv template | Not started | | After 215 |
 | R-13 Markdown report | Not started | | After R-19b |
 | R-23 lock regeneration | Not started | | New; see below |
