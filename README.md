@@ -151,6 +151,12 @@ sort -u -o domains.txt domains.txt
 
 ## Output
 
+> **Changed in v3.0.0.** `NS_TAKEOVER` records in `takeover_candidates_*.txt` gain a fourth field
+> (`NS_TAKEOVER|origin|domain|nameserver`); `environment_results_*.json` records `external_ip` as
+> `null` unless `--record-external-ip` is set; the pipe files are written in sorted order; the AWS
+> Lambda entry point is removed. Anything parsing v2 output needs updating. See the
+> [release notes](https://github.com/incendiary/DNSResolver/releases/tag/v3.0.0).
+
 > **Formats changed in v2.0.0.** `csp_matches_*.txt` moved from prose to structured fields,
 > `resolution_results_*.txt` and `csp_matches_*.txt` may carry a `WILDCARD_ZONE|` prefix, and
 > `takeover_candidates_*.txt` gained hop count and chain path. Anything parsing v1 output needs
