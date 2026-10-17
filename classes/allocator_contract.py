@@ -1,13 +1,10 @@
 """Publish the provider-aware allocator target contract from CSP match records."""
 
 import ipaddress
-import json
-import os
 from pathlib import Path
 
-from classes.custom_exceptions import OutputWriteError
+from classes.run_contract import CONTRACT_VERSION, _remove_output, _write_json_atomic
 
-CONTRACT_VERSION = "1.0"
 SUPPORTED_PROVIDERS = {"aws", "gcp", "azure"}
 WILDCARD_PREFIXES = ("WILDCARD|", "WILDCARD_ZONE|")
 
@@ -52,18 +49,7 @@ def publish_allocator_targets(csp_path, output_dir):
         )
     )
 
-    temporary = destination.with_suffix(".json.tmp")
-    try:
-        with open(temporary, "w", encoding="utf-8") as handle:
-            json.dump(targets, handle, indent=2)
-            handle.write("\n")
-        os.replace(temporary, destination)
-    except OSError as error:
-        raise OutputWriteError(
-            f"Unable to publish allocator targets to {destination}: {error}"
-        ) from error
-    finally:
-        _remove_output(temporary)
+    _write_json_atomic(targets, destination, what="allocator targets to")
     return targets
 
 
@@ -72,13 +58,6 @@ def clear_allocator_targets(output_dir):
     destination = Path(output_dir) / "allocator-targets-v1.json"
     _remove_output(destination)
     _remove_output(destination.with_suffix(".json.tmp"))
-
-
-def _remove_output(path):
-    try:
-        path.unlink(missing_ok=True)
-    except OSError as error:
-        raise OutputWriteError(f"Unable to remove output {path}: {error}") from error
 
 
 def _lines(path):

@@ -20,6 +20,7 @@ from classes.run_contract import (
 )
 from classes.run_summary import RunSummary
 from imports.cloud_ip_ranges import (
+    _timestamp,
     fetch_aws_ip_ranges,
     fetch_azure_ip_ranges,
     fetch_google_cloud_ip_ranges,
@@ -35,7 +36,7 @@ async def run(env_manager):
     can share the same logic.
     """
     run_id = str(uuid4())
-    started_at = _timestamp()
+    started_at = _timestamp(datetime.now(timezone.utc))
     catalogues = {}
     clear_allocator_targets(env_manager.output_dir)
     clear_run_documents(env_manager.output_dir)
@@ -56,7 +57,7 @@ async def run(env_manager):
                     run_id=run_id,
                     status="failed",
                     started_at=started_at,
-                    completed_at=_timestamp(),
+                    completed_at=_timestamp(datetime.now(timezone.utc)),
                     catalogues=catalogues,
                 )
         except Exception as contract_error:
@@ -107,7 +108,7 @@ async def _run(env_manager, run_id, started_at, catalogues):
             run_id=run_id,
             status="incomplete",
             started_at=started_at,
-            completed_at=_timestamp(),
+            completed_at=_timestamp(datetime.now(timezone.utc)),
             catalogues=catalogues,
         )
         raise ProviderCatalogueError(
@@ -210,13 +211,9 @@ async def _run(env_manager, run_id, started_at, catalogues):
         run_id=run_id,
         status="complete",
         started_at=started_at,
-        completed_at=_timestamp(),
+        completed_at=_timestamp(datetime.now(timezone.utc)),
         catalogues=catalogues,
     )
-
-
-def _timestamp():
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 async def main_async():

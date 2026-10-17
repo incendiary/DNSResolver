@@ -120,14 +120,17 @@ def test_publication_failure_removes_stale_and_temporary_files(tmp_path, failure
         failure_patch = patch("builtins.open", side_effect=fail_output_open)
     elif failure == "write":
         failure_patch = patch(
-            "classes.allocator_contract.json.dump", side_effect=OSError("disk full")
+            "classes.run_contract.json.dump", side_effect=OSError("disk full")
         )
     else:
         failure_patch = patch(
-            "classes.allocator_contract.os.replace", side_effect=OSError("read only")
+            "classes.run_contract.os.replace", side_effect=OSError("read only")
         )
 
-    with failure_patch, pytest.raises(OutputWriteError):
+    with (
+        failure_patch,
+        pytest.raises(OutputWriteError, match="Unable to publish allocator targets to"),
+    ):
         publish_allocator_targets(matches, tmp_path)
 
     assert not destination.exists()
