@@ -49,7 +49,7 @@
     "kind": "ns_takeover",
     "ips": [],
     "reasons": [
-      "Nameserver did not resolve: nstake.example.com"
+      "Nameserver did not resolve: ns1.deadns.example.net"
     ],
     "actionability": "excluded"
   }

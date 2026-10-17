@@ -42,7 +42,12 @@ def _records():
             1,
             "old.example.com -> missing.example.net",
         ),
-        NsTakeover("delegated.example.com", "ns1.missing.example.net"),
+        NsTakeover(
+            "delegated.example.com",
+            "delegated.example.com",
+            "ns1.missing.example.net",
+        ),
+        NsTakeover("nodata.example.com", "nodata.example.com", "-"),
         CspMatch(
             "ordinary.example.com",
             "192.0.2.30",
@@ -93,6 +98,17 @@ def test_observation_publisher_retains_every_excluded_kind(tmp_path):
         item for item in observations if item["hostname"] == "rotating.example.com"
     )
     assert rotating["ips"] == ["192.0.2.20", "2001:db8::20"]
+    reasons = {
+        item["hostname"]: item["reasons"]
+        for item in observations
+        if item["kind"] == "ns_takeover"
+    }
+    assert reasons == {
+        "delegated.example.com": [
+            "Nameserver did not resolve: ns1.missing.example.net"
+        ],
+        "nodata.example.com": ["Name has NS records but no address records"],
+    }
     assert all(item["actionability"] == "excluded" for item in observations)
     assert (
         json.loads((tmp_path / "dns-observations-v1.json").read_text()) == observations
