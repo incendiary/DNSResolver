@@ -21,7 +21,7 @@ address is only actionable if you know where it is allocated from and what it be
 It also:
 
 - Flags **wildcard DNS** zones, so catch-all answers are not mistaken for real hosts
-- Collects forensic evidence (dig/nslookup output) for flagged domains
+- Collects forensic evidence (dig/nslookup output) for flagged domains when enabled (`--evidence`; off by default)
 
 Domain processing runs concurrently using `asyncio`, making it practical for large domain lists.
 
@@ -85,14 +85,18 @@ python resolver.py <domains_file> [options]
 |------|-------|-------------|
 | `--output-dir` | `-o` | Directory to save results (default: `output`) |
 | `--config-file` | | Path to config JSON (default: `config.json`) |
-| `--verbose` | `-v` | Enable verbose logging |
-| `--extreme` | `-e` | Enable extreme logging (includes full IP range dumps, implies `-v`) |
+| `--verbose` / `--no-verbose` | `-v` | Enable verbose logging (default: off) |
+| `--extreme` / `--no-extreme` | `-e` | Enable extreme logging (includes full IP range dumps, implies `-v`) (default: off) |
 | `--nameservers` | | Comma-separated custom resolvers, e.g. `8.8.8.8,1.1.1.1` |
 | `--max-threads` | `-mt` | Max concurrent domain tasks (default: 50) |
 | `--timeout` | `-t` | DNS query timeout in seconds |
 | `--retries` | | Retry attempts for failed domains (default from config) |
-| `--evidence` | | Save dig/nslookup output for flagged domains |
+| `--evidence` / `--no-evidence` | | Save dig/nslookup output for flagged domains (default: off) |
 | `--version` | | Print version and exit |
+
+### Configuration precedence
+
+Each option resolves as: command-line flag, then the `config` block of `config.json`, then the built-in default. The boolean options (`--verbose`, `--extreme`, `--evidence`) can be switched on or off from either place, and a flag always wins: `--no-evidence` overrides `"evidence": true` in `config.json`. The shipped `config.json` has all three off.
 
 ### Example
 
@@ -144,7 +148,7 @@ Each run creates a timestamped subdirectory under the output directory containin
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `provider_catalogues.json` | AWS, GCP, and Azure catalogue status, source, retrieval time, snapshot identifier, and any failure reason |
 | `{provider}_ip_ranges.json` | Validated provider ranges and provenance used by this run, from either a live source or a fresh cache |
-| `evidence/dns/` | dig or nslookup output per flagged domain (when `--evidence` is set) |
+| `evidence/dns/` | dig or nslookup output per flagged domain (only when evidence is enabled: `--evidence`, or `"evidence": true` in `config.json`) |
 
 Required output failures terminate the run instead of being logged and ignored.
 `allocator-targets-v1.json` is cleared when a run starts and published with an

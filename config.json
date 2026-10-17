@@ -6,7 +6,7 @@
     "nameservers": "1.1.1.1,8.8.8.8",
     "verbose": false,
     "retries": 2,
-    "evidence": true,
+    "evidence": false,
     "extreme": false
   },
   "domain_categorisation": {
