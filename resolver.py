@@ -175,6 +175,8 @@ async def _run(env_manager, run_id, started_at, catalogues):
             retries + 1,
         )
 
+    env_manager.sort_pipe_files()
+
     targets = publish_allocator_targets(env_manager.records, env_manager.output_dir)
     env_manager.log_info(
         "Published %d actionable target(s) to allocator-targets-v1.json",

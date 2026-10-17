@@ -117,6 +117,12 @@ consumed by other tooling — changing a format is a breaking change.**
 | `environment_results_*.json` | Run metadata (command, external IP, Docker status) |
 | `evidence/dns/` | `dig`/`nslookup` capture per flagged domain, when `--evidence` is set |
 
+Line order in the four pipe files is sorted (by full line text) and stable: identical input
+yields byte-identical files under any hash seed or completion order. During a run lines are
+appended as they are found; when every domain has finished each file is rewritten sorted
+(atomically), before the JSON documents are published. Consumers must still not depend on
+more than stability.
+
 The prefix convention (`WILDCARD|`, `WILDCARD_ZONE|`, `DANGLING|`, `NS_TAKEOVER|`) is the house
 style for tagging a line's type while keeping untagged lines backward compatible. Follow it.
 

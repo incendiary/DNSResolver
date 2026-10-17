@@ -9,7 +9,8 @@ from urllib.request import urlopen
 from tqdm import tqdm
 
 from classes.config_resolver import ConfigResolver
-from classes.output_manager import OutputManager
+from classes.output_manager import OutputManager, write_sorted_atomic
+from classes.records import CspMatch, Dangling, NsTakeover, Resolution, Unresolved
 
 
 class TqdmLoggingHandler(logging.StreamHandler):
@@ -139,6 +140,23 @@ class EnvironmentManager:
             self.patterns = config.get("domain_categorisation", {})
         except (IOError, json.JSONDecodeError):
             self.patterns = {}
+
+    def sort_pipe_files(self):
+        """Rewrite each pipe file in sorted order once every domain has finished.
+
+        Domains complete in DNS-latency order, so the live writes race. The
+        lines come from the records the run already holds.
+        """
+        standard = self.output_files["standard"]
+        for key, kinds in (
+            ("resolved", (Resolution,)),
+            ("csp", (CspMatch,)),
+            ("takeover", (Dangling, NsTakeover)),
+            ("unresolved", (Unresolved,)),
+        ):
+            write_sorted_atomic(
+                standard[key], [r.pipe() for r in self.records if isinstance(r, kinds)]
+            )
 
     def set_domains(self):
         with open(self.domains_file, "r", encoding="utf-8") as f:
