@@ -3,6 +3,6 @@
 pytest>=9.1.1
 pytest-asyncio>=1.4.0
 pytest-cov>=7.1.0
-ruff==0.17.0  # pinned exact — bump deliberately, not via range
+ruff==0.17.1  # pinned exact — bump deliberately, not via range
 pre-commit~=4.7
 jsonschema==4.26.0  # validates published allocator contracts and examples
