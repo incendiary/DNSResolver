@@ -38,15 +38,16 @@ def setup_logger(log_file="dnsresolver.log", verbose=False):
         logger.handlers.clear()
     ch = TqdmLoggingHandler()
     ch.setLevel(logging.INFO if verbose else logging.CRITICAL)
-    fh = logging.FileHandler(log_file)
-    fh.setLevel(logging.INFO)
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     ch.setFormatter(formatter)
-    fh.setFormatter(formatter)
     logger.addHandler(ch)
-    logger.addHandler(fh)
+    if log_file is not None:
+        fh = logging.FileHandler(log_file)
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
     logger.info("Logger initialized.")
     return logger
 
@@ -54,8 +55,8 @@ def setup_logger(log_file="dnsresolver.log", verbose=False):
 class EnvironmentManager:
     """Thin orchestrator: wires ConfigResolver, OutputManager, logging, and domain I/O."""
 
-    def __init__(self):
-        self.logger = setup_logger()
+    def __init__(self, argv=None, log_file="dnsresolver.log"):
+        self.logger = setup_logger(log_file=log_file)
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.domains = []
         self.records = []
@@ -63,7 +64,7 @@ class EnvironmentManager:
         self.patterns = None
         self.environment_info = {}
 
-        cfg = ConfigResolver()
+        cfg = ConfigResolver(argv=argv)
         self.args = cfg.args
         self._config_file = cfg.args.config_file
         self.domains_file = cfg.args.domains_file

@@ -61,11 +61,14 @@ they are accepted trade-offs, not bugs. See §7.
 ## 2. Architecture
 
 ```
-resolver.py            CLI entry point ───► run(env_manager)  — shared async pipeline
+resolver.py            CLI entry point ────┐
+lambda_handler.py      Lambda entry point ─┴─► run(env_manager) — shared async pipeline
 ```
 
-The Lambda entry point was removed (restorable from tag `v2.0.0`). The shared `run()` pipeline
-remains; do not add Lambda-specific features.
+The Lambda entry point removed in v3.0.0 has been reintroduced for the owner's
+personal AWS MVP. It adapts versioned S3 input and output around the shared
+DNS-only pipeline; the CLI and JSON contracts remain unchanged. CloudClaim's
+Terraform root deploys it through the module in `terraform/`.
 
 | Module | Responsibility |
 |---|---|
