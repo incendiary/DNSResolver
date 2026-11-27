@@ -65,9 +65,9 @@ def _check_choice(dest, value, source):
 class ConfigResolver:
     """Resolves options: CLI flag, then DNSRESOLVER_* variable, then config.json."""
 
-    def __init__(self):
+    def __init__(self, argv=None):
         self._logger = logging.getLogger("DNSResolver")
-        self.args = self._parse_args()
+        self.args = self._parse_args(argv)
         config = self._load_config()
         for dest in OPTIONS:
             if dest != "config_file":
@@ -104,7 +104,7 @@ class ConfigResolver:
             return value
         return DEFAULTS.get(dest)
 
-    def _parse_args(self):
+    def _parse_args(self, argv=None):
         parser = self._parser = argparse.ArgumentParser(
             description="Resolve DNS records for domains and check against "
             "cloud provider IP ranges."
@@ -193,7 +193,7 @@ class ConfigResolver:
             help="Report format: md also writes run-report.md next to the JSON "
             "documents, json skips it (default: md)",
         )
-        return parser.parse_args()
+        return parser.parse_args(argv)
 
     def _validate_args(self):
         if self.args.domains_file and not os.path.isfile(self.args.domains_file):

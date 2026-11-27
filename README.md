@@ -47,6 +47,9 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+For the optional S3-triggered Lambda package used by CloudClaim's personal AWS
+demo, see [AWS Lambda deployment](docs/LAMBDA.md). The CLI remains supported.
+
 ### Reproducible installs (locked dependencies)
 
 Output files are interfaces for other tooling, so CI installs from hash-locked files rather
@@ -154,7 +157,8 @@ sort -u -o domains.txt domains.txt
 > **Changed in v3.0.0.** `NS_TAKEOVER` records in `takeover_candidates_*.txt` gain a fourth field
 > (`NS_TAKEOVER|origin|domain|nameserver`); `environment_results_*.json` records `external_ip` as
 > `null` unless `--record-external-ip` is set; the pipe files are written in sorted order; the AWS
-> Lambda entry point is removed. Anything parsing v2 output needs updating. See the
+> Lambda entry point was removed in that release (the optional personal MVP adapter
+> is documented above). Anything parsing v2 output needs updating. See the
 > [release notes](https://github.com/incendiary/DNSResolver/releases/tag/v3.0.0).
 
 > **Formats changed in v2.0.0.** `csp_matches_*.txt` moved from prose to structured fields,

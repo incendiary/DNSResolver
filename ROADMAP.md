@@ -1,5 +1,8 @@
 # DNSResolver: Roadmap
 
+The owner's 2026-11-28 personal AWS MVP decision reopens a narrow Lambda adapter
+and Terraform module. The v3.0.0 Lambda removal below remains historical.
+
 Single source of truth for planned work. Written 2026-10-16 from [`REVIEW.md`](REVIEW.md) and
 the maintainer decisions in it. Delivered history (the August goal-aligned plan, items 1 to 10, and
 the earlier A to H plan) is in [`docs/roadmap/ARCHIVE.md`](docs/roadmap/ARCHIVE.md).

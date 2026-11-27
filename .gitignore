@@ -14,3 +14,6 @@ __pycache__/
 
 .envrc
 .env
+build/
+terraform/.terraform/
+terraform/.terraform.lock.hcl
